@@ -1,0 +1,1 @@
+{"description":"拳击养成经营游戏 · 网页原型独立源码工程（Phase 7.5 工程化 v1）","devDependencies":{"jsdom":"^30.1.3"},"name":"boxing-game-web","private":true,"scripts":{"build":"node scripts/build-single.mjs","test":"node tests/smoke.mjs"},"version":"1.0.0"}
