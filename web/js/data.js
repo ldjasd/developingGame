@@ -293,7 +293,15 @@
       outfit: {
         default: { name: '默认', src: 'assets/portrait.webp' },
         robe: { name: '登场战袍', src: 'assets/portrait/outfit_robe.png' },
-        training: { name: '训练服', src: 'assets/portrait/outfit_training.png' }
+        training: { name: '训练服', src: 'assets/portrait/outfit_training.png' },
+        short_training: { name: '短款训练服', src: 'assets/portrait/outfit_short_training.png' },
+        short_vest: { name: '短款背心', src: 'assets/portrait/outfit_short_vest.png' },
+        short_cami: { name: '吊带款', src: 'assets/portrait/outfit_short_cami.png' },
+        wide_strap: { name: '宽肩带', src: 'assets/portrait/outfit_wide_strap.png' },
+        racerback: { name: '工字背', src: 'assets/portrait/outfit_racerback.png' },
+        cross_back: { name: '交叉美背', src: 'assets/portrait/outfit_cross_back.png' },
+        halter: { name: '挂脖款', src: 'assets/portrait/outfit_halter.png' },
+        zip: { name: '拉链款', src: 'assets/portrait/outfit_zip.png' }
       },
       body: {
         petite: { name: '娇小', scale: 0.92 },
@@ -308,4 +316,68 @@
       { lv: 3, name: '声名鹊起', bonus: 20 },
       { lv: 4, name: '家喻户晓', bonus: 35 },
       { lv: 5, name: '传奇', bonus: 50 }
+    ];
+
+    /* ================= Phase 9：成就系统（纯荣誉，不发任何数值/现金奖励） =================
+       判定只读 S 已有字段；唯一例外是累计 KO 胜场 koWins——原先没有这个计数，
+       由比赛结算处纯计数写入（见 battle.js settleNow），不参与任何胜负/数值逻辑。
+       「累计赚取」无现成字段（S.money 是余额不是累计值），不做，不新造口径。
+       图鉴集齐 10 款成就与 DEX_ACH 的现金里程碑是两回事：成就只记录展示，不重复发奖。 */
+    var ACH_CATEGORIES = [
+      { id: 'battle', name: '战斗' },
+      { id: 'career', name: '生涯' },
+      { id: 'gear', name: '装备 / 经营' },
+      { id: 'story', name: '情感 / 剧情' }
+    ];
+    var ACHIEVEMENTS = [
+      /* ---- 战斗 ---- */
+      { id: 'first_win', cat: 'battle', name: '初尝胜果', desc: '赢得第 1 场比赛',
+        check: function (s) { return (s.wins || 0) >= 1; } },
+      { id: 'wins_10', cat: 'battle', name: '十胜俱乐部', desc: '累计赢得 10 场比赛',
+        check: function (s) { return (s.wins || 0) >= 10; } },
+      { id: 'wins_25', cat: 'battle', name: '常胜之师', desc: '累计赢得 25 场比赛',
+        check: function (s) { return (s.wins || 0) >= 25; } },
+      { id: 'wins_50', cat: 'battle', name: '半百荣光', desc: '累计赢得 50 场比赛',
+        check: function (s) { return (s.wins || 0) >= 50; } },
+      { id: 'first_ko', cat: 'battle', name: '一击入魂', desc: '首次以 KO / TKO 赢得比赛',
+        check: function (s) { return (s.koWins || 0) >= 1; } },
+      { id: 'ko_10', cat: 'battle', name: 'KO 艺术家', desc: '累计以 KO / TKO 赢得 10 场比赛',
+        check: function (s) { return (s.koWins || 0) >= 10; } },
+      { id: 'streak_3', cat: 'battle', name: '势如破竹', desc: '取得 3 连胜',
+        check: function (s) { return (s.winStreak || 0) >= 3; } },
+      { id: 'streak_5', cat: 'battle', name: '无人能挡', desc: '取得 5 连胜',
+        check: function (s) { return (s.winStreak || 0) >= 5; } },
+      /* ---- 生涯 ---- */
+      { id: 'rank_25', cat: 'career', name: '跻身前列', desc: '国内排名进入前 25',
+        check: function (s) { return (s.rank || 50) <= 25; } },
+      { id: 'rank_10', cat: 'career', name: '国内十强', desc: '国内排名进入前 10',
+        check: function (s) { return (s.rank || 50) <= 10; } },
+      { id: 'rank_1', cat: 'career', name: '登顶国内', desc: '国内排名达到第 1 名',
+        check: function (s) { return (s.rank || 50) <= 1; } },
+      { id: 'influence_3', cat: 'career', name: '声名鹊起', desc: '影响力达到 Lv3（10 胜或排名前 25）',
+        check: function (s) { return (s.wins || 0) >= 10 || (s.rank || 50) <= 25; } },
+      { id: 'influence_5', cat: 'career', name: '传奇之名', desc: '影响力达到 Lv5（排名第 1 名）',
+        check: function (s) { return (s.rank || 50) <= 1; } },
+      { id: 'stage_4', cat: 'career', name: '国内顶尖之路', desc: '到达生涯阶段 4「国内顶尖」',
+        check: function (s) { return (s.stage || 1) >= 4 || (s.completedStages || []).indexOf(4) >= 0; } },
+      { id: 'stage_6', cat: 'career', name: '传奇之路', desc: '到达生涯阶段 6「传奇之路」',
+        check: function (s) { return (s.stage || 1) >= 6 || (s.completedStages || []).indexOf(6) >= 0; } },
+      /* ---- 装备 / 经营 ---- */
+      { id: 'first_craft', cat: 'gear', name: '亲手打造', desc: '在工坊打造第 1 件装备',
+        check: function (s) { return (s.customGear || []).some(function (g) { return g && g.source === 'craft'; }); } },
+      { id: 'enh_5', cat: 'gear', name: '千锤百炼', desc: '任意装备强化到 +5',
+        check: function (s) { return Object.keys(s.enh || {}).some(function (k) { return (s.enh[k] || 0) >= 5; }); } },
+      { id: 'enh_10', cat: 'gear', name: '登峰造极', desc: '任意装备强化到 +10（满级）',
+        check: function (s) { return Object.keys(s.enh || {}).some(function (k) { return (s.enh[k] || 0) >= 10; }); } },
+      { id: 'dex_10', cat: 'gear', name: '图鉴收藏家', desc: '装备图鉴集齐 10 款（成就只作记录，图鉴现金奖励见图鉴区）',
+        check: function (s) { return (s.dexSigs || []).length >= 10; } },
+      { id: 'sponsor_any', cat: 'gear', name: '商业首秀', desc: '签约任意一家赞助商',
+        check: function (s) { return !!s.sponsor; } },
+      /* ---- 情感 / 剧情 ---- */
+      { id: 'prologue_done', cat: 'story', name: '命运的测力机', desc: '完成序章',
+        check: function (s) { return !!(s.story && s.story.prologueDone); } },
+      { id: 'affinity_60', cat: 'story', name: '亲近信赖', desc: '任意角色好感达到 60',
+        check: function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 60; }); } },
+      { id: 'affinity_90', cat: 'story', name: '心意相通', desc: '任意角色好感达到 90',
+        check: function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 90; }); } }
     ];

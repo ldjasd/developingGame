@@ -13,7 +13,12 @@ web/
 ├── js/
 │   ├── data.js         纯数据定义：常量/训练/装备/材料/阶段/赞助/对手风格/角色池名册/外观/影响力
 │   ├── story.js        剧情数据：STORY_CHARS 角色表 + STORY_EVENTS 事件库（Phase 7）
-│   └── game.js         其余全部主逻辑（状态/界面/战斗/剧情引擎/初始化），逐字搬运未重构
+│   ├── audio.js        音效合成（Web Audio 现场合成，无外部文件）（v2 拆出；Phase 9 加全合成 BGM 两曲与关键场面音效）
+│   ├── story-engine.js Phase 7 剧情引擎：对白弹窗/事件队列/状态页关系区/序章引擎（v2 拆出）
+│   ├── tools.js        工具：$ / clamp / rnd / toast / 日常日志（v2 拆出，battle/ui 的加载期依赖）
+│   ├── ui.js           日常界面：日常渲染/训练计划/确认框/外出商店/状态页/生涯与赞助卡/排名榜/背包/工坊（v2 拆出）
+│   ├── battle.js       战斗：主循环/打击反馈/Phase 4 连击反击破防击倒/模拟跳过/手动操作/触屏控制（v2 拆出）
+│   └── game.js         剩余核心：前置工具函数与角色池辅助、状态与存档、Phase 6 外观、心态/装备、装备强化、阶段/影响力/赞助逻辑、事件绑定、测试档、初始化
 ├── assets/             静态资源（equipment / opponents / portrait / story / portrait.webp），引用路径与原版一致
 ├── scripts/
 │   └── build-single.mjs  打包：合并回单文件 dist/index.html + 复制 assets
@@ -23,7 +28,7 @@ web/
 └── package.json        npm 脚本：build / test；devDependency 仅 jsdom（测试用）
 ```
 
-脚本加载顺序固定为 `data.js → story.js → game.js`（普通脚本、全局作用域，与原单文件内的执行顺序一致）。三者都是顶层 `var`/函数声明，跨文件引用在运行时解析；data.js 与 story.js 的初始化不依赖任何外部变量（已单独执行验证）。
+脚本加载顺序固定为 `data.js → story.js → audio.js → story-engine.js → tools.js → ui.js → battle.js → game.js`（普通脚本、全局作用域）。各文件主体是顶层 `var`/函数声明，跨文件引用多在运行时解析；少数加载期语句有硬顺序要求：battle.js 的触屏绑定 IIFE 与 ui.js 的确认框按钮绑定在加载时调用 tools.js 的 `$()`，game.js 的事件绑定与初始化在加载时直接引用 ui.js/battle.js 的函数——故 tools/ui/battle 必须排在 game.js 之前、tools 必须排在 ui/battle 之前（即保持它们在原单文件中的相对先后）。
 
 ## 本地运行
 
@@ -41,27 +46,27 @@ npx serve .          # 或 python3 -m http.server 8000
 npm run build        # 生成 dist/index.html（内嵌 css/js）+ dist/assets/
 ```
 
-打包只是把壳里的 `<link>`/`<script src>` 换回内嵌 `<style>`/`<script>`，内容逐字来自工程文件；dist/index.html 与原单文件仅差拆分装配行（三个 JS 文件各保留一句 `'use strict';` 与文件头说明注释）。发布动作由父代理用 dist 产物走 artifact 构建流程，本工程内不做发布。
+打包只是把壳里的 `<link>`/`<script src>` 换回内嵌 `<style>`/`<script>`，内容逐字来自工程文件；dist/index.html 与原单文件仅差拆分装配行（每个 JS 文件各保留一句 `'use strict';` 与文件头说明注释）。发布动作由父代理用 dist 产物走 artifact 构建流程，本工程内不做发布。
 
 ## 测试
 
 ```bash
 npm install          # 首次：安装 jsdom（仅测试需要）
 npm run build        # 先打包，smoke 会同时测 dist 版
-npm test             # 工程版 + dist 版各 21 项断言
+npm test             # 工程版 + dist 版各 47 项断言
 node tests/smoke.mjs --original <目录>   # 可选：对指定目录（如 artifact 目录）跑同组断言做对照
 ```
 
-断言覆盖：加载无脚本错误、新档初始化（S 结构、排名 50、story）、角色池 50 人名次完整性与候补、数据/逻辑全局就位、makeFoe 取池内真人且名次 ±5 内、模拟比赛可结算记账、存档保存→重读逐字一致（roster/story）。
+断言覆盖：加载无脚本错误、新档初始化（S 结构、排名 50、story）、角色池 50 人名次完整性与候补、数据/逻辑全局就位、makeFoe 取池内真人且名次 ±5 内、战斗全局就位、手动战斗可开局（阶段/视图/HP）、模拟结算一致性（奖金到账/lastMatchDay/B 状态）与结算记账、存档保存→重读逐字一致（roster/story）、重读页上自动战斗 tick 推进与一局可结算（KO 路径走 finishBattle）、Phase 9 成就（新档空表、达标解锁且不重复、解锁记录含周/日、状态页成就区渲染、老存档删字段迁移＋静默追溯解锁且只汇总一条日志）、Phase 9 多存档槽（老档自动成槽 1、切空槽得新档、切回无损、复制到槽 3 并切过去一致、meta 当前槽重读保持、测试档在槽 2 开启→切槽被锁→恢复回原槽）。
 
 等价性证据（v1 拆分时）：拆分脚本逐行多重集比对——原脚本 3,955 行非空行在 data.js+story.js+game.js 中出现次数完全一致（差 0）；工程版、dist 版、原 artifact 版三方同组冒烟 63/63 全过。
 
 ## 编辑约定
 
 1. 改玩法/数值/文案 → 只改本工程 `js/`、`css/`、`index.html`，不要碰 ts-spaces 里的发布副本，也不要直接改 `dist/`（会被 build 覆盖）。
-2. 纯数据（新装备、新对手、新剧情事件等）优先加到 `data.js` / `story.js`；逻辑加到 `game.js` 对应区段。
+2. 纯数据（新装备、新对手、新剧情事件等）优先加到 `data.js` / `story.js`；逻辑按区段加到对应文件（音效→`audio.js`、剧情引擎→`story-engine.js`、小工具→`tools.js`、日常界面→`ui.js`、战斗→`battle.js`、其余核心→`game.js`）。
 3. 每次改动后跑 `npm run build && npm test`，全过再交付发布。
-4. 存档格式（localStorage key `boxing-phase1-save-v1` 与 S 结构）视为兼容契约：改结构必须带迁移并先补断言。
+4. 存档格式（localStorage key `boxing-phase1-save-v1` 与 S 结构）视为兼容契约：改结构必须带迁移并先补断言。多存档槽（Phase 9，详见工程外 `../PHASE9_SAVESLOTS.md`）在此契约之上做槽位交换：`boxing-phase1-save-v1` 恒为**当前槽**本体，save()/load() 路径不变；当前槽号存 `boxing-phase1-save-v1-meta`（缺失默认槽 1，老存档零迁移自动成槽 1），非当前槽的进度暂存于 `boxing-phase1-save-v1-slot1/2/3`；新增/修改槽逻辑不得打破「当前槽看 SAVE_KEY、非当前槽看暂存位」这一不变量，测试档备份 key `boxing-phase1-save-backup-v1` 与槽 key 不冲突且测试期间禁止切槽。
 
 ## 拆分映射（v1，源 = ts-spaces/phase-1/index.html 的行号）
 
@@ -91,14 +96,24 @@ node tests/smoke.mjs --original <目录>   # 可选：对指定目录（如 arti
 
 检查记录：源脚本未发现生成器拼接痕迹或重复块——顶层函数名、顶层 var 名均无重复定义；个别高频整行（如 addEventListener 样板）属正常写法重复，未做清理（遵逐字搬运原则）。
 
-## v2 细拆路线（game.js 仍约 3,469 行，后续按区段继续拆）
+## v2 细拆（已完成，2026-11-02，过程记录见工程外 `../PHASE75_V2.md`）
 
-game.js 内区段边界清晰（原有 `/* ================= … ================= */` 标题），v2 可按下列顺序逐个搬出为独立普通脚本，仍遵循「一次搬一段、搬完跑全套冒烟」的节奏：
+game.js 已由 3,469 行细拆至 909 行核心，路线四步全部完成，仍遵循「一次搬一段、搬完跑全套冒烟」（现行冒烟每套 27 项、工程版＋dist 版 54/54）：
 
 1. `audio.js`：音效合成区段（源「音效（Web Audio 现场合成）」）——无外部依赖，最易先拆。
 2. `story-engine.js`：Phase 7 剧情引擎（弹窗/队列/序章），数据已在 story.js，引擎与数据成对。
-3. `battle.js`：战斗区段（战斗/打击反馈/Phase 4 连击反击/三模式/触屏控制）——体量最大、耦合最深，最后拆，拆前先补战斗冒烟断言。
+3. `battle.js`：战斗区段（战斗/打击反馈/Phase 4 连击反击/三模式/触屏控制）——拆前先补了 6 项战斗冒烟断言。
 4. `ui.js`：日常界面/训练/确认框/外出/状态页/工坊等渲染区段。
-5. 剩余部分（状态与存档、工具、事件绑定、测试档、初始化）保留为 `game.js` 核心。
+5. 剩余部分（前置工具函数与角色池辅助、状态与存档、Phase 6 外观、心态/装备、装备强化、阶段/影响力/赞助逻辑、事件绑定、测试档、初始化）保留为 `game.js` 核心。
 
-拆分顺序与命名只是路线建议，实施时以当时的耦合实测为准。
+实施时按耦合实测多拆了一个 `tools.js`：battle 区段的触屏绑定 IIFE 与 ui 区段的确认框按钮绑定在**加载期**就调用 `$()`，而 game.js 的事件绑定/初始化又在加载期直接引用 ui/battle 的函数，单靠调整引用顺序无解；「工具」区段（原位于 ui/battle 之前、无加载期外部依赖）一并逐字拆出排在两者之前，加载期依赖即按原相对顺序满足。另有两小块战斗/界面辅助因无独立区段标题、与存档常量等交错而留核心（详见 PHASE75_V2.md 的耦合记录）：战斗常量与辅助（PUNCH_KO/KO_DECAY/comboBonusPct/decayTrauma/freshRoundStats，位于状态区段之前）、Phase 6 外观区段（与状态同组）。
+
+### 拆分映射（v2，行号为各步拆分当时 game.js 内的行号）
+
+| 目标文件 | 源行范围 | 内容 |
+|---|---|---|
+| js/audio.js | 1921–1970（第 1 步时） | 音效区段：AC/muted、audio/noiseBuffer/playNoise/playTone、SFX |
+| js/story-engine.js | 477–746（第 2 步时） | Phase 7 剧情引擎区段头至 finishPrologue |
+| js/tools.js | 566–585（第 3 步时） | 工具区段：$ / clamp / rnd / toast / dailyLog / renderDailyLog |
+| js/battle.js | 1454–2787（第 3 步时，工具拆出后） | 战斗区段头至触屏控制与 useClinch：makeFoe/startBattle/打击反馈/Phase 4 连击反击破防击倒/tick/startBreak/finishBattle/settleNow/模拟跳过/手动操作/键盘监听/触屏 IIFE/renderBattle/即时指令 |
+| js/ui.js | 567–1452（第 4 步时，工具与战斗拆出后） | 日常界面区段头至 useConsumable：render/训练计划/确认框/外出商店/状态页与背包/生涯赞助卡/排名榜/工坊 |

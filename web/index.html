@@ -30,6 +30,7 @@
           <button class="ghost-btn" id="btnTestSave" title="开一个 ¥100000 开局的测试档（主存档会先自动备份）">测试档</button>
           <button class="ghost-btn" id="btnRestoreSave" style="display:none" title="把之前备份的主存档恢复回来">恢复主存档</button>
           <button class="ghost-btn" id="btnStatus">状态</button>
+          <button class="ghost-btn" id="btnSaves" title="管理 3 个存档槽：切换 / 复制备份，切换前当前进度会自动存回本槽">存档</button>
           <button class="ghost-btn" id="btnHelp">玩法说明</button>
           <button class="ghost-btn" id="btnReset">重新开始</button>
         </div>
@@ -138,8 +139,16 @@
                   <button class="app-btn" data-app-dim="outfit" data-app-val="default">默认</button>
                   <button class="app-btn" data-app-dim="outfit" data-app-val="robe">登场战袍</button>
                   <button class="app-btn" data-app-dim="outfit" data-app-val="training">训练服</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="short_training">短款训练服</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="short_vest">短款背心</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="short_cami">吊带款</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="wide_strap">宽肩带</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="racerback">工字背</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="cross_back">交叉美背</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="halter">挂脖款</button>
+                  <button class="app-btn" data-app-dim="outfit" data-app-val="zip">拉链款</button>
                 </div></div>
-                <p class="app-note">显示规则：立绘图片由最近一次切换的维度决定（发型、脸型、服装三者取最后一次切换的），体型缩放恒叠加其上；9×3×3 全组合需要 81 张图，本期用 13 张立绘图片（v8 默认立绘＋12 张新变体）代表各维度变体，不做全组合拼图。</p>
+                <p class="app-note">显示规则：立绘图片由最近一次切换的维度决定（发型、脸型、服装三者取最后一次切换的），体型缩放恒叠加其上；全组合需要大量立绘图，本期用 21 张立绘图片（v8 默认立绘＋20 张变体，含短款多版）代表各维度变体，不做全组合拼图。</p>
               </div>
             </div>
             <div>
@@ -177,6 +186,10 @@
             <section class="card">
               <h2>生涯阶段 <span class="tag">完成目标领奖金与称号</span></h2>
               <div id="stStage"></div>
+            </section>
+            <section class="card">
+              <h2>成就 <span class="tag" id="achCount">纯荣誉 · 不发奖励</span></h2>
+              <div id="stAchievements"></div>
             </section>
             <section class="card">
               <h2>关系 <span class="tag">好感 · 可选线，不理会也无惩罚</span></h2>
@@ -585,11 +598,24 @@
       </div>
     </div>
 
+    <!-- 存档槽弹窗（Phase 9：3 个存档槽，槽位交换实现，当前槽本体仍是 SAVE_KEY） -->
+    <div class="modal-mask" id="saveModal">
+      <div class="modal">
+        <h2>存档槽</h2>
+        <p>共 3 个存档槽。切换到其他槽时，当前进度会先自动存回本槽，不会丢失；切回本槽即可继续。把当前进度「复制到此槽」可以留一份备份。</p>
+        <p class="cf-note" id="saveTestNote" style="display:none">测试档进行中：为保证「恢复主存档」能准确回到开启测试档前的那个槽，测试期间不能切换 / 复制存档槽。请先点顶部「恢复主存档」结束测试档。</p>
+        <div id="saveSlotList"></div>
+        <div class="modal-btns">
+          <button class="secondary-btn" id="btnCloseSaves">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 重置确认弹窗 -->
     <div class="modal-mask" id="resetModal">
       <div class="modal">
         <h2>重新开始？</h2>
-        <p>当前的存档（日期、属性、金钱、战绩）会被全部清空，从 Day 1 重新出道。这个操作无法撤销。</p>
+        <p>当前存档槽（<b id="resetSlotNo">槽 1</b>）的存档（日期、属性、金钱、战绩）会被全部清空，从 Day 1 重新出道；其他存档槽的进度不受影响。这个操作无法撤销。</p>
         <div class="modal-btns">
           <button class="secondary-btn" id="btnCancelReset">取消</button>
           <button class="primary-btn" id="btnConfirmReset">确认重开</button>
@@ -601,6 +627,11 @@
 
     <script src="js/data.js"></script>
     <script src="js/story.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/story-engine.js"></script>
+    <script src="js/tools.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/battle.js"></script>
     <script src="js/game.js"></script>
   </body>
 </html>

@@ -107,3 +107,56 @@ appearance: { hair: 'ponytail', face: 'default', body: 'standard', outfit: 'defa
 - `~/workspace/game/boxing/DESIGN.md`（新增「九之二、Phase 6」章节，MVP 路线补充 Phase 6 已落地）
 - `~/workspace/game/boxing/ROADMAP.md`（Phase 6 改为已落地状态＋待发布说明，已完成列表补充）
 - `~/workspace/game/boxing/PHASE6.md`（本文件）
+
+
+---
+
+## 6. 2026-11-02 追加：短款训练服两版
+
+> 本节为 2026-11-02 本轮迭代追加，原 Phase 6 内容（第 1~5 节）不变。
+
+### 背景与用户定稿标准
+
+用户定下人物体型定稿标准：**以后角色都用短款运动训练服版型；肌肉量要收——不要大块腹肌，平坦腹部＋马甲线（腹部竖直的两条线，一边一条）就足够，lean 精瘦运动员体型**；并明确强调这类造型是体育向的训练成果展示、不是色情方向。据此给主角补做两版短款服装，接入 Phase 6 换装。（术语经用户 2026-11-02 纠正确认：要的是马甲线，不是人鱼线——人鱼线指下腹两侧斜向的 V 形线；本节及后续记录统一写「马甲线」。）
+
+### 改动内容
+
+- 服装选项由 **3 项先扩为 5 项**（`web/js/data.js` 的 APPEARANCE.outfit ＋ `web/index.html` 状态页服装组按钮）：
+  - 原有：默认（v8 本体）、登场战袍（`robe`）、训练服（`training`）
+  - 本节主体新增：短款训练服（`short_training`，有袖）、短款背心（`short_vest`，无袖运动背心）
+  - 同日后续扩充（用户「肩带细的粗的都要、可以多做一些服装」）：再补吊带款（`short_cami`）、宽肩带（`wide_strap`）、工字背（`racerback`）、交叉美背（`cross_back`）、挂脖款（`halter`）、拉链款（`zip`）6 款，服装选项最终共 **11 项**，全部按同一定稿体型标准生成并接入，图在 `web/assets/portrait/outfit_*.png`。
+- 显示规则不变：立绘图仍由 `S.appearance.lastDim`（最后切换维度）决定；新图比例 1120×2240，立绘 CSS 为 aspect-ratio + object-fit cover，不会变形。
+- 存档兼容：老存档外观字段无新增必填项，缺失/非法值照旧回落 v8 默认。
+
+### 两张新图路径
+
+| 选项 | 工程内图（实际接入） | 生成母版（游戏目录 assets/） |
+|---|---|---|
+| 短款训练服（有袖） | `web/assets/portrait/outfit_short_training.png` | `assets/media-generation-protagonist-outfit-short-train-0-37f8a450-0b7a-4a1b-8d34-80f387729b6a.webp` |
+| 短款背心（无袖） | `web/assets/portrait/outfit_short_vest.png` | `assets/media-generation-protagonist-outfit-short-vest-0-229a14a8-cdc4-434d-af7e-40f7a7d02225.webp` |
+
+两张均为粉紫＋星星刺绣、与 v8 同角色，体型按上述定稿标准绘制（平坦腹部、淡线条）。
+
+### 验证
+
+- 工程冒烟新增/复用外观断言复跑，最终 **96/96 全过**（见 SESSION_20261102.md）。
+- 状态页外观按钮总计 26 个：发型 9 / 脸型 3 / 体型 3 / 服装 11（默认/登场战袍/训练服/短款训练服/短款背心/吊带款/宽肩带/工字背/交叉美背/挂脖款/拉链款），与 index.html 实际按钮逐一对应。
+
+### 续（2026-11-02 同日）：短款服装补齐至 11 项
+
+用户进一步定：肩带细的粗的都要、可以多做一些服装，把市面常见运动款补齐。服装选项现共 **11 项**：
+
+- 此前已有 6 项：默认（v8 本体）、登场战袍（`robe`）、训练服（`training`）、短款训练服（`short_training`，有袖）、短款背心（`short_vest`，无袖）、吊带款（`short_cami`，细肩带）
+- 本次新增 5 项（全部短款、衣长到肋骨下方、粉紫配色＋星星刺绣、与前三款短款成系列）：
+
+| 选项 | key | 工程内图（实际接入） | 生成母版（游戏目录 assets/） | 款式特征自查 |
+|---|---|---|---|---|
+| 宽肩带 | `wide_strap` | `web/assets/portrait/outfit_wide_strap.png` | `assets/media-generation-protagonist-outfit-wide-strap-0-7baab230-77fe-4a9d-bcd2-c2b671b8c108.webp` | 宽肩带无袖背心，特征明确 |
+| 工字背 | `racerback` | `web/assets/portrait/outfit_racerback.png` | `assets/media-generation-protagonist-outfit-racerback-0-214738fa-8c83-4aa6-832e-29aaebf5db14.webp` | 正面肩带向内收拢的工字背式结构 |
+| 交叉美背 | `cross_back` | `web/assets/portrait/outfit_cross_back.png` | `assets/media-generation-protagonist-outfit-cross-back-0-61bcc2fe-ca15-4de9-9fdc-e09b5edbe1bf.webp` | 四分之三侧背角度，背后肩带交叉造型清晰可见 |
+| 挂脖款 | `halter` | `web/assets/portrait/outfit_halter.png` | `assets/media-generation-protagonist-outfit-halter-0-2bd402f5-bdf3-4456-a8e0-83f4c828ccf4.webp` | 挂脖系带绕颈、无肩带 |
+| 拉链款 | `zip` | `web/assets/portrait/outfit_zip.png` | `assets/media-generation-protagonist-outfit-zip-0-b4b1ba86-fa4b-4bd5-992f-ae8be384cada.webp` | 短袖、前拉链拉到领口 |
+
+- 接入点同前：`web/js/data.js` 的 APPEARANCE.outfit 增 5 项、`web/index.html` 服装组增 5 个按钮，app-note 立绘张数更新为 21 张（v8＋20 变体）。
+- 五张逐张自查：均为同一主角（粉色高马尾、黑发带、温柔坚定表情、紫拳套、白绷带、粉护腕、紫色百褶裙、浅色纯背景、竖版全身、无裁切畸形）；体型按定稿标准——平坦腹部＋淡淡的马甲线（竖直两条线），无大块腹肌。按术语纠正口径复查腹部线条：五张均未画出明显的斜向 V 形人鱼线（挂脖款与拉链款下腹仅有极淡的阴影笔触，非成形的人鱼线），无需重生成。
+- 验证：冒烟短款服装断言已扩（服装 11 项＋`wide_strap`/`halter` 等切换校验），复跑 **96/96 全过**；状态页外观按钮总计 26 个：发型 9 / 脸型 3 / 体型 3 / 服装 11。

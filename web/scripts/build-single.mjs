@@ -10,7 +10,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
 const shell = read('index.html');
 const css = read('css/main.css');
-const jsParts = ['js/data.js', 'js/story.js', 'js/game.js'].map(read);
+const jsParts = ['js/data.js', 'js/story.js', 'js/audio.js', 'js/story-engine.js', 'js/tools.js', 'js/ui.js', 'js/battle.js', 'js/game.js'].map(read);
 
 // 安全前提：内联内容里不能出现提前闭合标签（源文件本来就是单文件内联版，已验证不存在）
 for (const [name, content, tag] of [['css/main.css', css, '</style'], ['js files', jsParts.join('\n'), '</script']]) {
@@ -21,10 +21,15 @@ const CSS_LINK = '    <link rel="stylesheet" href="css/main.css" />';
 const SCRIPT_TAGS = [
   '    <script src="js/data.js"></script>',
   '    <script src="js/story.js"></script>',
+  '    <script src="js/audio.js"></script>',
+  '    <script src="js/story-engine.js"></script>',
+  '    <script src="js/tools.js"></script>',
+  '    <script src="js/ui.js"></script>',
+  '    <script src="js/battle.js"></script>',
   '    <script src="js/game.js"></script>',
 ].join('\n');
 if (!shell.includes(CSS_LINK)) throw new Error('index.html 中找不到 css 引用行，壳文件结构已变化');
-if (!shell.includes(SCRIPT_TAGS)) throw new Error('index.html 中找不到三行 script 引用，壳文件结构已变化');
+if (!shell.includes(SCRIPT_TAGS)) throw new Error('index.html 中找不到 script 引用行组，壳文件结构已变化');
 
 const out = shell
   .replace(CSS_LINK, '    <style>\n' + css + '    </style>')
