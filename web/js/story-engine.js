@@ -19,6 +19,15 @@
       storyQueue.push(id);
     }
     function queueStoryRepeat(id) { if (STORY_EVENTS[id] && storyQueue.indexOf(id) < 0) storyQueue.push(id); }
+    /* ---------- D2：日常事件触发（训练后 / 散心共用：概率命中后从未触发的日常事件里随机抽一段排队弹出） ---------- */
+    function triggerDailyEvent(chance) {
+      storyState();
+      if (Math.random() >= chance) return false;
+      var pool = DAILY_EVENT_IDS.filter(function (id) { return S.story.seenEvents.indexOf(id) < 0; });
+      if (!pool.length) return false;
+      queueStory(pool[Math.floor(Math.random() * pool.length)]);
+      return showStoryEventIfPending();
+    }
     function addAffinity(who, delta) {
       storyState();
       if (!STORY_CHARS[who] || !delta) return;
@@ -102,6 +111,50 @@
       save(); render();
       showNextPendingModal();
     }
+    /* ---------- D4：剧情回顾（只读回放） ----------
+       与正式事件路径完全隔离：不写 seenEvents、不走 chooseStoryChoice/applyStoryFx、不 save、不改好感，
+       选项在回放里只展示当初的后续文本。状态页「回忆」列表调用 openStoryReplay(id)。 */
+    var curReplay = null;
+    function openStoryReplay(id) {
+      var def = STORY_EVENTS[id]; if (!def) return;
+      if (curStory || proState) return; // 正式剧情/序章进行中不叠加回放
+      storyState();
+      if (S.story.seenEvents.indexOf(id) < 0) return; // 只重看已触发过的
+      curReplay = { id: id, def: def, page: 0, picked: false };
+      $('storyTitle').textContent = (def.title || '剧情') + ' · 回忆';
+      $('storySkip').style.display = 'none';
+      renderStoryReplayPage();
+      $('storyModal').classList.add('open');
+    }
+    function renderStoryReplayPage() {
+      if (!curReplay) return;
+      var def = curReplay.def, pg = def.pages[curReplay.page], who = pg.w || def.char;
+      if (STORY_CHARS[who]) storySet(STORY_CHARS[who].img, STORY_CHARS[who].name, STORY_CHARS[who].role, pg.t);
+      else if (who === 'me') storySet('assets/portrait.webp', S.name + '（你）', '主角', pg.t);
+      else storySet(STORY_CHARS[def.char].img, '', '', pg.t);
+      if (curReplay.page < def.pages.length - 1) {
+        storyBtns([{ label: '继续', fn: function () { curReplay.page++; renderStoryReplayPage(); } }]);
+      } else if (!curReplay.picked && def.choices && def.choices.length) {
+        storyBtns(def.choices.map(function (c, i) {
+          return { label: c.text, cls: i === 0 ? 'primary-btn' : 'secondary-btn', fn: function () { replayPickChoice(i); } };
+        }));
+      } else {
+        storyBtns([{ label: '关闭', fn: closeStoryReplay }]);
+      }
+    }
+    function replayPickChoice(i) {
+      if (!curReplay) return;
+      curReplay.picked = true;
+      var c = curReplay.def.choices[i];
+      var fxEl = $('storyFx');
+      fxEl.textContent = (c.result || '') + '（回忆回放：选项效果不再结算）';
+      fxEl.classList.add('show');
+      storyBtns([{ label: '关闭', fn: closeStoryReplay }]);
+    }
+    function closeStoryReplay() {
+      $('storyModal').classList.remove('open');
+      curReplay = null;
+    }
     function showStoryEventIfPending() {
       if (!storyQueue.length) return false;
       if (B) return false;
@@ -140,6 +193,7 @@
       $('storyTitle').textContent = '序章 · 街机厅';
       $('storySkip').style.display = 'block';
       $('storyModal').classList.add('open');
+      setScene('arcade'); // A1：序章（街机厅测力机）切街机场景
       renderProScene();
     }
     function renderProScene() {
@@ -267,6 +321,7 @@
       proState = null;
       $('storySkip').style.display = 'none';
       $('storyModal').classList.remove('open');
+      setScene('gym'); // A1：序章结束回日常复位拳馆
       if (!skipped) queueStory('ev_stage1');
       save(); render();
       $('helpModal').classList.add('open');

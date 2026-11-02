@@ -250,7 +250,7 @@
         day: 1, ap: 6, money: 100, stamina: 100, injury: 0, fame: 0, rank: 50,
         roster: buildRoster(50, 1), // 角色池：新档按名册顺序建池（玩家第 50 名，胡小桃候补）
         influence: 1, stage: 1, completedStages: [], winStreak: 0, champWinBase: null, titles: [], sponsor: null,
-        wins: 0, losses: 0, koWins: 0, achievements: {}, lastMatchDay: 0, deathFight: false, testMode: false,
+        wins: 0, losses: 0, koWins: 0, achievements: {}, facedFoes: [], lastMatchDay: 0, deathFight: false, testMode: false,
         name: '小拳', mind: 60, scoutedForDay: 0,
         gear: { gloves: null, guard: null, boots: null, head: null, robe: null, wrist: null },
         owned: [], enh: {},
@@ -515,6 +515,7 @@
       }).join('') + (list.length > 1 ? '<p style="text-align:center">合计奖励 <b style="color:var(--gold)">¥' + total + '</b></p>' : '') +
         '<p style="text-align:center">' + (S.stage <= 6 ? '下一阶段：「' + stageById(S.stage).name + '」——' + stageById(S.stage).goalText : '全部阶段完成，传奇之路走到尽头了！') + '</p>';
       $('stageModal').classList.add('open');
+      setScene('title_stage'); // A1：阶段达成（冲冠/夺冠节点）切冠军舞台
       save();
       return true;
     }
@@ -608,6 +609,9 @@
         });
         if (typeof S.koWins !== 'number' || isNaN(S.koWins) || S.koWins < 0) S.koWins = 0;
         S.koWins = Math.floor(S.koWins);
+        // D3 老存档兼容：对手名鉴「已交手」记录缺失/非法时补 []（仅展示用，历史交手无从追溯，从读档后开始记录）
+        if (!Array.isArray(S.facedFoes)) S.facedFoes = [];
+        S.facedFoes = S.facedFoes.filter(function (x) { return typeof x === 'string'; });
         // 角色池兼容：无 roster 字段的老存档 / roster 缺失、长度不对或含非法条目时，按当前 S.rank 与周数迁移重建（story/好感/进度一律保留）
         if (!Array.isArray(data.roster) || !rosterValid(S.roster)) S.roster = buildRoster(S.rank, weekOf(S.day));
         // Phase 5 深化：已拥有的全部装备款式补登记进图鉴（此前图鉴只登记拳套；强化等级与图鉴互不影响）
@@ -686,7 +690,6 @@
       if (typeof proStopTimer === 'function') proStopTimer(); // 切槽时停掉旧槽序章的计时器并清序章状态，防止串槽
       proState = null;
       $('storyModal').classList.remove('open');
-      $('saveModal').classList.remove('open');
       if (tgtRaw && load()) {
         dailyLog('已切换到存档槽 ' + n + '：回到 Day ' + S.day + '，排名第 ' + S.rank + ' 名，战绩 ' + S.wins + ' 胜 · ' + S.losses + ' 负。', 'good');
         checkAchievements(true); // 切到的若是老存档，成就追溯补登记（与恢复主存档同口径）
@@ -744,22 +747,49 @@
         onOk: function () { copyCurrentToSlot(n); }
       });
     }
-    function renderSaveSlots() { // 渲染存档面板的 3 张槽卡（当前槽摘要读内存 S，保证与界面一致）
+    function deleteSlot(n) { // 实际删除（确认框在 confirmDeleteSlot；自带守卫，可直接调用）：只清非当前槽的暂存位
+      n = Math.floor(n);
+      if (!(n >= 1 && n <= SLOT_COUNT) || n === currentSlot()) return;
+      if (slotsLocked()) { toast('测试档进行中，不能删除存档槽（先恢复主存档）'); return; }
+      try { localStorage.removeItem(slotKey(n)); } catch (e) { toast('删除失败：存储不可用'); return; }
+      dailyLog('已删除存档槽 ' + n + ' 的存档。', 'dim');
+      renderSaveSlots();
+      toast('存档槽 ' + n + ' 已清空');
+    }
+    function confirmDeleteSlot(n) {
+      if (n === currentSlot()) return;
+      if (slotsLocked()) { toast('测试档进行中，不能删除存档槽（先恢复主存档）'); return; }
+      if (!slotData(n)) { toast('存档槽 ' + n + ' 已经是空的'); return; }
+      askConfirm({
+        title: '删除存档槽 ' + n + '？',
+        lines: [
+          ['将被删除', '槽 ' + n + '：' + slotSummaryText(n)]
+        ],
+        note: '删除后无法恢复。当前槽（槽 ' + currentSlot() + '）和其他槽不受影响。',
+        okText: '确认删除',
+        onOk: function () { deleteSlot(n); }
+      });
+    }
+    function renderSaveSlots() { // 渲染存档屏的 3 张槽卡（当前槽摘要读内存 S，保证与界面一致）
       var box = $('saveSlotList'); if (!box) return;
       var cur = currentSlot(), locked = slotsLocked();
       var note = $('saveTestNote'); if (note) note.style.display = locked ? '' : 'none';
       box.innerHTML = [1, 2, 3].map(function (n) {
         var isCur = n === cur;
+        var has = isCur || !!slotData(n);
         var sum = isCur
           ? '第 ' + weekOf(S.day) + ' 周 · Day ' + S.day + ' · 排名第 ' + S.rank + ' 名 · 战绩 ' + S.wins + ' 胜-' + S.losses + ' 负 · 金钱 ¥' + S.money + ' · 阶段：' + slotStageName(S) + (S.testMode ? ' · 测试档' : '')
           : slotSummaryText(n);
         return '<div class="save-slot' + (isCur ? ' current' : '') + '">' +
           '<div class="save-slot-head"><span>存档槽 ' + n + '</span>' + (isCur ? '<span class="save-slot-cur">当前槽</span>' : '') + '</div>' +
           '<div class="save-slot-sum">' + sum + '</div>' +
-          (isCur ? '' : '<div class="save-slot-btns">' +
-            '<button data-slot-switch="' + n + '"' + (locked ? ' disabled' : '') + '>切换到此槽</button>' +
-            '<button data-slot-copy="' + n + '"' + (locked ? ' disabled' : '') + '>复制当前进度到此槽</button>' +
-            '</div>') +
+          (isCur
+            ? '<div class="save-slot-btns"><span class="save-slot-auto">当前进度自动保存在此槽</span></div>'
+            : '<div class="save-slot-btns">' +
+              '<button data-slot-switch="' + n + '"' + (locked || !has ? ' disabled' : '') + '>读取</button>' +
+              '<button data-slot-copy="' + n + '"' + (locked ? ' disabled' : '') + '>覆盖保存（存入当前进度）</button>' +
+              '<button data-slot-delete="' + n + '"' + (locked || !has ? ' disabled' : '') + '>删除</button>' +
+              '</div>') +
           '</div>';
       }).join('');
       Array.prototype.forEach.call(box.querySelectorAll('[data-slot-switch]'), function (b) {
@@ -768,41 +798,134 @@
       Array.prototype.forEach.call(box.querySelectorAll('[data-slot-copy]'), function (b) {
         b.addEventListener('click', function () { confirmCopySlot(parseInt(b.getAttribute('data-slot-copy'), 10)); });
       });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-slot-delete]'), function (b) {
+        b.addEventListener('click', function () { confirmDeleteSlot(parseInt(b.getAttribute('data-slot-delete'), 10)); });
+      });
     }
-    function openSaveSlots() { renderSaveSlots(); $('saveModal').classList.add('open'); }
+    function openSaveSlots() { renderSaveSlots(); showScene('saves'); } // 界面架构批：存档由弹窗正式化为独立屏
+
+    /* ================= 界面架构批：商店进店流程 / 标题屏 / 场景导航 =================
+       进店规则与旧版完全一致：每次进店先走「外出」确认、确认后扣 2 AP；离开商店（回据点或
+       去别的场景）即结束本次进店，下次再进重新确认扣点。shopSession 只记「本趟是否已付过
+       外出点」，防场景导航重复点商店时重复扣点；不入存档。 */
+    var shopSession = false;
+    function enterShopFlow() {
+      if (typeof B !== 'undefined' && B) { toast('比赛中无法去商店'); return; }
+      if (currentSceneView === 'shop' && shopSession) return; // 已在本趟店里，重复点导航不重复扣点
+      if (S.ap < 2) { toast('行动点不足（外出需要 2 AP）'); return; }
+      askConfirm({
+        title: '外出 · 体育用品店',
+        lines: [
+          ['行动点', '−2 AP（' + S.ap + ' → ' + (S.ap - 2) + '）'],
+          ['效果', '进入商店选购装备与消耗品']
+        ],
+        note: '购买只花金钱，不再另耗 AP；每次买到东西心态 +10。出门这一趟本身消耗 2 AP，离开商店不退还。',
+        okText: '确认出门',
+        onOk: function () {
+          if (S.ap < 2) { toast('行动点不足（外出需要 2 AP）'); return; }
+          S.ap -= 2; // 外出本身 2 AP，进入商店后购买不再重复收费
+          shopSession = true;
+          $('outList').classList.remove('open');
+          renderShop();
+          showScene('shop');
+          render();
+        }
+      });
+    }
+    function leaveShopToDaily() { shopSession = false; showScene('daily'); }
+    /* 标题屏：启动先到这里。继续＝当前槽有档时进游戏；新的开始＝当前槽有档先确认覆盖、
+       无档直接开始（新档走序章，与旧版新档流程一致）；读取存档/画廊/设置从标题也可达。
+       进游戏的收尾集中在 enterGame()：补弹读档追溯的阶段/成就祝贺、未走完序章的继续序章。 */
+    var titleHadSave = false;
+    function renderTitle(hadSave) {
+      titleHadSave = !!hadSave;
+      var btn = $('btnTitleContinue'); if (btn) btn.disabled = !hadSave;
+      var tp = $('titlePortrait'); if (tp) tp.src = portraitSrc();
+      var info = $('titleSlotInfo');
+      if (info) info.textContent = hadSave
+        ? '存档槽 ' + currentSlot() + '：' + slotSummaryText(currentSlot())
+        : '暂无存档——点「新的开始」，从街机厅的测力机开始你的生涯。';
+    }
+    function enterGame() {
+      gameEntered = true;
+      shopSession = false;
+      showScene('daily');
+      if (S.story && !S.story.prologueDone) { startPrologue(); return; }
+      showNextPendingModal(); // 读档追溯的阶段/图鉴祝贺窗，进游戏后再弹（不在标题屏上叠罗汉）
+    }
+    function startNewGame() {
+      // 只认启动时捕获的 titleHadSave：init 的 render() 已把默认档写进 SAVE_KEY，slotData 区分不了「真旧档」
+      if (titleHadSave) {
+        askConfirm({
+          title: '在存档槽 ' + currentSlot() + ' 开始新生涯？',
+          lines: [
+            ['当前槽', '槽 ' + currentSlot() + '：' + slotSummaryText(currentSlot())],
+            ['新生涯', 'Day 1 · 排名第 50 名 · 从序章（街机测力机）开始']
+          ],
+          note: '当前槽的进度会被清空覆盖，无法恢复（其他存档槽不受影响）。想保留现进度，先去「读取存档」把它复制备份到别的槽。',
+          okText: '清空并开始新生涯',
+          onOk: function () { doResetCurrentSlot(); }
+        });
+        return;
+      }
+      enterGame(); // 无档：S 已是新档默认状态，进游戏即走序章（enterGame 内处理）
+    }
+    function doResetCurrentSlot() { // 「重新开始」的实际执行（顶部按钮经 resetModal 确认、标题屏经确认框、设置危险区经双重确认共用）
+      try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(slotKey(currentSlot())); } catch (e) {}
+      clearInterval(battleTimer); B = null;
+      S = defaultState();
+      pendingStageNotice = []; pendingStageReward = 0;
+      pendingAchNotice = [];
+      storyQueue = []; curStory = null;
+      shopSession = false;
+      gameEntered = true;
+      $('stageModal').classList.remove('open');
+      $('storyModal').classList.remove('open');
+      $('resetModal').classList.remove('open');
+      lastAttrs = null;
+      showScene('daily');
+      dailyLog('新的生涯开始了。从地区新人赛打起，一步步往上走。', 'dim');
+      render();
+      toast('已重新开始');
+      startPrologue(); // 新存档先走序章
+    }
+    function gotoScene(name) { // 场景导航统一入口：各屏的既有守卫/流程在这里分发
+      if (name === 'daily') { shopSession = false; showScene('daily'); }
+      else if (name === 'train') { renderPlan(); showScene('train'); }
+      else if (name === 'shop') enterShopFlow();
+      else if (name === 'match') { shopSession = false; showScene('match'); }
+      else if (name === 'status') openStatus();
+      else if (name === 'gallery') openGallery();
+      else if (name === 'saves') openSaveSlots();
+      else if (name === 'settings') { renderSettingsControls(); showScene('settings'); }
+    }
 
     /* ================= 事件绑定 ================= */
-    $('btnTrain').addEventListener('click', function () { closeSubLists('trainList'); $('trainList').classList.toggle('open'); renderPlan(); });
-    $('btnOut').addEventListener('click', function () { closeSubLists('outList'); $('outList').classList.toggle('open'); });
+    // （C5 顶部锚点快捷条已在界面架构批移除：单页全列改为多场景分屏，导航走 #sceneNav 的 gotoScene）
+    // C5：长分区折叠开关（只切换 .folded 视觉类，内容与渲染逻辑不动）
+    Array.prototype.forEach.call(document.querySelectorAll('[data-fold]'), function (b) {
+      b.addEventListener('click', function () {
+        var sec = document.getElementById(b.getAttribute('data-fold'));
+        if (!sec) return;
+        var folded = sec.classList.toggle('folded');
+        b.textContent = folded ? '▸' : '▾';
+        b.setAttribute('aria-expanded', String(!folded));
+      });
+    });
+    $('btnTrain').addEventListener('click', function () { gotoScene('train'); }); // 界面架构批：训练改为独立屏
+    $('btnOut').addEventListener('click', function () { closeSubLists('outList'); $('outList').classList.toggle('open'); setScene($('outList').classList.contains('open') ? 'street' : 'gym'); }); // A1：外出展开切街道
     Array.prototype.forEach.call(document.querySelectorAll('[data-out]'), function (b) {
       b.addEventListener('click', function () {
         var kind = b.getAttribute('data-out');
         if (S.ap < 2) { toast('行动点不足（外出需要 2 AP）'); return; }
         if (kind === 'shop') {
-          // 进店先确认：确认后才扣 2 AP，取消不消耗
-          askConfirm({
-            title: '外出 · 体育用品店',
-            lines: [
-              ['行动点', '−2 AP（' + S.ap + ' → ' + (S.ap - 2) + '）'],
-              ['效果', '进入商店选购装备与消耗品']
-            ],
-            note: '购买只花金钱，不再另耗 AP；每次买到东西心态 +10。出门这一趟本身消耗 2 AP，点「离开商店」不退还。',
-            okText: '确认出门',
-            onOk: function () {
-              if (S.ap < 2) { toast('行动点不足（外出需要 2 AP）'); return; }
-              S.ap -= 2; // 外出本身 2 AP，进入商店后购买不再重复收费
-              $('outList').classList.remove('open');
-              renderShop();
-              $('shopList').classList.add('open');
-              render();
-              $('shopList').classList.add('open'); // render 不关闭面板，这里确保保持打开
-            }
-          });
+          enterShopFlow(); // 进店先确认：确认后才扣 2 AP，取消不消耗（与场景导航「商店」共用同一流程）
         } else if (kind === 'hospital') {
           // 医院治疗：先确认（2 AP + ¥500 → 伤病 −30），确认后才结算
           if (S.injury <= 0) { toast('身上没伤，不用去医院'); return; }
           if (S.money < 500) { toast('钱不够治疗（需要 ¥500）'); return; }
           askConfirm({
+            scene: 'hospital', // A1：治疗确认框打开期间切医院场景，关闭自动复位
             title: '外出 · 医院治疗',
             lines: [
               ['行动点', '−2 AP（' + S.ap + ' → ' + (S.ap - 2) + '）'],
@@ -871,7 +994,7 @@
     $('btnRest').addEventListener('click', confirmRest);
     $('btnSleep').addEventListener('click', confirmSleep);
     $('btnMatch').addEventListener('click', confirmMatch);
-    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); });
+    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); setScene('gym'); }); // A1：取消赛前弹窗复位拳馆
     Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
       b.addEventListener('click', function () {
         var m = b.getAttribute('data-mode');
@@ -904,6 +1027,9 @@
     $('cmdClinch').addEventListener('click', useClinch);
     $('btnMute').addEventListener('click', function () {
       muted = !muted;
+      // 界面架构批：静音键与设置屏联动——主静音状态同步写入设置（音乐/音效开关），设置屏拨动任一开关也会解除主静音
+      SETTINGS.musicOn = !muted; SETTINGS.sfxOn = !muted;
+      saveSettings(); applySettings();
       $('btnMute').textContent = muted ? '音效：关' : '音效：开';
       if (!muted) { audio(); SFX.light(); }
     });
@@ -957,8 +1083,7 @@
       keysDown = {};
       touchBlock = false;
       B = null;
-      $('battleView').style.display = 'none';
-      $('dailyView').style.display = 'block';
+      showScene('daily'); // 结算回据点（背景 gym 由映射处理；其后若弹阶段窗会再切冠军舞台）
       if (typeof BGM !== 'undefined') BGM.start('daily'); // Phase 9：回日常视图确保日常曲（finishBattle 已切过时为无操作）
       // 报名免费（0 AP）：不跳天，当天剩余 AP 保留，可以继续训练/打工/休息
       dailyLog('比赛结束，回到日常。今天还剩 ' + S.ap + ' 点行动点，可以继续安排。', 'dim');
@@ -978,23 +1103,8 @@
     });
     $('btnCancelReset').addEventListener('click', function () { $('resetModal').classList.remove('open'); });
     $('btnConfirmReset').addEventListener('click', function () {
-      // Phase 9 多存档槽：重开只清当前槽——SAVE_KEY 本体 + 当前槽暂存位（防御性清理）；其他槽与 meta 当前槽号不动
-      try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(slotKey(currentSlot())); } catch (e) {}
-      clearInterval(battleTimer); B = null;
-      S = defaultState();
-      pendingStageNotice = []; pendingStageReward = 0;
-      pendingAchNotice = []; // P2-14：重新开始也要清图鉴待发通知（此前只清了阶段队列）
-      storyQueue = []; curStory = null; // Phase 7：新档清剧情队列，并从序章开始
-      $('stageModal').classList.remove('open');
-      $('storyModal').classList.remove('open');
-      lastAttrs = null;
-      $('battleView').style.display = 'none';
-      $('dailyView').style.display = 'block';
-      $('resetModal').classList.remove('open');
-      dailyLog('新的生涯开始了。从地区新人赛打起，一步步往上走。', 'dim');
-      render();
-      toast('已重新开始');
-      startPrologue(); // Phase 7：新存档先走序章
+      // Phase 9 多存档槽：重开只清当前槽（执行体 doResetCurrentSlot 与标题屏/设置危险区共用）
+      doResetCurrentSlot();
     });
 
     /* ================= 测试档（¥100000 开局，主存档自动备份 / 一键恢复） ================= */
@@ -1021,9 +1131,8 @@
       resetJoy();
       keysDown = {};
       touchBlock = false;
-      $('battleView').style.display = 'none';
-      $('statusView').style.display = 'none';
-      $('dailyView').style.display = 'block';
+      gameEntered = true; // 切档/测试档/恢复主存档都直接落回游戏内据点
+      showScene('daily'); // A1：切档/测试档回日常复位拳馆（背景由映射处理）
       if (typeof BGM !== 'undefined') BGM.start('daily'); // Phase 9：切存档/测试档回日常时切日常曲
       $('stageModal').classList.remove('open');
       $('settleModal').classList.remove('open');
@@ -1103,8 +1212,52 @@
     $('btnTestSave').addEventListener('click', confirmStartTest);
     $('btnRestoreSave').addEventListener('click', confirmRestoreMain);
     $('btnSaves').addEventListener('click', openSaveSlots);
-    $('btnCloseSaves').addEventListener('click', function () { $('saveModal').classList.remove('open'); });
-    $('saveModal').addEventListener('click', function (e) { if (e.target === this) $('saveModal').classList.remove('open'); });
+
+    /* ================= 界面架构批：标题 / 导航 / 画廊 / 设置 绑定 ================= */
+    $('btnTitleContinue').addEventListener('click', function () { if (!$('btnTitleContinue').disabled) enterGame(); });
+    $('btnTitleNew').addEventListener('click', startNewGame);
+    $('btnTitleSaves').addEventListener('click', openSaveSlots);
+    $('btnTitleGallery').addEventListener('click', function () { openGallery(); });
+    $('btnTitleSettings').addEventListener('click', function () { gotoScene('settings'); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (b) {
+      b.addEventListener('click', function () { gotoScene(b.getAttribute('data-nav')); });
+    });
+    $('btnTrainBack').addEventListener('click', function () { showScene('daily'); });
+    $('btnGalleryBack').addEventListener('click', backFromUtility);
+    $('btnSavesBack').addEventListener('click', backFromUtility);
+    $('btnSettingsBack').addEventListener('click', backFromUtility);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-galtab]'), function (b) {
+      b.addEventListener('click', function () { openGallery(b.getAttribute('data-galtab')); });
+    });
+    $('btnImgClose').addEventListener('click', function () { $('imgModal').classList.remove('open'); });
+    $('imgModal').addEventListener('click', function (e) { if (e.target === this) $('imgModal').classList.remove('open'); });
+    // 状态页「收藏与记录」跳转（画廊为唯一渲染处，状态页只留入口）
+    $('btnGoGalleryDex').addEventListener('click', function () { openGallery('gear'); });
+    $('btnGoGalleryDesign').addEventListener('click', function () { openGallery('design'); });
+    $('btnGoGalleryFoes').addEventListener('click', function () { openGallery('foes'); });
+    $('btnGoGalleryMem').addEventListener('click', function () { openGallery('mem'); });
+    $('btnGoMatchRank').addEventListener('click', function () { gotoScene('match'); });
+    // 设置屏控件：即改即生效（setSetting 落盘＋applySettings）；拨动音乐/音效开关时同步解除战斗面板主静音
+    $('setMusicOn').addEventListener('click', function () { muted = false; setSetting('musicOn', !SETTINGS.musicOn); syncMuteBtn(); });
+    $('setSfxOn').addEventListener('click', function () { muted = false; setSetting('sfxOn', !SETTINGS.sfxOn); syncMuteBtn(); });
+    $('setReduceMotion').addEventListener('click', function () { setSetting('reduceMotion', !SETTINGS.reduceMotion); toast(SETTINGS.reduceMotion ? '已减少动效：过渡与残影动画关闭' : '动效已恢复'); });
+    $('setMusicVol').addEventListener('input', function () { setSetting('musicVol', parseInt($('setMusicVol').value, 10) || 0); });
+    $('setSfxVol').addEventListener('input', function () { setSetting('sfxVol', parseInt($('setSfxVol').value, 10) || 0); });
+    $('btnSettingsReset').addEventListener('click', function () { // 危险区双重确认：先 askConfirm，再走既有 resetModal 二次确认
+      askConfirm({
+        title: '重置当前存档槽 ' + currentSlot() + '？',
+        lines: [
+          ['当前槽', '槽 ' + currentSlot() + '：' + slotSummaryText(currentSlot())],
+          ['后果', '该槽进度全部清空，从 Day 1 重新出道；其他槽不受影响']
+        ],
+        note: '这是第一重确认。点「继续重置」后还会再弹一次最终确认，两次都确认才会真正清空。',
+        okText: '继续重置',
+        onOk: function () {
+          var rsn = $('resetSlotNo'); if (rsn) rsn.textContent = '槽 ' + currentSlot();
+          $('resetModal').classList.add('open');
+        }
+      });
+    });
 
     /* ================= 初始化 ================= */
     var hadSave = load();
@@ -1114,12 +1267,13 @@
     if (hadSave) checkAchievements(true); // Phase 9：老存档追溯判定——已达成的成就静默补解锁，只汇总一条日志，不弹一串 toast
     renderDailyLog();
     render();
-    if (retroStages.length) showStageModalIfPending();
-    else showAchModalIfPending();
     if (!hadSave) {
       dailyLog('欢迎来到拳馆。你是无名新人「' + S.name + '」，先从训练和打工开始攒实力吧。（名字可以在「状态」页修改）', 'dim');
       render();
     }
-    // Phase 7：新存档（或序章未读完的新档）先走序章；序章结束/跳过后才打开玩法说明。老存档 prologueDone=true（迁移保证），绝不触发
-    if (S.story && !S.story.prologueDone) startPrologue();
-    else if (!hadSave) $('helpModal').classList.add('open');
+    /* 界面架构批：启动先到标题屏——不在此自动弹追溯祝贺窗/序章/说明，
+       全部推迟到 enterGame()（点「继续游戏」/「新的开始」）后按旧流程依次发生：
+       未走完序章 → startPrologue（序章结束自动开玩法说明）；已走完 → showNextPendingModal
+       补弹阶段/图鉴追溯祝贺。老存档 prologueDone=true（迁移保证），点继续即原进度，绝不被序章卡住。 */
+    renderTitle(hadSave);
+    showScene('title');

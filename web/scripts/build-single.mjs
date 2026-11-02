@@ -37,7 +37,23 @@ const out = shell
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(root, 'dist/index.html'), out);
-fs.cpSync(path.join(root, 'assets'), path.join(root, 'dist/assets'), { recursive: true });
+// 发布包瘦身：assets/portrait/ 与 assets/equipment/ 的 PNG 原件只留工程内，
+// dist 只带同名 webp（引用已全部指向 .webp）
+fs.rmSync(path.join(root, 'dist/assets'), { recursive: true, force: true });
+fs.cpSync(path.join(root, 'assets'), path.join(root, 'dist/assets'), {
+  recursive: true,
+  filter: (src) => {
+    const rel = path.relative(path.join(root, 'assets'), src);
+    const webpOnlyDir = rel.startsWith('portrait' + path.sep) || rel.startsWith('equipment' + path.sep);
+    return !(webpOnlyDir && rel.endsWith('.png'));
+  },
+});
+
+// PWA：manifest 与 Service Worker 复制到 dist 根目录（图标在 assets/icons/，随 assets 一并复制）
+for (const f of ['manifest.webmanifest', 'sw.js']) {
+  fs.copyFileSync(path.join(root, f), path.join(root, 'dist', f));
+}
 
 console.log('dist/index.html 已生成：', out.length, '字节');
-console.log('dist/assets 已复制（与工程 assets/ 相同）');
+console.log('dist PWA 文件已复制：manifest.webmanifest、sw.js');
+console.log('dist/assets 已复制（portrait/、equipment/ 仅含 webp，PNG 原件不进发布包）');

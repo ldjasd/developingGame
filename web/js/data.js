@@ -138,31 +138,141 @@
     ];
 
     var GEAR_IMG_SRC = {
-      gloves1: 'assets/equipment/glove_beginner.png',
-      gloves2: 'assets/equipment/glove_standard.png',
-      gloves3: 'assets/equipment/glove_professional.png',
-      gloves4: 'assets/equipment/glove_swift.png',
-      gloves5: 'assets/equipment/glove_cannon.png',
-      gloves6: 'assets/equipment/glove_shadowmoon.png',
-      guard1: 'assets/equipment/mouthguard_basic.png',
-      boots1: 'assets/equipment/boots_light.png',
-      head1: 'assets/equipment/headgear_basic.png',
-      head2: 'assets/equipment/headgear_pro.png',
-      robe1: 'assets/equipment/robe_entrance.png',
-      wrist1: 'assets/equipment/wrist_basic.png',
-      wrist2: 'assets/equipment/wrist_pro.png',
-      wrist3: 'assets/equipment/wrist_champion.png',
-      head3: 'assets/equipment/headgear_champion.png',
-      robe2: 'assets/equipment/robe_training.png',
-      robe3: 'assets/equipment/robe_champion.png',
-      boots2: 'assets/equipment/boots_speed.png',
-      boots3: 'assets/equipment/boots_heavy.png',
-      guard2: 'assets/equipment/mouthguard_custom.png',
-      guard3: 'assets/equipment/mouthguard_pro.png',
-      'pattern-guardian': 'assets/equipment/glove_guardian.png',
-      'pattern-bull': 'assets/equipment/glove_bull.png',
-      'pattern-classic': 'assets/equipment/glove_classic.png'
+      gloves1: 'assets/equipment/glove_beginner.webp',
+      gloves2: 'assets/equipment/glove_standard.webp',
+      gloves3: 'assets/equipment/glove_professional.webp',
+      gloves4: 'assets/equipment/glove_swift.webp',
+      gloves5: 'assets/equipment/glove_cannon.webp',
+      gloves6: 'assets/equipment/glove_shadowmoon.webp',
+      guard1: 'assets/equipment/mouthguard_basic.webp',
+      boots1: 'assets/equipment/boots_light.webp',
+      head1: 'assets/equipment/headgear_basic.webp',
+      head2: 'assets/equipment/headgear_pro.webp',
+      robe1: 'assets/equipment/robe_entrance.webp',
+      wrist1: 'assets/equipment/wrist_basic.webp',
+      wrist2: 'assets/equipment/wrist_pro.webp',
+      wrist3: 'assets/equipment/wrist_champion.webp',
+      head3: 'assets/equipment/headgear_champion.webp',
+      robe2: 'assets/equipment/robe_training.webp',
+      robe3: 'assets/equipment/robe_champion.webp',
+      boots2: 'assets/equipment/boots_speed.webp',
+      boots3: 'assets/equipment/boots_heavy.webp',
+      guard2: 'assets/equipment/mouthguard_custom.webp',
+      guard3: 'assets/equipment/mouthguard_pro.webp',
+      'pattern-guardian': 'assets/equipment/glove_guardian.webp',
+      'pattern-bull': 'assets/equipment/glove_bull.webp',
+      'pattern-classic': 'assets/equipment/glove_classic.webp'
     };
+
+    /* 设计款式图鉴（展示型收集）：从装备设计池精选的款式画廊，按类别分组陈列。
+       纯展示——不登记收集进度（dexSigs）、不影响里程碑奖励与任何数值。条目格式：[类别, 中文名, 图片] */
+    var DEX_GALLERY_CATS = [ ['gloves', '拳套'], ['head', '护头'], ['boots', '战靴'], ['wrist', '护腕'], ['robe', '战袍'], ['guard', '护齿'] ];
+    var DEX_GALLERY = [
+      ['gloves', '橙爱心·方正拳套', 'assets/equipment_pool/gloves/glove_boxy_heart_orange.webp'],
+      ['gloves', '薄荷绿闪电·方正拳套', 'assets/equipment_pool/gloves/glove_boxy_lightning_mint.webp'],
+      ['gloves', '白花瓣·方正拳套', 'assets/equipment_pool/gloves/glove_boxy_petal_white.webp'],
+      ['gloves', '藏青星星·方正拳套', 'assets/equipment_pool/gloves/glove_boxy_star_navy.webp'],
+      ['gloves', '红星星·方正拳套', 'assets/equipment_pool/gloves/glove_boxy_star_red.webp'],
+      ['gloves', '蓝爱心·经典拳套', 'assets/equipment_pool/gloves/glove_classic2_heart_blue.webp'],
+      ['gloves', '紫闪电·经典拳套', 'assets/equipment_pool/gloves/glove_classic2_lightning_purple.webp'],
+      ['gloves', '金花瓣·经典拳套', 'assets/equipment_pool/gloves/glove_classic2_petal_gold.webp'],
+      ['gloves', '红花瓣·经典拳套', 'assets/equipment_pool/gloves/glove_classic2_petal_red.webp'],
+      ['gloves', '金星星·经典拳套', 'assets/equipment_pool/gloves/glove_classic2_star_gold.webp'],
+      ['gloves', '红爱心·圆润拳套', 'assets/equipment_pool/gloves/glove_compact_heart_red.webp'],
+      ['gloves', '金闪电·圆润拳套', 'assets/equipment_pool/gloves/glove_compact_lightning_gold.webp'],
+      ['gloves', '蓝花瓣·圆润拳套', 'assets/equipment_pool/gloves/glove_compact_petal_blue.webp'],
+      ['gloves', '薄荷绿星星·圆润拳套', 'assets/equipment_pool/gloves/glove_compact_star_mint.webp'],
+      ['gloves', '粉星星·圆润拳套', 'assets/equipment_pool/gloves/glove_compact_star_pink.webp'],
+      ['gloves', '薄荷绿爱心·饱满拳套', 'assets/equipment_pool/gloves/glove_pillow_heart_mint.webp'],
+      ['gloves', '粉爱心·饱满拳套', 'assets/equipment_pool/gloves/glove_pillow_heart_pink.webp'],
+      ['gloves', '蓝闪电·饱满拳套', 'assets/equipment_pool/gloves/glove_pillow_lightning_blue.webp'],
+      ['gloves', '紫花瓣·饱满拳套', 'assets/equipment_pool/gloves/glove_pillow_petal_purple.webp'],
+      ['gloves', '金星星·饱满拳套', 'assets/equipment_pool/gloves/glove_pillow_star_gold.webp'],
+      ['gloves', '紫爱心·修长拳套', 'assets/equipment_pool/gloves/glove_slim_heart_purple.webp'],
+      ['gloves', '橙闪电·修长拳套', 'assets/equipment_pool/gloves/glove_slim_lightning_orange.webp'],
+      ['gloves', '薄荷绿花瓣·修长拳套', 'assets/equipment_pool/gloves/glove_slim_petal_mint.webp'],
+      ['gloves', '粉花瓣·修长拳套', 'assets/equipment_pool/gloves/glove_slim_petal_pink.webp'],
+      ['gloves', '蓝星星·修长拳套', 'assets/equipment_pool/gloves/glove_slim_star_blue.webp'],
+      ['gloves', '蓝爱心·泰式拳套', 'assets/equipment_pool/gloves/glove_thai_heart_blue.webp'],
+      ['gloves', '粉闪电·泰式拳套', 'assets/equipment_pool/gloves/glove_thai_lightning_pink.webp'],
+      ['gloves', '橙花瓣·泰式拳套', 'assets/equipment_pool/gloves/glove_thai_petal_orange.webp'],
+      ['gloves', '紫星星·泰式拳套', 'assets/equipment_pool/gloves/glove_thai_star_purple.webp'],
+      ['gloves', '红星星·泰式拳套', 'assets/equipment_pool/gloves/glove_thai_star_red.webp'],
+      ['gloves', '金爱心·主题拳套', 'assets/equipment_pool/gloves/glove_pool_heart_gold.webp'],
+      ['gloves', '红爱心·主题拳套', 'assets/equipment_pool/gloves/glove_pool_heart_red.webp'],
+      ['gloves', '金闪电·主题拳套', 'assets/equipment_pool/gloves/glove_pool_lightning_gold.webp'],
+      ['gloves', '橙闪电·主题拳套', 'assets/equipment_pool/gloves/glove_pool_lightning_orange.webp'],
+      ['gloves', '蓝花瓣·主题拳套', 'assets/equipment_pool/gloves/glove_pool_petal_blue.webp'],
+      ['gloves', '薄荷绿花瓣·主题拳套', 'assets/equipment_pool/gloves/glove_pool_petal_mint.webp'],
+      ['gloves', '蓝星星·主题拳套', 'assets/equipment_pool/gloves/glove_pool_star_blue.webp'],
+      ['gloves', '薄荷绿星星·主题拳套', 'assets/equipment_pool/gloves/glove_pool_star_mint.webp'],
+      ['gloves', '蓝色设计拳套·01号', 'assets/equipment_pool/gloves/glove_bulk_001.webp'],
+      ['gloves', '蓝色设计拳套·10号', 'assets/equipment_pool/gloves/glove_bulk_010.webp'],
+      ['gloves', '素色设计拳套·19号', 'assets/equipment_pool/gloves/glove_bulk_019.webp'],
+      ['gloves', '青蓝设计拳套·28号', 'assets/equipment_pool/gloves/glove_bulk_028.webp'],
+      ['gloves', '素色设计拳套·37号', 'assets/equipment_pool/gloves/glove_bulk_037.webp'],
+      ['gloves', '橙色设计拳套·46号', 'assets/equipment_pool/gloves/glove_bulk_046.webp'],
+      ['gloves', '蓝色设计拳套·55号', 'assets/equipment_pool/gloves/glove_bulk_055.webp'],
+      ['gloves', '素色设计拳套·64号', 'assets/equipment_pool/gloves/glove_bulk_064.webp'],
+      ['gloves', '红色设计拳套·73号', 'assets/equipment_pool/gloves/glove_bulk_073.webp'],
+      ['gloves', '橙色设计拳套·82号', 'assets/equipment_pool/gloves/glove_bulk_082.webp'],
+      ['head', '蓝色设计护头·01号', 'assets/equipment_pool/head/headgear_bulk_001.webp'],
+      ['head', '素色设计护头·05号', 'assets/equipment_pool/head/headgear_bulk_005.webp'],
+      ['head', '橙色设计护头·09号', 'assets/equipment_pool/head/headgear_bulk_009.webp'],
+      ['head', '素色设计护头·13号', 'assets/equipment_pool/head/headgear_bulk_013.webp'],
+      ['head', '素色设计护头·17号', 'assets/equipment_pool/head/headgear_bulk_017.webp'],
+      ['head', '红色设计护头·21号', 'assets/equipment_pool/head/headgear_bulk_021.webp'],
+      ['head', '红爱心·主题护头', 'assets/equipment_pool/head/headgear_pool_heart_red.webp'],
+      ['head', '金闪电·主题护头', 'assets/equipment_pool/head/headgear_pool_lightning_gold.webp'],
+      ['head', '薄荷绿花瓣·主题护头', 'assets/equipment_pool/head/headgear_pool_petal_mint.webp'],
+      ['head', '橙花瓣·主题护头', 'assets/equipment_pool/head/headgear_pool_petal_orange.webp'],
+      ['head', '蓝星星·主题护头', 'assets/equipment_pool/head/headgear_pool_star_blue.webp'],
+      ['head', '金星星·主题护头', 'assets/equipment_pool/head/headgear_pool_star_gold.webp'],
+      ['boots', '素色设计战靴·01号', 'assets/equipment_pool/boots/boots_bulk_001.webp'],
+      ['boots', '素色设计战靴·05号', 'assets/equipment_pool/boots/boots_bulk_005.webp'],
+      ['boots', '橙色设计战靴·09号', 'assets/equipment_pool/boots/boots_bulk_009.webp'],
+      ['boots', '素色设计战靴·13号', 'assets/equipment_pool/boots/boots_bulk_013.webp'],
+      ['boots', '素色设计战靴·17号', 'assets/equipment_pool/boots/boots_bulk_017.webp'],
+      ['boots', '红色设计战靴·21号', 'assets/equipment_pool/boots/boots_bulk_021.webp'],
+      ['boots', '红爱心·主题战靴', 'assets/equipment_pool/boots/boots_pool_heart_red.webp'],
+      ['boots', '金闪电·主题战靴', 'assets/equipment_pool/boots/boots_pool_lightning_gold.webp'],
+      ['boots', '薄荷绿花瓣·主题战靴', 'assets/equipment_pool/boots/boots_pool_petal_mint.webp'],
+      ['boots', '紫花瓣·主题战靴', 'assets/equipment_pool/boots/boots_pool_petal_purple.webp'],
+      ['boots', '蓝星星·主题战靴', 'assets/equipment_pool/boots/boots_pool_star_blue.webp'],
+      ['boots', '粉星星·主题战靴', 'assets/equipment_pool/boots/boots_pool_star_pink.webp'],
+      ['wrist', '素色设计护腕·01号', 'assets/equipment_pool/wrist/wrist_001.webp'],
+      ['wrist', '蓝色设计护腕·02号', 'assets/equipment_pool/wrist/wrist_002.webp'],
+      ['wrist', '红色设计护腕·03号', 'assets/equipment_pool/wrist/wrist_003.webp'],
+      ['wrist', '橙色设计护腕·04号', 'assets/equipment_pool/wrist/wrist_004.webp'],
+      ['wrist', '素色设计护腕·05号', 'assets/equipment_pool/wrist/wrist_005.webp'],
+      ['wrist', '素色设计护腕·06号', 'assets/equipment_pool/wrist/wrist_006.webp'],
+      ['wrist', '橙色设计护腕·07号', 'assets/equipment_pool/wrist/wrist_007.webp'],
+      ['wrist', '蓝色设计护腕·08号', 'assets/equipment_pool/wrist/wrist_008.webp'],
+      ['wrist', '橙色设计护腕·09号', 'assets/equipment_pool/wrist/wrist_009.webp'],
+      ['wrist', '青蓝设计护腕·10号', 'assets/equipment_pool/wrist/wrist_010.webp'],
+      ['robe', '紫色设计战袍·01号', 'assets/equipment_pool/robe/robe_001.webp'],
+      ['robe', '素色设计战袍·02号', 'assets/equipment_pool/robe/robe_002.webp'],
+      ['robe', '红色设计战袍·03号', 'assets/equipment_pool/robe/robe_003.webp'],
+      ['robe', '蓝色设计战袍·04号', 'assets/equipment_pool/robe/robe_004.webp'],
+      ['robe', '蓝色设计战袍·05号', 'assets/equipment_pool/robe/robe_005.webp'],
+      ['robe', '红色设计战袍·06号', 'assets/equipment_pool/robe/robe_006.webp'],
+      ['robe', '红色设计战袍·07号', 'assets/equipment_pool/robe/robe_007.webp'],
+      ['robe', '橙色设计战袍·08号', 'assets/equipment_pool/robe/robe_008.webp'],
+      ['robe', '蓝色设计战袍·09号', 'assets/equipment_pool/robe/robe_009.webp'],
+      ['robe', '素色设计战袍·10号', 'assets/equipment_pool/robe/robe_010.webp'],
+      ['guard', '素色设计护齿·01号', 'assets/equipment_pool/guard/mouthguard_001.webp'],
+      ['guard', '素色设计护齿·02号', 'assets/equipment_pool/guard/mouthguard_002.webp'],
+      ['guard', '素色设计护齿·03号', 'assets/equipment_pool/guard/mouthguard_003.webp'],
+      ['guard', '蓝色设计护齿·04号', 'assets/equipment_pool/guard/mouthguard_004.webp'],
+      ['guard', '橙色设计护齿·05号', 'assets/equipment_pool/guard/mouthguard_005.webp'],
+      ['guard', '素色设计护齿·06号', 'assets/equipment_pool/guard/mouthguard_006.webp'],
+      ['guard', '红色设计护齿·07号', 'assets/equipment_pool/guard/mouthguard_007.webp'],
+      ['guard', '素色设计护齿·08号', 'assets/equipment_pool/guard/mouthguard_008.webp'],
+      ['guard', '橙色设计护齿·09号', 'assets/equipment_pool/guard/mouthguard_009.webp'],
+      ['guard', '金黄色设计护齿·10号', 'assets/equipment_pool/guard/mouthguard_010.webp'],
+      ['guard', '青蓝设计护齿·11号', 'assets/equipment_pool/guard/mouthguard_011.webp'],
+      ['guard', '紫色设计护齿·12号', 'assets/equipment_pool/guard/mouthguard_012.webp'],
+    ];
 
     /* 消耗品（商店同步上架，存入背包，点击使用，下次生效型） */
     var CONSUMABLES = [
@@ -273,35 +383,130 @@
 
     var GROWTH_LABELS = { early: '早熟', steady: '稳定', late: '大器晚成', volatile: '波动', genius: '天才', veteran: '老将' };
 
+    /* ================= D1：对手台词（角色池前 15 名高频对手专属 + 通用兜底池） =================
+       pre = 赛前台词（2 条，赛前弹窗随机取 1）；win / lose = 以对手视角的赛后胜 / 负台词（各 1 条）。
+       无专属台词的对手走 FOE_LINES_GENERIC 兜底，任何一场比赛都不会留白。
+       取词统一走 foeLine(key, kind)，kind ∈ 'pre' | 'win' | 'lose'（win/lose 均为对手视角）。 */
+    var FOE_LINES = {
+      opp_world_champion: { // 伊芙琳（第 1 名 · 世界冠军）：王者的从容
+        pre: ['冠军的擂台，不是谁想站就能站稳的。让我看看你走到这里的本事。', '很多人挑战过我，你不是第一个，也不会是最后一个——但愿你能让我认真起来。'],
+        win: '这就是世界顶点的风景。想再看，先爬到够得着我的地方来。',
+        lose: '……输了？呵，很好。这个擂台，终于又有点意思了。'
+      },
+      opp_crimson: { // 薇拉（第 2 名 · 力量天才）：狂气嗜战
+        pre: ['别眨眼哦，我的拳头可不等人——被打哭了，我可不会哄你。', '绯红的拳头只认一件事：谁更强。来，让我兴奋起来！'],
+        win: '哈！就这点程度？我的血都还没热起来呢。',
+        lose: '疼……但真痛快！下次，我会把这一拳加倍还给你。'
+      },
+      opp_champion_domestic: { // 白鸟丽华（第 3 名 · 国内冠军）：大小姐式的优雅傲气
+        pre: ['擂台也是社交场，失礼的打法，我可不会原谅。……请多指教。', '白鸟家的拳头，讲究的是优雅与胜负兼得。你，准备好了吗？'],
+        win: '胜负已分。你的礼仪，还需要再修炼呢。',
+        lose: '是我失态了……输得这么难看，回去要被祖母训话了。'
+      },
+      opp_legend: { // 白霜华（第 4 名 · 传奇老将）：沉稳提点后辈
+        pre: ['年轻人，拳头不只是力气。这一场，就当是我给你的课。', '打了这么多年，我的手背比你的脸还清楚拳头的脾气。来吧。'],
+        win: '姜还是老的辣。回去把基本功再磨三年。',
+        lose: '后生可畏啊……我的时代，看来真的要翻篇了。'
+      },
+      opp_asia: { // 萨菲娅（第 5 名 · 洲际力量型）：豪迈自信
+        pre: ['整个亚洲的擂台我都站过，你的拳头，最好有点分量。', '别客气，尽管攻过来——我萨菲娅从不躲着打。'],
+        win: '洲际的门槛，没那么好跨。回去再练！',
+        lose: '打得漂亮！这场败仗，我认——下次洲际赛上见。'
+      },
+      opp_saint: { // 塞西莉亚（第 6 名 · 圣女系防守反击）：温柔而坚定
+        pre: ['愿这场比赛没有怨恨。……我会全力以赴的，那是对你的尊重。', '别怕，我的拳头不伤人——只是会把你请下擂台而已。'],
+        win: '阿门。你的拳头里，少了点信念呢。',
+        lose: '输了也心怀感激……谢谢你，让我看见了自己的不足。'
+      },
+      opp_amazon: { // 塔娅（第 7 名 · 亚马逊力量型）：野性直率
+        pre: ['在丛林里，猎物和猎手只有一线之隔。你闻起来……像猎物。', '废话少说！拳头响起来，才是打招呼的方式！'],
+        win: '弱者就该让路，这就是自然的规矩。',
+        lose: '嗷……你比看起来凶得多。好，我记住你了，猎手。'
+      },
+      opp_ice: { // 白凛华（第 8 名 · 冰系防守反击）：冷淡寡言
+        pre: ['……站好。我的拳，比冬天的风更快。', '话不必多说。冻住你，只需要一回合。'],
+        win: '果然，冰面之下，你还差得远。',
+        lose: '……冰，也会碎吗。这份寒意，我收下了。'
+      },
+      opp_counter: { // 沈墨凛（第 9 名 · 宿敌）：冷峻、知己知彼（赛后另有宿敌专属剧情对白，此处为擂台台词）
+        pre: ['又见面了。你的出拳习惯，我闭着眼都数得清——这一场，我等很久了。', '别以为赢过我一次就懂我了。宿敌，就是用来跨越的。'],
+        win: '你还是老样子，一急就露破绽。……下次，别再输给我了。',
+        lose: '……是我输了。但你要知道，我沈墨凛认输的次数，一只手数得过来。'
+      },
+      opp_europe: { // 艾琳·诺德（第 10 名 · 欧洲均衡型）：礼貌周到、骨子里傲
+        pre: ['远道而来的比赛要有仪式感。失礼了——我会用最正式的方式击败你。', '欧洲的擂台讲究章法。你的野路子，在我这里行不通。'],
+        win: '承让。按照礼节，我就不补最后一拳了。',
+        lose: '败给你的感觉并不坏。……不，是相当屈辱。下次见。'
+      },
+      opp_genius: { // 米娅（第 11 名 · 天才速度型）：轻快跳脱、自信满满
+        pre: ['嘿嘿，天才的拳头是用脑子打的哦！你跟得上我的节奏吗？', '三分钟，我只要三分钟。这场比赛的剧本，我昨晚就写好了！'],
+        win: '看吧？剧本没写错一个字。回去多读点书再来！',
+        lose: '诶——剧本撕了？！……有意思，你这个变数，我喜欢。'
+      },
+      opp_africa: { // 阿玛拉（第 12 名 · 力量型）：热情奔放、节奏感强
+        pre: ['听见鼓点了吗？我的拳头跟着心跳走，你可别乱了拍子！', '来啊，把擂台当成舞池——不过领舞的人，只能是我！'],
+        win: '哈哈！你的节奏全乱啦。跳舞和打拳，都得练！',
+        lose: '呼……这一曲，是你赢了。跳得漂亮，朋友！'
+      },
+      opp_north: { // 艾丽娅·诺尔（第 13 名 · 北方防守反击）：克制冷静、耐心
+        pre: ['北方的冬天教会我一件事：等。等你的拳头先冷下来。', '雪落无声，我的反击也一样。等你察觉，已经晚了。'],
+        win: '极夜里站到最后的人，从来都不是喊得最响的那个。',
+        lose: '雪化了……原来我的耐心，还没练到家。'
+      },
+      opp_muscle: { // 岩宫刚子（第 14 名 · 肌肉力量型）：豪爽大姐头
+        pre: ['看见这身肌肉了吗？这可是十年汗水堆出来的！你的拳头，够格吗？', '大姐我打架不玩虚的——接得住三拳，算你有本事！'],
+        win: '哈哈哈！力量就是正义！回去多吃点肉再来！',
+        lose: '嘶——疼死我了……行，你的拳头比我的肌肉还硬，服气！'
+      },
+      opp_korea_style: { // 韩凛（第 15 名 · 韩式快拳新锐）：干练好胜、带点紧绷
+        pre: ['别小看我排在第十五——往上爬的路，我一步都不会让。', '我的拳速录像你看过吧？没看过也没关系，反正你也跟不上。'],
+        win: '赢了！……呼，差点以为要输。这场，算我状态好。',
+        lose: '可恶……明明就差一点！下次，下次我绝对不会再输了！'
+      }
+    };
+    var FOE_LINES_GENERIC = {
+      pre: ['排名什么的无所谓——擂台上见真章，来吧！', '我最近状态正好，你可要小心了。', '别紧张，放开打。输了，也算积累经验。', '这一场，我可是冲着赢来的。'],
+      win: ['打得不错，但赢的人是我。回去再练练吧。', '呼……险胜。你的拳头，比想象中重。'],
+      lose: ['是我输了……你的实力，名不虚传。', '甘拜下风。下次再战，我不会再输了。']
+    };
+    function foeLine(key, kind) {
+      var e = key ? FOE_LINES[key] : null;
+      var v = e ? e[kind] : null;
+      if (Array.isArray(v) && v.length) return v[Math.floor(Math.random() * v.length)];
+      if (typeof v === 'string' && v) return v;
+      var g = FOE_LINES_GENERIC[kind] || FOE_LINES_GENERIC.pre;
+      return g[Math.floor(Math.random() * g.length)];
+    }
+
     var APPEARANCE = {
       hair: {
         ponytail: { name: '高马尾', src: 'assets/portrait.webp' },
-        hime: { name: '公主切', src: 'assets/portrait/hair_hime.png' },
-        waves: { name: '大波浪', src: 'assets/portrait/hair_waves.png' },
-        halfup: { name: '半扎发', src: 'assets/portrait/hair_halfup.png' },
-        short: { name: '超短发', src: 'assets/portrait/hair_short.png' },
-        braid: { name: '麻花辫', src: 'assets/portrait/hair_braid.png' },
-        longstraight: { name: '黑长直', src: 'assets/portrait/hair_longstraight.png' },
-        bun: { name: '丸子头', src: 'assets/portrait/hair_bun.png' },
-        waterwaves: { name: '水波纹', src: 'assets/portrait/hair_waterwaves.png' }
+        hime: { name: '公主切', src: 'assets/portrait/hair_hime.webp' },
+        waves: { name: '大波浪', src: 'assets/portrait/hair_waves.webp' },
+        halfup: { name: '半扎发', src: 'assets/portrait/hair_halfup.webp' },
+        short: { name: '超短发', src: 'assets/portrait/hair_short.webp' },
+        braid: { name: '麻花辫', src: 'assets/portrait/hair_braid.webp' },
+        longstraight: { name: '黑长直', src: 'assets/portrait/hair_longstraight.webp' },
+        bun: { name: '丸子头', src: 'assets/portrait/hair_bun.webp' },
+        waterwaves: { name: '水波纹', src: 'assets/portrait/hair_waterwaves.webp' }
       },
       face: {
         default: { name: '默认', src: 'assets/portrait.webp' },
-        round: { name: '圆润', src: 'assets/portrait/face_round.png' },
-        oval: { name: '瓜子', src: 'assets/portrait/face_oval.png' }
+        round: { name: '圆润', src: 'assets/portrait/face_round.webp' },
+        oval: { name: '瓜子', src: 'assets/portrait/face_oval.webp' }
       },
       outfit: {
         default: { name: '默认', src: 'assets/portrait.webp' },
-        robe: { name: '登场战袍', src: 'assets/portrait/outfit_robe.png' },
-        training: { name: '训练服', src: 'assets/portrait/outfit_training.png' },
-        short_training: { name: '短款训练服', src: 'assets/portrait/outfit_short_training.png' },
-        short_vest: { name: '短款背心', src: 'assets/portrait/outfit_short_vest.png' },
-        short_cami: { name: '吊带款', src: 'assets/portrait/outfit_short_cami.png' },
-        wide_strap: { name: '宽肩带', src: 'assets/portrait/outfit_wide_strap.png' },
-        racerback: { name: '工字背', src: 'assets/portrait/outfit_racerback.png' },
-        cross_back: { name: '交叉美背', src: 'assets/portrait/outfit_cross_back.png' },
-        halter: { name: '挂脖款', src: 'assets/portrait/outfit_halter.png' },
-        zip: { name: '拉链款', src: 'assets/portrait/outfit_zip.png' }
+        robe: { name: '登场战袍', src: 'assets/portrait/outfit_robe.webp' },
+        training: { name: '训练服', src: 'assets/portrait/outfit_training.webp' },
+        short_training: { name: '短款训练服', src: 'assets/portrait/outfit_short_training.webp' },
+        short_vest: { name: '短款背心', src: 'assets/portrait/outfit_short_vest.webp' },
+        short_cami: { name: '吊带款', src: 'assets/portrait/outfit_short_cami.webp' },
+        wide_strap: { name: '宽肩带', src: 'assets/portrait/outfit_wide_strap.webp' },
+        racerback: { name: '工字背', src: 'assets/portrait/outfit_racerback.webp' },
+        cross_back: { name: '交叉美背', src: 'assets/portrait/outfit_cross_back.webp' },
+        halter: { name: '挂脖款', src: 'assets/portrait/outfit_halter.webp' },
+        zip: { name: '拉链款', src: 'assets/portrait/outfit_zip.webp' }
       },
       body: {
         petite: { name: '娇小', scale: 0.92 },
@@ -324,11 +529,17 @@
        「累计赚取」无现成字段（S.money 是余额不是累计值），不做，不新造口径。
        图鉴集齐 10 款成就与 DEX_ACH 的现金里程碑是两回事：成就只记录展示，不重复发奖。 */
     var ACH_CATEGORIES = [
-      { id: 'battle', name: '战斗' },
-      { id: 'career', name: '生涯' },
-      { id: 'gear', name: '装备 / 经营' },
-      { id: 'story', name: '情感 / 剧情' }
+      { id: 'battle', name: '战斗', icon: '⚡' },
+      { id: 'career', name: '生涯', icon: '★' },
+      { id: 'gear', name: '装备 / 经营', icon: '◆' },
+      { id: 'story', name: '情感 / 剧情', icon: '♥' }
     ];
+    function achBadge(catId, off) { // D3：成就类别徽章（样式在 css .ach-badge.cat-*，未解锁传 off 灰显）
+      var cat = null;
+      ACH_CATEGORIES.forEach(function (c) { if (c.id === catId) cat = c; });
+      if (!cat) return '';
+      return '<span class="ach-badge cat-' + cat.id + (off ? ' off' : '') + '" aria-hidden="true">' + cat.icon + '</span>';
+    }
     var ACHIEVEMENTS = [
       /* ---- 战斗 ---- */
       { id: 'first_win', cat: 'battle', name: '初尝胜果', desc: '赢得第 1 场比赛',

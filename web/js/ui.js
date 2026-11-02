@@ -2,9 +2,21 @@
 /* ui.js · 日常界面（日常渲染/训练计划/确认框/外出商店/状态页/生涯赞助/排名榜/背包/工坊） —— 由 game.js 逐字拆分（Phase 7.5 工程化 v2），逻辑/数值/文案未改。 */
     /* ================= 日常界面 ================= */
     var lastAttrs = null;
+    /* 改版：属性游戏式条目——类别（决定图标徽章与数值条配色）＋图标字形＋条宽（平方根刻度，纯呈现不影响数据） */
+    var ATTR_STYLE = {
+      power: ['cat-a', '✦'], endurance: ['cat-a', '♥'], will: ['cat-a', '★'],
+      speed: ['cat-b', '⚡'], accuracy: ['cat-b', '◎'], footwork: ['cat-b', '»'],
+      defense: ['cat-c', '◆'], technique: ['cat-c', '✧']
+    };
+    function attrRowHTML(a, val, extra) {
+      var st = ATTR_STYLE[a.key] || ['cat-c', '✦'];
+      var pct = Math.min(100, Math.round(Math.sqrt(Math.max(0, val)) * 10));
+      return '<div class="attr ' + st[0] + '"><span class="attr-ic">' + st[1] + '</span><span class="an">' + a.name +
+        '</span><span class="attr-bar"><i style="width:' + pct + '%"></i></span><span class="av num">' + val + (extra || '') + '</span></div>';
+    }
     function render() {
       $('tbDay').textContent = 'Day ' + S.day + ' · 第 ' + weekOf(S.day) + ' 周';
-      $('tbMoney').textContent = S.money;
+      countUp($('tbMoney'), S.money); // C2：余额变化滚动到位（值未变时内部直写，无动画）
       $('tbStam').style.width = S.stamina + '%';
       $('tbStamNum').textContent = Math.round(S.stamina);
       $('tbInj').style.width = S.injury + '%';
@@ -27,7 +39,7 @@
       $('attrGrid').innerHTML = ATTRS.map(function (a) {
         var up = lastAttrs && ea[a.key] > lastAttrs[a.key] ? '<span class="up">↑</span>' : '';
         var bonus = gb[a.key] ? '<span class="up"> +' + gb[a.key] + '</span>' : '';
-        return '<div class="attr"><span class="an">' + a.name + '</span><span class="av num">' + ea[a.key] + bonus + up + '</span></div>';
+        return attrRowHTML(a, ea[a.key], bonus + up);
       }).join('');
 
       $('punchList').innerHTML = PUNCH_KEYS.map(function (k) {
@@ -51,6 +63,7 @@
         $('weekNote').innerHTML = '距离下一个比赛日还有 <b>' + left + ' 天</b>（每周第 7 天）。抓紧训练，或者打工攒钱。';
         $('matchDesc').textContent = '每周第 7 天开放 · 还有 ' + left + ' 天';
       }
+      var mwn = $('matchWeekNote'); if (mwn) mwn.innerHTML = $('weekNote').innerHTML; // 比赛屏同步本周提示（与据点同一段文案）
       $('btnMatch').classList.toggle('match', match);
       $('btnMatch').disabled = !match;
       $('btnTrain').disabled = S.ap < 2;
@@ -143,7 +156,7 @@
         });
       });
       $('btnPlanGo').addEventListener('click', doPlanTrain);
-      $('btnPlanCancel').addEventListener('click', function () { planSel = []; $('trainList').classList.remove('open'); renderPlan(); });
+      $('btnPlanCancel').addEventListener('click', function () { planSel = []; renderPlan(); }); // 训练屏内取消 = 清空已选计划（列表常驻）
     }
     function doPlanTrain() {
       if (!planSel.length || S.ap < 2) return;
@@ -178,9 +191,11 @@
       if (over > 0) { toast('体力透支 ' + over + ' 点！伤病 +' + injAdd + '，悠着点'); dailyLog('训练体力透支 ' + over + ' 点，伤病 +' + injAdd + '。', 'bad'); }
       dailyLog('Day ' + S.day + ' · 训练计划完成：' + names + '（体力 −' + cost + '）', 'good');
       planSel = [];
-      $('trainList').classList.remove('open');
       render();
+      showScene('daily'); // 界面架构批：训练结算后回据点（训练屏的列表常驻显示，不再靠 open 类开关）
       toast('训练计划完成');
+      // D2：训练后小概率触发日常小事件（拳馆日常/队友互动等，未触发过的才抽）
+      triggerDailyEvent(0.25);
     }
     /* ================= 行动确认框（确认后才结算，取消不消耗） ================= */
     var pendingConfirm = null;
@@ -189,8 +204,10 @@
       var sign = d > 0 ? '+' : '';
       return Math.round(before) + ' → ' + Math.round(after) + (unit || '') + '（' + sign + Math.round(d) + '）';
     }
+    var confirmScene = ''; // A1：带场景的确认框（如医院）打开时切背景、关闭时复位
     function askConfirm(cfg) {
       pendingConfirm = cfg;
+      if (cfg.scene) { confirmScene = cfg.scene; setScene(cfg.scene); }
       $('cfTitle').textContent = cfg.title;
       $('cfLines').innerHTML = cfg.lines.map(function (row) {
         return '<tr><td>' + row[0] + '</td><td>' + row[1] + '</td></tr>';
@@ -201,14 +218,22 @@
       $('btnCfOk').disabled = !!cfg.okDisabled;
       $('confirmModal').classList.add('open');
     }
-    function closeConfirm() { pendingConfirm = null; $('confirmModal').classList.remove('open'); }
+    function closeConfirm() { pendingConfirm = null; $('confirmModal').classList.remove('open'); if (confirmScene) { confirmScene = ''; setScene('gym'); } }
     $('btnCfCancel').addEventListener('click', closeConfirm);
     $('confirmModal').addEventListener('click', function (e) { if (e.target === this) closeConfirm(); });
     $('btnCfOk').addEventListener('click', function () {
-      if (typeof SFX !== 'undefined' && SFX.click) SFX.click(); // Phase 9：主要确认按钮轻点声（只挂这一个通用确认键，不全局挂）
+      // 点击音由下方 C3 全局委托统一播放（确认键也在内），此处不再单独播放，避免双响
       var cfg = pendingConfirm;
       closeConfirm();
       if (cfg && cfg.onOk) cfg.onOk();
+    });
+    /* C3：主要按钮统一点击音（事件委托：任意未禁用的 <button> 点击都轻响一声；
+       SFX.click 内部自带 muted / 无 AudioContext 守卫，jsdom 与未解锁音频时均安全无声） */
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      var btn = (t && t.closest) ? t.closest('button') : null;
+      if (!btn || btn.disabled) return;
+      if (typeof SFX !== 'undefined' && SFX.click) SFX.click();
     });
 
     function confirmWork() {
@@ -392,7 +417,7 @@
       html += '<label class="cs-lab">固定方式<select id="csFix">' + optTags(GLOVE_FIX, customSel.fix, function (o) { return o.name + ' · ¥' + o.price + ' · ' + o.note; }) + '</select></label>';
       html += '<div class="custom-preview" id="customPreview"></div>';
       html += '<div class="plan-foot"><button class="primary-btn" id="btnCustomBuy">定制这副拳套</button></div></div>';
-      html += '<div class="plan-foot"><button class="secondary-btn" id="btnShopBack">离开商店</button></div>';
+      html += '<div class="plan-foot"><button class="secondary-btn" id="btnShopDex">款式图鉴（设计池精选 ' + (typeof DEX_GALLERY !== 'undefined' ? DEX_GALLERY.length : 0) + ' 款）</button><button class="secondary-btn" id="btnShopBack">离开商店</button></div>';
       $('shopList').innerHTML = html;
       Array.prototype.forEach.call(document.querySelectorAll('[data-buy-gear]'), function (btn) {
         btn.addEventListener('click', function () { buyGear(btn.getAttribute('data-buy-gear')); });
@@ -400,7 +425,11 @@
       Array.prototype.forEach.call(document.querySelectorAll('[data-buy-item]'), function (btn) {
         btn.addEventListener('click', function () { buyConsumable(btn.getAttribute('data-buy-item')); });
       });
-      $('btnShopBack').addEventListener('click', function () { $('shopList').classList.remove('open'); });
+      $('btnShopBack').addEventListener('click', function () { $('shopList').classList.remove('open'); shopSession = false; showScene('daily'); }); // 离开商店回据点（再次进店重新走外出确认）
+      $('btnShopDex').addEventListener('click', function () { // 图鉴联动：从商店直达画廊的设计款式页签（纯展示）
+        $('shopList').classList.remove('open');
+        openGallery('design');
+      });
       [['csPattern', 'pattern'], ['csOuter', 'outer'], ['csLining', 'lining'], ['csFix', 'fix']].forEach(function (pair) {
         var sel = $(pair[0]);
         if (sel) sel.addEventListener('change', function () { customSel[pair[1]] = sel.value; updateCustomPreview(); });
@@ -482,26 +511,62 @@
       $('outList').classList.remove('open');
       render();
       toast('散心回来，神清气爽');
-      // Phase 7：散心小概率偶遇日常事件（每段只触发一次，触发后直接弹出对白）
-      if (Math.random() < 0.4) {
-        var pool = ['daily_1', 'daily_2', 'daily_3'].filter(function (id) { return S.story && S.story.seenEvents.indexOf(id) < 0; });
-        if (pool.length) { queueStory(pool[Math.floor(Math.random() * pool.length)]); showStoryEventIfPending(); }
-      }
+      // Phase 7→D2：散心小概率偶遇日常事件（事件池已扩至 15 段，每段只触发一次，触发后直接弹出对白）
+      triggerDailyEvent(0.4);
     }
 
     /* ================= 状态界面 / 背包 ================= */
     var bagTab = 'gear';
     function openStatus() {
       if (B) { toast('比赛中无法查看状态'); return; }
-      $('dailyView').style.display = 'none';
-      $('statusView').style.display = 'block';
+      showScene('status'); // 界面架构批：走统一场景管理器（背景 street 由 SCENE_BG 映射）
       renderStatus();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     function closeStatus() {
-      $('statusView').style.display = 'none';
-      $('dailyView').style.display = 'block';
+      showScene('daily');
       render();
+    }
+    /* ================= 界面架构批：画廊屏（五页签，收集内容唯一渲染处） =================
+       立绘页签在此新建网格；装备图鉴/设计款式/对手名鉴/回忆四个页签的 DOM 已迁入画廊屏，
+       渲染仍由 renderStatus() 内的既有函数完成（render() 每次都会调用），此处只管页签切换。 */
+    var galleryTab = 'portrait';
+    function portraitGalleryList() { // 主角 21 张立绘：默认立绘 + 发型 8 + 脸型 2 + 服装 10（同图去重，带维度标签）
+      var seen = {}, list = [];
+      [['发型', APPEARANCE.hair], ['脸型', APPEARANCE.face], ['服装', APPEARANCE.outfit]].forEach(function (pair) {
+        Object.keys(pair[1]).forEach(function (k) {
+          var v = pair[1][k];
+          if (seen[v.src]) return;
+          seen[v.src] = true;
+          list.push({ src: v.src, label: pair[0] + ' · ' + v.name });
+        });
+      });
+      return list;
+    }
+    function renderGalleryPortraits() {
+      var el = $('galPortraits'); if (!el) return;
+      el.innerHTML = portraitGalleryList().map(function (e) {
+        return '<figure class="gal-portrait" data-gal-img="' + e.src + '" data-gal-cap="' + e.label + '"><img src="' + e.src + '" alt="' + e.label + ' 立绘" loading="lazy" /><figcaption>' + e.label + '</figcaption></figure>';
+      }).join('');
+      Array.prototype.forEach.call(el.querySelectorAll('[data-gal-img]'), function (f) {
+        f.addEventListener('click', function () {
+          $('imgModalImg').src = f.getAttribute('data-gal-img');
+          $('imgModalCap').textContent = f.getAttribute('data-gal-cap');
+          $('imgModal').classList.add('open');
+        });
+      });
+    }
+    function openGallery(tab) {
+      if (typeof B !== 'undefined' && B) { toast('比赛中无法打开画廊'); return; }
+      if (tab) galleryTab = tab;
+      renderGalleryPortraits();
+      renderStatus(); // 图鉴/名鉴/回忆四页签内容由既有渲染函数填充（DOM 已在画廊屏内）
+      Array.prototype.forEach.call(document.querySelectorAll('[data-galtab]'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-galtab') === galleryTab);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-galpanel]'), function (p) {
+        p.style.display = p.getAttribute('data-galpanel') === galleryTab ? '' : 'none';
+      });
+      showScene('gallery');
     }
     /* ================= Phase 3：日常页生涯概览 / 状态页阶段与赞助 ================= */
     function renderCareerDaily() {
@@ -553,13 +618,70 @@
       html += ACH_CATEGORIES.map(function (cat) {
         var items = ACHIEVEMENTS.filter(function (a) { return a.cat === cat.id; });
         if (!items.length) return '';
-        return '<p class="shop-note" style="margin:12px 0 6px"><b>' + cat.name + '</b></p>' + items.map(function (a) {
+        return '<p class="shop-note" style="margin:12px 0 6px">' + achBadge(cat.id) + '<b>' + cat.name + '</b></p>' + items.map(function (a) {
           var rec = S.achievements && S.achievements[a.id];
-          if (rec) return '<div class="dex-item"><div style="flex:1;min-width:0"><span class="bi-t">🏆 ' + a.name + '</span><div class="bi-d">' + a.desc + '</div></div><span class="dex-state">' + (rec.text || '') + '</span></div>';
-          return '<div class="dex-item locked"><div style="flex:1;min-width:0"><span class="bi-t">' + a.name + '</span><div class="bi-d">条件：' + a.desc + '</div></div><span class="dex-state">未解锁</span></div>';
+          if (rec) return '<div class="dex-item"><div style="flex:1;min-width:0"><span class="bi-t">' + achBadge(a.cat) + a.name + '</span><div class="bi-d">' + a.desc + '</div></div><span class="dex-state">' + (rec.text || '') + '</span></div>';
+          return '<div class="dex-item locked"><div style="flex:1;min-width:0"><span class="bi-t">' + achBadge(a.cat, true) + a.name + '</span><div class="bi-d">条件：' + a.desc + '</div></div><span class="dex-state">未解锁</span></div>';
         }).join('');
       }).join('');
       el.innerHTML = html;
+    }
+    /* ================= D3：状态页「对手名鉴」（52 人 = 角色池 50 + 前辈 + 经纪人） =================
+       数据全部来自现有表：S.roster（当前排名/风格/成长）+ STORY_CHARS（前辈/经纪人），不新造数据表；
+       已交手取 S.facedFoes（settleNow 结算时记录，仅供点亮展示）；未交手半透明＋「未交手」标。 */
+    function renderFoeDex() {
+      var el = $('stFoeDex'); if (!el) return;
+      ensureRoster();
+      if (!Array.isArray(S.facedFoes)) S.facedFoes = [];
+      var faced = S.facedFoes;
+      var members = S.roster.slice().sort(function (a, b) {
+        var ra = a.rank > 0 ? a.rank : 999, rb = b.rank > 0 ? b.rank : 999;
+        return ra - rb;
+      });
+      var facedCount = members.filter(function (m) { return faced.indexOf(m.key) >= 0; }).length;
+      var cnt = $('foeDexCount'); if (cnt) cnt.textContent = '已交手 ' + facedCount + ' / ' + members.length + ' 人 · 另含前辈与经纪人';
+      var html = '<div class="foe-dex-grid">';
+      html += members.map(function (m) {
+        var met = faced.indexOf(m.key) >= 0;
+        var line = (FOE_STYLES[m.style] ? FOE_STYLES[m.style].name : '') + ' · ' + (GROWTH_LABELS[m.growth] || '');
+        if (m.key === 'opp_counter') line += ' · 宿敌';
+        if (m.key === 'opp_rookie') line += ' · 同期队友';
+        return '<div class="foe-dex-item' + (met ? '' : ' unmet') + '">' +
+          (met ? '' : '<span class="fd-unmet">未交手</span>') +
+          '<img src="assets/opponents/' + m.key + '.webp" alt="' + m.name + ' 的立绘" loading="lazy" />' +
+          '<div class="fd-name">' + m.name + '</div>' +
+          '<div class="fd-rank">' + (m.rank > 0 ? '国内第 ' + m.rank + ' 名' : '候补 · 未入榜') + '</div>' +
+          '<div class="fd-line">' + line + '</div></div>';
+      }).join('');
+      html += [['senior', '拳馆前辈'], ['manager', '经纪人']].map(function (pair) {
+        var c = STORY_CHARS[pair[0]];
+        return '<div class="foe-dex-item"><span class="fd-staff">' + pair[1] + '</span>' +
+          '<img src="' + c.img + '" alt="' + c.name + ' 的立绘" loading="lazy" />' +
+          '<div class="fd-name">' + c.name + '</div>' +
+          '<div class="fd-rank">' + pair[1] + '</div>' +
+          '<div class="fd-line">' + c.role + '</div></div>';
+      }).join('');
+      html += '</div>';
+      el.innerHTML = html;
+    }
+    /* ================= D4：状态页「回忆」（已触发剧情列表 → 只读回放） ================= */
+    function renderMemories() {
+      var el = $('stMemories'); if (!el) return;
+      storyState();
+      var ids = S.story.seenEvents.filter(function (id) { return !!STORY_EVENTS[id]; });
+      var cnt = $('memCount'); if (cnt) cnt.textContent = ids.length ? '已触发 ' + ids.length + ' 段 · 只读回放，不重复结算' : '暂无记录';
+      if (!ids.length) {
+        el.innerHTML = '<p class="shop-note">还没有触发过剧情事件。推进生涯、赢下比赛、提升好感，故事会自己找上门——看过的都会收进这里。</p>';
+        return;
+      }
+      el.innerHTML = ids.map(function (id) {
+        var d = STORY_EVENTS[id];
+        var c = STORY_CHARS[d.char];
+        return '<div class="dex-item"><div style="flex:1;min-width:0"><span class="bi-t">' + (d.title || id) + '</span><div class="bi-d">' + (c ? c.name + ' · ' + c.role + '　·　' : '') + '共 ' + d.pages.length + ' 页对白</div></div><button data-replay="' + id + '">重看</button></div>';
+      }).join('');
+      Array.prototype.forEach.call(el.querySelectorAll('[data-replay]'), function (btn) {
+        btn.addEventListener('click', function () { openStoryReplay(btn.getAttribute('data-replay')); });
+      });
     }
     function renderSponsorCard() {
       var el = $('stSponsor'); if (!el) return;
@@ -639,15 +761,16 @@
       S.roster.forEach(function (m) { if (m.rank > 0) byRank[m.rank] = m; });
       var rows = [];
       for (var r = 1; r <= 50; r++) {
+        var badge = '<span class="rr-badge num' + (r <= 3 ? ' r' + r : '') + '">' + r + '</span>';
         if (r === S.rank) {
-          rows.push('<div class="rank-row me"><span class="rr-rank num">' + r + '</span><img src="' + portraitSrc() + '" alt="" /><span class="rr-name">' + S.name + '（你）</span><span class="rr-meta">玩家</span></div>');
+          rows.push('<div class="rank-row me">' + badge + '<img src="' + portraitSrc() + '" alt="" /><span class="rr-name">' + S.name + '（你）</span><span class="rr-meta">' + S.wins + ' 胜 · ' + S.losses + ' 负</span></div>');
         } else if (byRank[r]) {
           var m = byRank[r];
-          rows.push('<div class="rank-row"><span class="rr-rank num">' + r + '</span><img src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
+          rows.push('<div class="rank-row">' + badge + '<img src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
         }
       }
       S.roster.forEach(function (m) {
-        if (m.rank === 0) rows.push('<div class="rank-row reserve"><span class="rr-rank">候补</span><img src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">候补 · 未入榜 · ' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
+        if (m.rank === 0) rows.push('<div class="rank-row reserve"><span class="rr-badge wide">候补</span><img src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">候补 · 未入榜 · ' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
       });
       el.innerHTML = rows.join('');
     }
@@ -662,10 +785,12 @@
         $('stCareerLine').innerHTML = '当前阶段：<b>' + (curDef ? curDef.id + ' · ' + curDef.name + '（' + curDef.goalText + '）' : '全部完成 · 传奇') + '</b>　·　连胜 <b>' + (S.winStreak || 0) + '</b>　·　赞助 <b>' + (currentSponsor() ? currentSponsor().name : '无') + '</b>';
       }
       if ($('stTitles')) $('stTitles').innerHTML = (S.titles && S.titles.length) ? '称号：' + S.titles.map(function (t) { return '<span class="title-badge">' + t + '</span>'; }).join('') : '';
-      $('stMoney').textContent = S.money;
+      countUp($('stMoney'), S.money); // C2：状态页余额同顶栏一起滚动
       $('stRecord').textContent = S.wins + ' 胜 · ' + S.losses + ' 负';
       renderRelations(); // Phase 7：关系区（好感）
       renderRankBoard(); // 角色池：国内排名榜
+      renderFoeDex(); // D3：对手名鉴（52 人）
+      renderMemories(); // D4：剧情回忆列表
       $('stStam').style.width = S.stamina + '%'; $('stStamNum').textContent = Math.round(S.stamina);
       $('stInj').style.width = S.injury + '%'; $('stInjNum').textContent = Math.round(S.injury);
       $('stMind').style.width = S.mind + '%'; $('stMindTxt').textContent = Math.round(S.mind) + ' · ' + mindTierName(S.mind);
@@ -684,7 +809,7 @@
       var ea = effAttrs(), gb = gearBonus();
       $('stAttrs').innerHTML = ATTRS.map(function (a) {
         var bonus = gb[a.key] ? '<span class="up"> +' + gb[a.key] + ' 装备</span>' : '';
-        return '<div class="attr"><span class="an">' + a.name + '</span><span class="av num">' + ea[a.key] + bonus + '</span></div>';
+        return attrRowHTML(a, ea[a.key], bonus);
       }).join('');
       $('stPunches').innerHTML = $('punchList').innerHTML;
       $('stGear').innerHTML = Object.keys(SLOT_NAMES).map(function (slot) {
@@ -700,6 +825,21 @@
           $('bagGear').scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
       });
+      // 设计款式图鉴（展示型收集）：设计池精选画廊，按类别分组；纯展示，不登记进度、不影响数值
+      function dexGalleryHTML() {
+        if (typeof DEX_GALLERY === 'undefined' || !DEX_GALLERY.length) return '';
+        var html = '<div class="dex-gallery" id="dexGallery"><h3 class="dex-gal-title">设计款式图鉴 <span class="tag">精选 ' + DEX_GALLERY.length + ' 款 · 展示收藏</span></h3>' +
+          '<p class="shop-note" style="margin:0 0 6px">从装备设计池里精选的款式陈列（版型拳套、主题款与各部位设计款）。这里是纯欣赏的收藏画廊，与上面的收集进度分开计数。</p>';
+        DEX_GALLERY_CATS.forEach(function (c) {
+          var items = DEX_GALLERY.filter(function (e) { return e[0] === c[0]; });
+          if (!items.length) return;
+          html += '<h4 class="dex-gal-cat">' + c[1] + ' <span class="tag">' + items.length + ' 款</span></h4><div class="dex-gal-grid">' +
+            items.map(function (e) {
+              return '<figure class="dex-gal-item"><img src="' + e[2] + '" alt="' + e[1] + '" loading="lazy" /><figcaption>' + e[1] + '</figcaption></figure>';
+            }).join('') + '</div>';
+        });
+        return html + '</div>';
+      }
       // 拳套图鉴（Phase 5）：按"款式"登记——商店款按商品、定制/打造按组合；拆解不掉记录
       function dexEntryFor(sig) {
         if (sig.indexOf('shop:') === 0) return gearById(sig.slice(5));
@@ -736,6 +876,8 @@
       }).join('');
       dexHtml += '<p class="shop-note" style="margin:6px 0 0">定制 / 打造出的新组合也会在获得时登记进来（同组合重复获得不重复计数）；已登记的款式拆解后记录保留。</p>';
       $('stDex').innerHTML = dexHtml;
+      var galDesignEl = $('galDesign'); // 界面架构批：设计款式图鉴渲染到画廊「设计款式」页签（与装备图鉴分开两个页签）
+      if (galDesignEl) galDesignEl.innerHTML = dexGalleryHTML();
       renderStageCard();
       renderAchievements(); // Phase 9：成就区
       renderSponsorCard();

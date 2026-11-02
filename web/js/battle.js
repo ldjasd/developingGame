@@ -78,7 +78,9 @@
         ' 风格：' + FOE_STYLES[pendingFoe.style].name + '。' +
         (pendingFoe.isRival ? ' 【宿敌战】她就是沈墨凛——赛后会有专属对白。' : '') +
         (pendingFoe.weakness ? ' 弱点已侦察：' + PUNCHES[pendingFoe.weakness].name + '方向防守薄弱，用' + PUNCHES[pendingFoe.weakness].name + '打他伤害 +30%。' : '');
+      var mfl = $('modeFoeLine'); if (mfl) mfl.textContent = pendingFoe.name + '：「' + foeLine(pendingFoe.key, 'pre') + '」'; // D1：赛前台词（专属或兜底，随机一条）
       $('modeModal').classList.add('open');
+      setScene('ring_wide'); // A1/B1：赛前弹窗背景切擂台全景
     }
 
     function startBattle(mode) {
@@ -118,8 +120,11 @@
       B.mindStamMul = S.mind < 20 ? 1.1 : 1;
       if (B.mindTense) ATTRS.forEach(function (a) { B.me.attrs[a.key] = Math.round(B.me.attrs[a.key] * 0.95 * 10) / 10; });
       B.foe.tactic = ['attack', 'counter', 'points'][Math.floor(Math.random() * 3)];
-      $('dailyView').style.display = 'none';
-      $('battleView').style.display = 'block';
+      showScene('battle'); // 界面架构批：统一场景管理器切战斗屏（背景 ring_wide 由映射处理；顺带收起可能开着的状态/比赛屏）
+      // A2 第二步：我方战斗内改用姿势帧（抱架图起手，动作中按事件切换姿势）；对手取角色池立绘
+      preloadPoses();
+      var fmi = $('figMeImg'); if (fmi) { fmi.src = POSE_DIR + POSES.guard; fmi.style.objectPosition = POSE_FOCUS.guard; }
+      var ffi = $('figFoeImg'); if (ffi) ffi.src = B.foe.img || '';
       $('foeName').textContent = B.foe.name + '（第 ' + B.foe.rank + ' 名）';
       var fp = $('foePortrait'); if (fp) { fp.src = B.foe.img || ''; fp.alt = B.foe.name + ' 的立绘'; }
       var stb = $('foeStyleBadge');
@@ -163,6 +168,7 @@
       if (B.mindTense) blog('心态有些紧张：前两回合全属性 −5%，第 3 回合起恢复正常。', 'bad');
       if (B.mindStamMul > 1) blog('心态疲劳：本场比赛体力消耗 +10%，注意分配体力。', 'bad');
       if (injuryDebuffMul() < 1) blog('伤病未愈（伤病 ' + Math.round(S.injury) + '）：本场全属性 ' + (injuryDebuffMul() <= 0.85 ? '−15%' : '−5%') + '，是咬牙带伤上场。', 'bad');
+      playBattleIntro(mode); // B3：开场入场滑入＋VS 横幅＋推近（自动模式缩短；模拟不走此路径）
       renderBattle();
       clearInterval(battleTimer);
       battleTimer = setInterval(mode === 'manual' ? manualTick : tick, mode === 'manual' ? 50 : TICK_MS);
@@ -176,6 +182,105 @@
       box.appendChild(p);
       while (box.children.length > 80) box.removeChild(box.firstChild);
       box.scrollTop = box.scrollHeight;
+    }
+
+    /* ================= B3：赛前与回合演出（纯表现层，不阻塞流程） =================
+       开场：双方立绘从两侧滑入（ring.intro）＋VS 名字横幅（vsBanner.show），手动约 1.2s、自动缩短到约 0.7s；
+       模拟模式不走 startBattle，天然无演出。回合开始：擂台轻微推近（ring.zooming，scale 1→1.04→1）。
+       所有演出层都有 setTimeout 兜底移除，动画异常也不会残留遮挡。 */
+    function playBattleIntro(mode) {
+      var ring = $('ring'); if (!ring) return;
+      var quick = mode !== 'manual';
+      var banner = $('vsBanner');
+      if (banner && B && B.foe) {
+        $('vsbMe').textContent = S.name;
+        $('vsbFoe').textContent = B.foe.name;
+        banner.classList.remove('show', 'quick'); void banner.offsetWidth;
+        banner.classList.add('show');
+        if (quick) banner.classList.add('quick');
+      }
+      ring.classList.remove('intro', 'quick'); void ring.offsetWidth;
+      ring.classList.add('intro');
+      if (quick) ring.classList.add('quick');
+      setTimeout(function () { // 超时兜底隐藏
+        ring.classList.remove('intro', 'quick');
+        if (banner) banner.classList.remove('show', 'quick');
+      }, quick ? 700 : 1250);
+      ringZoom(quick);
+    }
+    function ringZoom(quick) {
+      var ring = $('ring'); if (!ring) return;
+      ring.classList.remove('zooming'); void ring.offsetWidth;
+      ring.classList.add('zooming');
+      setTimeout(function () { ring.classList.remove('zooming'); }, quick ? 500 : 950);
+    }
+
+    /* ================= 姿势帧（A2 第二步） =================
+       主角一套动作帧通吃（左右靠镜像的只有对手侧；主角姿势图本身朝右＝朝向对手）。
+       切换只换 figMeImg 的 src（＋按姿势微调 object-position 保住出拳方向不被 cover 裁掉），不动布局尺寸。
+       对手无姿势图：沿用立绘＋scaleX 镜像，靠 spawnPunchArc / recoiling / 护盾弧强化动作感。 */
+    var POSE_DIR = 'assets/pose/';
+    var POSES = { guard: 'guard.webp', jab: 'jab.webp', straight: 'straight.webp', hook: 'hook.webp', upper: 'upper.webp', body: 'body.webp', block: 'block.webp', dodge: 'dodge.webp', hit: 'hit.webp', victory: 'victory.webp' };
+    // cover 裁切焦点：出拳类姿势拳头在画面右侧，焦点右移避免拳头被裁；其余居中
+    var POSE_FOCUS = { guard: 'center top', jab: '80% top', straight: '82% top', hook: '76% top', upper: '62% top', body: '72% top', block: 'center top', dodge: 'center top', hit: 'center top', victory: 'center top' };
+    // 时序参数集中表（毫秒）：姿势保持时长，期满自动回抱架（格挡中则回格挡姿势）；终局姿势传 0＝不回位
+    var POSE_TIMING = { punch: 250, hit: 320, block: 300, dodge: 320 };
+    var _posePreloaded = false;
+    function preloadPoses() { // 开战时全量预加载，切换时不闪烁
+      if (_posePreloaded) return; _posePreloaded = true;
+      Object.keys(POSES).forEach(function (k) { var im = new Image(); im.src = POSE_DIR + POSES[k]; });
+    }
+    function setMePose(name, holdMs) {
+      var img = $('figMeImg'); if (!img) return;
+      var src = POSE_DIR + (POSES[name] || POSES.guard);
+      if (img.getAttribute('src') !== src) img.src = src;
+      img.style.objectPosition = POSE_FOCUS[name] || 'center top';
+      if (!B) return;
+      if (B._poseTimer) { clearTimeout(B._poseTimer); B._poseTimer = null; }
+      if (holdMs > 0) {
+        var tid = setTimeout(function () {
+          if (B && B._poseTimer === tid) { B._poseTimer = null; if (B.phase === 'fight') setMePose(B.meBlocking ? 'block' : 'guard', 0); }
+        }, holdMs);
+        B._poseTimer = tid;
+      }
+    }
+    // B2：出拳残影——克隆出拳方当前姿势图生成 1~2 帧半透明残影，滞后于本体朝出拳反方向错开，动画结束自回收
+    function spawnAfterimage(figEl) {
+      var ring = $('ring'); if (!ring || !figEl) return;
+      var img = figEl.querySelector('.fig-img');
+      if (!img || !img.getAttribute('src')) return;
+      var g = document.createElement('img');
+      g.className = 'fig-ghost' + (figEl.id === 'figFoe' ? ' foe' : '');
+      g.src = img.getAttribute('src');
+      g.alt = '';
+      g.style.left = figEl.offsetLeft + 'px';
+      g.style.top = figEl.offsetTop + 'px';
+      g.style.width = figEl.offsetWidth + 'px';
+      g.style.height = figEl.offsetHeight + 'px';
+      if (img.style.objectPosition) g.style.objectPosition = img.style.objectPosition;
+      ring.appendChild(g);
+      setTimeout(function () { g.remove(); }, 190);
+    }
+    // B2：命中点小闪光——在防守方靠进攻方一侧的胸口高度放一颗星形闪光，动画结束自回收
+    function spawnHitFlash(figDefender) {
+      var ring = $('ring'); if (!ring || !figDefender) return;
+      var foeDef = figDefender.id === 'figFoe';
+      var s = document.createElement('span');
+      s.className = 'hit-flash';
+      s.style.left = (figDefender.offsetLeft + (foeDef ? 4 : figDefender.offsetWidth - 4)) + 'px';
+      s.style.top = (figDefender.offsetTop + Math.round(figDefender.offsetHeight * 0.3)) + 'px';
+      ring.appendChild(s);
+      setTimeout(function () { s.remove(); }, 210);
+    }
+    // 对手拳风弧光：按粒子体系生成一闪而过的弧形残光（挂在对手身前＝朝我方一侧），动画结束自回收
+    function spawnPunchArc(figEl) {
+      var ring = $('ring'); if (!ring || !figEl) return;
+      var s = document.createElement('span');
+      s.className = 'arc-slash';
+      s.style.left = (figEl.offsetLeft - 12) + 'px';
+      s.style.top = (figEl.offsetTop + Math.round(figEl.offsetHeight * 0.28)) + 'px';
+      ring.appendChild(s);
+      setTimeout(function () { s.remove(); }, 230);
     }
 
     /* ================= 打击反馈 ================= */
@@ -195,7 +300,7 @@
     function burstParticles(figEl, heavy) {
       var ring = $('ring');
       var x = figEl.offsetLeft + figEl.offsetWidth / 2;
-      var y = figEl.offsetTop + 32;
+      var y = figEl.offsetTop + Math.round(figEl.offsetHeight * 0.3); // A2：立绘画更高，粒子爆发点抬到胸口高度
       var colors = ['#ffd34d', '#ffffff', '#ff8a5c'];
       var n = heavy ? 12 : 7;
       for (var i = 0; i < n; i++) {
@@ -229,6 +334,13 @@
       figDefender.classList.add('stumbling');
       knockback(figDefender, foeDef ? 1 : -1, heavy);
       burstParticles(figDefender, heavy);
+      spawnHitFlash(figDefender); // B2：命中点星形闪光（与粒子同点位体系，接触瞬间一闪）
+      // 对手强化：受击后仰回弹（位移/回弹曲线比通用 stumble 更明显），与主角侧的姿势切换观感对齐
+      if (foeDef) {
+        figDefender.classList.remove('recoiling'); void figDefender.offsetWidth;
+        figDefender.classList.add('recoiling');
+        setTimeout(function () { figDefender.classList.remove('recoiling'); }, 420);
+      }
     }
     function koFx() {
       var ring = $('ring');
@@ -274,6 +386,7 @@
       B.tkoReason = B.downIsTKO ? '第 ' + B.round + ' 回合第 3 次被击倒，触发 TKO 判定' : '';
       var fig = $(defIsMe ? 'figMe' : 'figFoe');
       fig.classList.add('down');
+      if (defIsMe) setMePose('hit', 0); // 击倒读秒期间定格受击姿势，配合 .down 旋转倒地
       $('downWho').textContent = (defIsMe ? '你被击倒了！' : '对手被击倒！') + '（本回合第 ' + downs + ' 次）';
       $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——读秒后按「TKO死战」设置判定（' + (S.deathFight ? '开：自动死战' : '关：直接判负') + '）' : '读秒中…站起来就能继续，HP 回到至少 20%';
       $('downCount').textContent = '3';
@@ -323,6 +436,7 @@
       var fig = $(defIsMe ? 'figMe' : 'figFoe');
       $('downOverlay').classList.remove('go');
       fig.classList.remove('down');
+      if (defIsMe) setMePose('guard', 0); // 起身回抱架（若随后 TKO 判负，finishBattle 会再定格受击姿势）
       if (B.downIsTKO) {
         B.phase = 'fight';
         decideTKO(defIsMe);
@@ -398,13 +512,18 @@
       var figDef = $(isMeAttacking ? 'figFoe' : 'figMe');
       figAtt.classList.add('punching');
       figAtt.classList.add('lined');
+      spawnAfterimage(figAtt); // B2：出拳残影
       setTimeout(function () { figAtt.classList.remove('punching'); figAtt.classList.remove('lined'); }, 170);
+      // 姿势帧/对手强化：我方出拳切对应拳种姿势图；对手出拳在其身前刷拳风弧光
+      if (isMeAttacking) setMePose(key, POSE_TIMING.punch);
+      else spawnPunchArc(figAtt);
 
       if (Math.random() > hitChance) {
         // 打空：进攻方连击清零；防守方视为闪避成功 → 开 1 秒反击窗口
         resetCombo(isMeAttacking);
         B.foeBlocking = false;
         openCounterWindow(!isMeAttacking, null);
+        if (!isMeAttacking) setMePose('dodge', POSE_TIMING.dodge); // 对手的拳打空＝我方闪避成功，切闪避姿势
         var counterP = def.tactic === 'counter' ? 0.45 : (def.style === 'guardcounter' ? 0.55 : 0.22);
         if (Math.random() < counterP && def.stam >= 8 && B.phase === 'fight') {
           // 防守方立刻抓反击窗口出拳（拳种取窗口对应的加成拳种，享受 +40%）
@@ -515,12 +634,26 @@
       var figDef = $(isMeAttacking ? 'figFoe' : 'figMe');
       var pop = $(isMeAttacking ? 'popFoe' : 'popMe');
       var heavy = crit || dmg >= 16;
+      // 姿势帧：我方挨打时按结果切姿势——格挡住（未被击腹穿透）切格挡图，其余切受击图（与顿帧/飘字同一时点）
+      if (!isMeAttacking) {
+        if (guarding && !pierce) setMePose('block', POSE_TIMING.block);
+        else setMePose('hit', POSE_TIMING.hit);
+      }
       hitFx(figDef, heavy, crit);
       if (guarding && !pierce) SFX.block(); else if (heavy) SFX.heavy(); else SFX.light();
       figDef.classList.remove('hit'); void figDef.offsetWidth; figDef.classList.add('hit');
       pop.textContent = (koTriggered ? 'KO! ' : '') + (counterBonus ? '反击! ' : '') + (brokeNow ? '破防! ' : '') + (crit ? '暴击! ' : '') + '-' + dmg + (comboNow >= 2 ? ' · ' + comboNow + '连击' : '') + ' · 重创+' + koAdd;
       pop.className = 'dmg-pop' + (crit || counterBonus ? ' crit' : heavy ? ' heavy' : '');
       void pop.offsetWidth; pop.classList.add('show');
+      // B2：连击计数演出——连击 ≥2 时在飘字上方挂「N 连击」小字，字号随连段放大，随飘字节奏弹出后自回收（只演出，不动判定）
+      if (comboNow >= 2) {
+        var comboPop = document.createElement('span');
+        comboPop.className = 'combo-pop';
+        comboPop.textContent = comboNow + ' 连击';
+        comboPop.style.fontSize = Math.min(13 + comboNow * 1.6, 30) + 'px';
+        figDef.appendChild(comboPop);
+        setTimeout(function () { comboPop.remove(); }, 720);
+      }
 
       var who = isMeAttacking ? '我方' : '对手';
       var tag = (isCounter || counterBonus) ? '反击' : '';
@@ -672,6 +805,8 @@
         blog('对手调整了战术：' + TACTICS[B.foe.tactic].name + '。', 'dim');
       }
       $('breakPanel').classList.remove('open');
+      setMePose('guard', 0); // 新回合起手回抱架
+      ringZoom(B.mode !== 'manual'); // B3：回合开始擂台轻微推近
       $('roundLabel').textContent = 'ROUND ' + B.round;
       SFX.roundStart(1);
       if (B.mindTense && !B.mindRestored && B.round >= 3) {
@@ -711,6 +846,9 @@
       else if (mePts < foePts) { win = false; how = '点数判定落败（' + mePts + ' : ' + foePts + '）'; }
       else { win = B.me.hp > B.foe.hp; how = '点数相同，按剩余 HP 判定' + (win ? '获胜' : '落败'); }
       B.result = { win: win, how: how };
+      // 姿势帧终局定格：胜＝胜利举臂图（结算窗延迟弹出，擂台上可见）；被 KO＝受击图配合倒地
+      if (win) setMePose('victory', 0);
+      else if (B.me.hp <= 0) setMePose('hit', 0);
       if (isKO) koFx(); else { SFX.finalBell(); if (win) SFX.victory(); } // Phase 9：KO 欢呼在 koFx 内（koCheer），判定胜另加胜利欢呼
       if (typeof BGM !== 'undefined') BGM.start('daily'); // Phase 9：战斗结束切回日常曲
       settleNow(win, how, isKO ? 2000 : 900);
@@ -757,6 +895,11 @@
         S.roster.forEach(function (m) { if (m.key === B.foe.key) foeMember = m; });
         if (foeMember) foeMember.rating = clamp(Math.round((foeMember.rating + (win ? -0.3 : 0.3)) * 100) / 100, 6, 30);
       }
+      // D3：对手名鉴「已交手」记录（三模式共用此结算点；仅供名鉴点亮展示，不参与任何数值/判定）
+      if (B.foe && B.foe.key) {
+        if (!Array.isArray(S.facedFoes)) S.facedFoes = [];
+        if (S.facedFoes.indexOf(B.foe.key) < 0) S.facedFoes.push(B.foe.key);
+      }
       // 心态结算：获胜 +15 / 战败 −10 / 被 KO −25
       var koLoss = !win && B.me.hp <= 0;
       var mindDelta = win ? 15 : (koLoss ? -25 : -10);
@@ -792,12 +935,12 @@
       if (B.foe.isTeammate) addAffinity('teammate', 2); // 同期队友林小葵（角色池 key 判定）：赛后小幅好感
 
       var rows = '';
-      rows += '<tr><td>奖金' + (win ? '' : '（出场费）') + '</td><td>¥' + prize + '（基础 ¥' + (200 + w * 100) + ' × 排名加成 × 影响力加成 +' + influencePctBefore + '%）</td></tr>';
+      rows += '<tr><td>奖金' + (win ? '' : '（出场费）') + '</td><td>¥<span class="tween-num" data-to="' + prize + '">0</span>（基础 ¥' + (200 + w * 100) + ' × 排名加成 × 影响力加成 +' + influencePctBefore + '%）</td></tr>'; // C2：奖金数字开窗后滚动到位
       if (win) rows += '<tr><td>名声</td><td>+1（名声仅作纪念展示，不参与判定）</td></tr>';
       rows += '<tr><td>影响力</td><td>' + (influenceUp ? influenceLabel(influenceBefore) + ' → <b>' + influenceLabel(influenceAfter) + '</b>（档位提升！出场费加成 +' + influenceBonusPct() + '%）' : influenceDown ? influenceLabel(influenceBefore) + ' → <b>' + influenceLabel(influenceAfter) + '</b>（排名跌出门槛，档位下降！出场费加成 +' + influenceBonusPct() + '%）' : influenceLabel(influenceAfter) + '（动态档位：按当前胜场/排名计算，输比赛跌出门槛会掉档）') + '</td></tr>';
       rows += '<tr><td>连胜</td><td>' + (win ? S.winStreak + ' 连胜' : '中断，清零') + '</td></tr>';
       stageDoneNow.forEach(function (d) {
-        rows += '<tr><td>阶段完成：' + d.name + '</td><td>奖励 ¥' + d.reward + ' 已到账' + (d.title ? ' ＋称号「' + d.title + '」' : '') + '</td></tr>';
+        rows += '<tr><td>阶段完成：' + d.name + '</td><td>奖励 ¥<span class="tween-num" data-to="' + d.reward + '">0</span> 已到账' + (d.title ? ' ＋称号「' + d.title + '」' : '') + '</td></tr>'; // C2：阶段奖励同奖金一起滚动
       });
       rows += '<tr><td>国内排名</td><td>第 ' + oldRank + ' 名 → 第 ' + S.rank + ' 名' + (rankMoved < 0 ? '（上升 ' + (-rankMoved) + ' 名）' : rankMoved > 0 ? '（下降 ' + rankMoved + ' 名）' : '（不变）') + '</td></tr>';
       rows += '<tr><td>我方总伤害 / 命中</td><td>' + B.me.dmg + ' / ' + B.me.hits + '</td></tr>';
@@ -819,9 +962,14 @@
       res.textContent = win ? '胜 利' : '败 北';
       res.className = 'big-result ' + (win ? 'win' : 'lose');
       $('settleDesc').textContent = how + '　战绩 ' + S.wins + ' 胜 · ' + S.losses + ' 负' + (rankMoved < 0 ? '　排名升至第 ' + S.rank + ' 名，恭喜！' : '') + '　影响力 ' + influenceLabel(influenceAfter) + (stageDoneNow.length ? '　阶段「' + stageDoneNow[stageDoneNow.length - 1].name + '」完成！' : '');
+      var sfl = $('settleFoeLine'); if (sfl && B.foe) sfl.textContent = B.foe.name + '：「' + foeLine(B.foe.key, win ? 'lose' : 'win') + '」'; // D1：赛后对手台词（win/lose 为对手视角：玩家胜→对手负台词）
       if (B.mode !== 'sim') dailyLog('比赛 vs ' + B.foe.name + '（第 ' + foeRank + ' 名）：' + how + '，国内排名第 ' + oldRank + ' 名 → 第 ' + S.rank + ' 名，影响力 ' + influenceLabel(influenceAfter) + (influenceUp ? '（本场后提升！）' : influenceDown ? '（本场后下降！）' : '') + '。', win ? 'good' : 'bad');
       if (rankMoved < 0) setTimeout(function () { toast('国内排名升至第 ' + S.rank + ' 名！'); }, (delay || 900) + 500);
-      setTimeout(function () { $('settleModal').classList.add('open'); }, delay || 900);
+      setTimeout(function () {
+        $('settleModal').classList.add('open');
+        setScene(win && S.rank === 1 ? 'title_stage' : 'ring_corner'); // A1：夺冠结算切冠军舞台，其余结算切擂台角
+        Array.prototype.forEach.call(document.querySelectorAll('#settleModal .tween-num'), function (el) { countUp(el, parseInt(el.getAttribute('data-to'), 10) || 0); }); // C2：开窗后启动数字滚动
+      }, delay || 900);
       save();
     }
 
@@ -947,7 +1095,9 @@
       B.me.stam = Math.max(0, B.me.stam - stamCost);
       var fig = $('figMe');
       fig.classList.add('punching'); fig.classList.add('lined');
+      spawnAfterimage(fig); // B2：手动出拳残影
       setTimeout(function () { fig.classList.remove('punching'); fig.classList.remove('lined'); }, 110);
+      setMePose(mp.prof, POSE_TIMING.punch); // 手动出拳：按拳种（MPUNCH.prof＝PUNCH 键）切姿势图
       var dist = B.man.fX - B.man.mX;
       if (dist > mp.range) {
         SFX.whiff();
@@ -1008,6 +1158,7 @@
       var fig = $('figMe');
       var t = dir === 'a' ? 'translateX(-18px)' : dir === 'd' ? 'translateX(18px)' : dir === 'w' ? 'rotate(-9deg)' : 'translateY(9px) scaleY(.86)';
       fig.style.transform = t;
+      setMePose('dodge', POSE_TIMING.dodge); // 主动闪避：下潜闪避姿势图（与位移变换叠加）
       SFX.whiff();
       setTimeout(function () { fig.style.transform = ''; }, 300);
       toast((dir === 'w' || dir === 'a' ? '后闪！' : dir === 's' ? '下闪！' : '侧闪！') + '（反击窗口：' + COUNTER_PREF_TXT[B.man.lastDodgeCat] + ' +40%）');
@@ -1032,9 +1183,12 @@
       foe.used[key] = (foe.used[key] || 0) + 1;
       var fig = $('figFoe');
       fig.classList.add('punching'); fig.classList.add('lined');
+      spawnAfterimage(fig); // B2：对手手动模式出拳残影
       setTimeout(function () { fig.classList.remove('punching'); fig.classList.remove('lined'); }, 150);
+      spawnPunchArc(fig); // 对手强化：出拳瞬间身前刷拳风弧光
       if (performance.now() < B.man.dodgeUntil) {
         SFX.whiff();
+        setMePose('dodge', POSE_TIMING.dodge); // 主动闪避帧内躲开：切闪避姿势
         resetCombo(false); // 对手出拳落空 → 其连击清零
         // Phase 4：闪避成功！按刚才的闪避方向给玩家开 1 秒反击窗口
         openCounterWindow(true, B.man.lastDodgeCat);
@@ -1046,6 +1200,7 @@
         var hitChance = calcHitChance(foe, me, foe.tactic, null); // P2-7：与自动模式共用同一命中公式
         if (Math.random() > hitChance) {
           SFX.whiff();
+          setMePose('dodge', POSE_TIMING.dodge); // 被闪开同样切闪避姿势
           resetCombo(false);
           // 普通闪开（非主动闪避帧）也算闪避成功，但方向随机
           openCounterWindow(true, null);
@@ -1107,6 +1262,8 @@
       var meBrokenNow = B.time < (B.meBrokenUntil || -1);
       B.meBlocking = !!(keysDown.space || touchBlock) && !meBrokenNow; // 破防期间抱架失效
       $('figMe').classList.toggle('guarding', B.meBlocking);
+      // 姿势帧：格挡状态变化时同步姿势（按住格挡＝格挡图定格，松开＝回抱架），与护盾弧视觉一致
+      if (B.meBlocking !== !!B._wasBlocking) { B._wasBlocking = B.meBlocking; setMePose(B.meBlocking ? 'block' : 'guard', 0); }
       var moving = false;
       if (!B.meBlocking) {
         var ed2 = effDir();

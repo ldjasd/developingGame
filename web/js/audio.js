@@ -3,6 +3,21 @@
    Phase 9 音效/音乐完整化（2026-11-02）：新增全合成 BGM sequencer（日常/战斗两曲）与关键场面音效，仍无任何外部音频文件。 */
     /* ================= 音效（Web Audio 现场合成，无外部文件） ================= */
     var AC = null, muted = false;
+    /* 界面架构批：音乐 / 音效双总线（设置屏接入）——audioLevels 为唯一音量/开关状态源，
+       设置模块（tools.js）写入；增益节点随 AudioContext 懒创建，创建时按 audioLevels 初始化，
+       之后由 setBusLevel() 实时更新。audioBus 标记当前发声归属：BGM 调度期间置 'music'。 */
+    var audioLevels = { musicOn: true, musicVol: 0.8, sfxOn: true, sfxVol: 0.9 };
+    var audioBus = 'sfx';
+    var musicGain = null, sfxGain = null;
+    function busOut(ac, bus) {
+      if (bus === 'music') { if (!musicGain) { musicGain = ac.createGain(); musicGain.gain.value = audioLevels.musicVol; musicGain.connect(ac.destination); } return musicGain; }
+      if (!sfxGain) { sfxGain = ac.createGain(); sfxGain.gain.value = audioLevels.sfxVol; sfxGain.connect(ac.destination); }
+      return sfxGain;
+    }
+    function setBusLevel(bus, on, vol) { // 设置即改即生效：已有增益节点立即更新，未建节点靠 audioLevels 在创建时生效
+      if (bus === 'music') { audioLevels.musicOn = !!on; audioLevels.musicVol = vol; if (musicGain) musicGain.gain.value = vol; }
+      else { audioLevels.sfxOn = !!on; audioLevels.sfxVol = vol; if (sfxGain) sfxGain.gain.value = vol; }
+    }
     function audio() {
       if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
       if (AC && AC.state === 'suspended') AC.resume();
@@ -16,17 +31,21 @@
     }
     function playNoise(dur, type, freq, peak, delay) {
       var ac = audio(); if (!ac || muted) return;
+      var bus = audioBus;
+      if (bus === 'music' ? !audioLevels.musicOn : !audioLevels.sfxOn) return;
       var t = ac.currentTime + (delay || 0);
       var src = ac.createBufferSource(); src.buffer = noiseBuffer(ac, dur);
       var f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq;
       var g = ac.createGain();
       g.gain.setValueAtTime(peak, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      src.connect(f); f.connect(g); g.connect(ac.destination);
+      src.connect(f); f.connect(g); g.connect(busOut(ac, bus));
       src.start(t); src.stop(t + dur + 0.05);
     }
     function playTone(freq, dur, type, peak, delay, slideTo) {
       var ac = audio(); if (!ac || muted) return;
+      var bus = audioBus;
+      if (bus === 'music' ? !audioLevels.musicOn : !audioLevels.sfxOn) return;
       var t = ac.currentTime + (delay || 0);
       var o = ac.createOscillator(); o.type = type || 'sine';
       o.frequency.setValueAtTime(freq, t);
@@ -34,7 +53,7 @@
       var g = ac.createGain();
       g.gain.setValueAtTime(peak, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      o.connect(g); g.connect(ac.destination);
+      o.connect(g); g.connect(busOut(ac, bus));
       o.start(t); o.stop(t + dur + 0.05);
     }
     var SFX = {
@@ -77,7 +96,7 @@
       buy: function () { // 购买成功：经典双音「金币」声
         playTone(988, 0.09, 'square', 0.06); playTone(1319, 0.32, 'square', 0.06, 0.08);
       },
-      click: function () { playNoise(0.025, 'bandpass', 2100, 0.07); playTone(720, 0.035, 'triangle', 0.045); } // 主要确认按钮轻点声（只挂确认框确定键）
+      click: function () { playNoise(0.025, 'bandpass', 2100, 0.07); playTone(720, 0.035, 'triangle', 0.045); } // 按钮轻点声（C3：ui.js 全局委托挂到所有主要按钮）
     };
 
     /* ================= Phase 9：BGM（全合成循环 sequencer，无外部文件） =================
@@ -124,7 +143,7 @@
       _tick: function () {
         if (!BGM.track) return;
         var ac = audio(); if (!ac) return;
-        if (muted || (typeof document !== 'undefined' && document.hidden)) { BGM._next = ac.currentTime + 0.12; return; }
+        if (muted || !audioLevels.musicOn || (typeof document !== 'undefined' && document.hidden)) { BGM._next = ac.currentTime + 0.12; return; }
         if (!BGM._next || BGM._next < ac.currentTime) BGM._next = ac.currentTime + 0.05;
         var tr = BGM_TRACKS[BGM.track];
         var stepDur = 60 / tr.bpm / 2; // 八分音符
@@ -135,6 +154,7 @@
         }
       },
       _schedule: function (name, tr, step, delay, stepDur) {
+        audioBus = 'music'; // 本函数的全部 playTone/playNoise 归音乐总线（同步执行，排完立即复位）
         var bar = tr.bars[Math.floor(step / 8) % tr.bars.length];
         var s = step % 8;
         if (name === 'daily') {
@@ -151,6 +171,7 @@
           var bm = bar.mel[s];
           if (bm > 0) playTone(mtof(bm), stepDur * 1.1, 'square', 0.018, delay);
         }
+        audioBus = 'sfx';
       }
     };
     /* 首次用户手势后才允许出声（浏览器 autoplay 限制）：第一次 pointerdown/keydown 时

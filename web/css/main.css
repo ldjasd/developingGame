@@ -1,35 +1,51 @@
+      /* 视觉大改版：主角代表色体系——粉（发色/星星）＋紫（拳套/裙）＋薰衣草打底；
+         --red 沿用变量名但取值改为玫红（主行动/危险语义并入粉紫系），--gold 仅保留给冠军/第一名/价格/成就点缀 */
       :root {
-        --bg: #eef0f3;
-        --panel: #ffffff;
-        --panel-2: #f6f7f9;
-        --ink: #1b2230;
-        --ink-2: #5a6478;
-        --line: #dde1e8;
-        --red: #d9382e;
-        --red-dark: #b02720;
-        --blue: #2f6fd0;
+        --bg: #f2ecfb;
+        --panel: #fffafd;
+        --panel-2: #f1e9fa;
+        --ink: #2b2145;
+        --ink-2: #5f5183;
+        --line: #ddcff2;
+        --red: #d12e77;
+        --red-dark: #a51e5c;
+        --pink: #f27bb5;
+        --purple: #7b4bb5;
+        --purple-deep: #4a2a7a;
+        --lav: #efe7fb;
+        --blue: #5b7fe0;
         --gold: #c8860a;
+        --gold-2: #d9a420;
         --green: #1f9d66;
-        --hp: #e0483e;
+        --hp: #e5487f;
         --stam: #f0a020;
-        --ap: #2f6fd0;
-        --shadow: 0 2px 10px rgba(20, 28, 45, .08);
-        --radius: 14px;
+        --ap: #7b4bb5;
+        --shadow: 0 2px 10px rgba(74, 42, 122, .10), 0 12px 30px rgba(74, 42, 122, .08);
+        --card-hi: rgba(255, 255, 255, .6);
+        --radius: 16px;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #12151b;
-          --panel: #1c212b;
-          --panel-2: #232936;
-          --ink: #e9edf4;
-          --ink-2: #9aa6ba;
-          --line: #333c4e;
-          --red: #f0564c;
-          --red-dark: #d9382e;
-          --blue: #5b93e8;
+          --bg: #16102a;
+          --panel: #231839;
+          --panel-2: #2c1f47;
+          --ink: #f3edfb;
+          --ink-2: #b7a8d4;
+          --line: #47356e;
+          --red: #e85a9e;
+          --red-dark: #d6337c;
+          --pink: #f79ac4;
+          --purple: #a678e8;
+          --purple-deep: #7b4bb5;
+          --lav: #322354;
+          --blue: #8aa5f2;
           --gold: #e8a93d;
+          --gold-2: #f0bc4a;
           --green: #3ec98a;
-          --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+          --hp: #f2709c;
+          --ap: #a678e8;
+          --shadow: 0 2px 10px rgba(0, 0, 0, .35), 0 12px 30px rgba(0, 0, 0, .3);
+          --card-hi: rgba(255, 255, 255, .06);
         }
       }
       * { box-sizing: border-box; }
@@ -45,15 +61,38 @@
       button { font-family: inherit; cursor: pointer; }
       button:disabled { cursor: not-allowed; opacity: .45; }
 
-      .wrap { max-width: 1060px; margin: 0 auto; padding: 14px 14px 40px; }
+      .wrap { max-width: 1060px; margin: 0 auto; padding: 14px 14px 40px; position: relative; z-index: 1; }
+
+      /* ---------- 场景背景层（A1 打磨） ---------- */
+      .scene-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+      .scene-bg img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; display: block; transition: opacity .18s ease; }
+      /* 本色洗罩：把场景压成氛围底，正文/卡片区对比度不被背景吃掉（卡片本身不透明，双保险） */
+      .scene-bg::after { content: ''; position: absolute; inset: 0; background: var(--bg); opacity: .8; }
+      @media (prefers-color-scheme: dark) { .scene-bg::after { opacity: .86; } }
+
+      /* ---------- 视图 / 弹窗过渡（C1 打磨） ---------- */
+      @keyframes viewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .view-in { animation: viewIn .22s ease-out; }
+      @keyframes maskIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes modalIn { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+      .modal-mask.open { animation: maskIn .18s ease-out; }
+      .modal-mask.open .modal { animation: modalIn .24s cubic-bezier(.2, 1.25, .35, 1); }
+      @media (prefers-reduced-motion: reduce) {
+        .view-in, .modal-mask.open, .modal-mask.open .modal { animation: none; }
+      }
 
       /* ---------- 顶部状态栏 ---------- */
       .topbar {
-        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--purple); border-radius: var(--radius);
         box-shadow: var(--shadow); padding: 12px 16px;
         display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
         position: sticky; top: 10px; z-index: 30;
       }
+      /* 改版：顶栏拳击元素——围绳三色条（粉/白/紫）＋拳套装饰图＋星星点缀 */
+      .tb-rope { flex: 1 1 100%; height: 6px; border-radius: 99px; margin-bottom: 2px;
+        background: repeating-linear-gradient(90deg, var(--pink) 0 34px, #ffffff 34px 44px, var(--purple) 44px 78px, #ffffff 78px 88px); }
+      .tb-glove { width: 36px; height: 36px; object-fit: contain; flex: none; filter: drop-shadow(0 2px 3px rgba(74, 42, 122, .3)); }
+      .tb-stars { color: var(--pink); font-size: 13px; letter-spacing: 3px; flex: none; margin-left: -14px; }
       .tb-item { display: flex; align-items: center; gap: 7px; font-size: 14px; white-space: nowrap; }
       .tb-item .lbl { color: var(--ink-2); font-size: 12px; }
       .tb-item .val { font-weight: 700; font-size: 16px; }
@@ -81,17 +120,30 @@
       @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
       .card {
         background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-        box-shadow: var(--shadow); padding: 16px;
+        box-shadow: var(--shadow), inset 0 1px 0 var(--card-hi); padding: 16px;
       }
-      .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+      /* 改版：标题 Oswald＋粉紫渐变竖条，标题下加粉/白/紫围绳纹理细条（拳台围绳） */
+      .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 900; display: flex; align-items: center; gap: 8px; font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em; padding-bottom: 8px;
+        background: linear-gradient(90deg, var(--pink) 0 33%, var(--panel) 33% 66%, var(--purple) 66% 100%) bottom / 100% 3px no-repeat; }
+      .card h2::before { content: ''; flex: none; width: 5px; align-self: stretch; min-height: 17px; border-radius: 3px; background: linear-gradient(180deg, var(--pink), var(--purple)); }
       .card h2 .tag { font-size: 11px; font-weight: 500; color: var(--ink-2); }
       .card + .card { margin-top: 14px; }
 
-      /* 属性 */
-      .attrs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
-      .attr { display: flex; justify-content: space-between; align-items: baseline; background: var(--panel-2); border-radius: 9px; padding: 7px 11px; }
-      .attr .an { font-size: 13px; color: var(--ink-2); }
-      .attr .av { font-weight: 700; font-size: 17px; }
+      /* 属性（改版去报表感：游戏式条目——图标徽章＋名称＋渐变数值条＋数字，一行一属性）
+         类别配色：cat-a 力系（力量/耐久/意志）粉系、cat-b 速系（速度/精准/步伐）蓝系、cat-c 技系（防守/技术）紫系 */
+      .attrs { display: flex; flex-direction: column; gap: 7px; }
+      .attr { display: flex; align-items: center; gap: 9px; background: var(--panel-2); border-radius: 11px; padding: 7px 11px; }
+      .attr .attr-ic { flex: none; width: 23px; height: 23px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; color: #fff; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .3); }
+      .attr.cat-a .attr-ic { background: linear-gradient(135deg, var(--pink), var(--red)); }
+      .attr.cat-b .attr-ic { background: linear-gradient(135deg, #7d9bf2, #4a6fd6); }
+      .attr.cat-c .attr-ic { background: linear-gradient(135deg, #a678e8, var(--purple)); }
+      .attr .an { font-size: 13px; color: var(--ink-2); width: 60px; flex: none; }
+      .attr .attr-bar { flex: 1; height: 9px; border-radius: 99px; background: var(--line); overflow: hidden; }
+      .attr .attr-bar > i { display: block; height: 100%; border-radius: 99px; transition: width .3s; }
+      .attr.cat-a .attr-bar > i { background: linear-gradient(90deg, var(--pink), var(--red)); }
+      .attr.cat-b .attr-bar > i { background: linear-gradient(90deg, #7d9bf2, #4a6fd6); }
+      .attr.cat-c .attr-bar > i { background: linear-gradient(90deg, #a678e8, var(--purple)); }
+      .attr .av { font-weight: 700; font-size: 16px; min-width: 36px; text-align: right; }
       .attr .up { color: var(--green); font-size: 12px; font-weight: 700; margin-left: 3px; }
 
       /* 拳种熟练度 */
@@ -121,7 +173,9 @@
       .act-btn .t { font-weight: 900; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
       .act-btn .cost { font-size: 11px; font-weight: 700; color: var(--ap); background: var(--panel); border: 1px solid var(--line); padding: 1px 7px; border-radius: 99px; }
       .act-btn .d { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
-      .act-btn.match { background: var(--red); border-color: var(--red-dark); color: #fff; grid-column: 1 / -1; }
+      .act-btn.match { background: linear-gradient(135deg, var(--red), var(--purple)); border-color: var(--red-dark); color: #fff; grid-column: 1 / -1; }
+      .btn-ic { width: 22px; height: 22px; object-fit: contain; vertical-align: -6px; margin-right: 6px; }
+      .btn-star { color: var(--pink); margin-right: 5px; }
       .act-btn.match .d { color: rgba(255,255,255,.85); }
       .act-btn.match .cost { color: var(--red-dark); border-color: transparent; }
       .act-btn.sleep { grid-column: 1 / -1; text-align: center; background: var(--ink); color: var(--panel); border-color: var(--ink); }
@@ -131,6 +185,8 @@
       .train-list { display: none; margin-top: 10px; max-height: 380px; overflow-y: auto; }
       .train-list.open { display: block; }
       .train-opt .cost { font-size: 11px; font-weight: 700; color: var(--ap); background: var(--panel-2); border: 1px solid var(--line); padding: 1px 7px; border-radius: 99px; margin-left: 6px; white-space: nowrap; }
+      /* 改版：仅商店内的价格改金币色标签（金色仅点缀用途之一）；训练计划的「点数」标签不受影响 */
+      #shopList .train-opt .cost { font-size: 12px; color: #503800; background: linear-gradient(135deg, #f6c945, #e0a313); border: 1px solid #c08d07; padding: 2px 10px; box-shadow: 0 1px 3px rgba(192, 141, 7, .35); }
       .plan-head { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 9px; }
       .plan-head .pts { color: var(--red); font-size: 16px; }
       .plan-sel { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
@@ -143,6 +199,12 @@
       .status-top { display: grid; grid-template-columns: 240px 1fr; gap: 16px; align-items: start; }
       @media (max-width: 640px) { .status-top { grid-template-columns: 1fr; } }
       .portrait { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: top; border-radius: 12px; border: 1px solid var(--line); display: block; }
+      /* 改版：状态页主角区做成「选手档案卡」——粉紫光晕＋渐变描边＋名牌缎带 */
+      .fighter-card { border-radius: 18px; padding: 6px; background: linear-gradient(160deg, rgba(242, 123, 181, .30), rgba(123, 75, 181, .24));
+        box-shadow: 0 0 0 1px var(--line), 0 0 28px rgba(242, 123, 181, .35), 0 12px 26px rgba(74, 42, 122, .18); }
+      .fighter-card .portrait { border: none; border-radius: 13px; }
+      .file-ribbon { margin-top: 6px; text-align: center; font-family: "Oswald", "Noto Sans SC", sans-serif; font-weight: 700; font-size: 12.5px; letter-spacing: .22em; color: #fff;
+        background: linear-gradient(90deg, var(--purple-deep), var(--red), var(--purple-deep)); border-radius: 9px; padding: 5px 0 5px .22em; }
       /* Phase 6：外观自定义（状态页立绘下方；手机上按钮够大、横向不溢出） */
       .app-panel { margin-top: 12px; }
       .app-group { margin-bottom: 10px; }
@@ -157,11 +219,11 @@
       .stat-bars { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
       .stat-bar-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
       .stat-bar-row .bar { width: 100%; }
-      .bar.mind > i { background: #8a5fc0; }
+      .bar.mind > i { background: var(--purple); }
       .gear-slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
       @media (max-width: 560px) { .gear-slots { grid-template-columns: 1fr; } }
       .gear-slot { text-align: left; background: var(--panel-2); border: 1.5px solid var(--line); border-radius: 11px; padding: 10px 12px; color: var(--ink); }
-      .gear-slot:hover { border-color: var(--gold); }
+      .gear-slot:hover { border-color: var(--pink); }
       .gear-slot .gs { font-size: 11.5px; color: var(--ink-2); }
       .gear-slot .gn { font-weight: 900; font-size: 14.5px; display: block; margin: 2px 0; }
       .gear-slot .gd { font-size: 12px; color: var(--green); font-weight: 700; }
@@ -175,12 +237,20 @@
       .bag-item button:not(:disabled):hover { border-color: var(--red); }
       .bag-empty { font-size: 13px; color: var(--ink-2); padding: 8px 2px; }
       /* 拳套图鉴 */
-      .dex-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px; margin-bottom: 8px; }
+      .dex-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 9px 12px; margin-bottom: 8px; box-shadow: inset 3px 0 0 var(--pink); }
       .dex-item .bi-t { font-weight: 700; font-size: 14px; }
       .dex-item .bi-d { font-size: 12px; color: var(--ink-2); }
       .dex-item .dex-state { font-size: 12px; font-weight: 700; color: var(--green); white-space: nowrap; }
       .dex-item.locked { opacity: .5; }
       .dex-item.locked .dex-state { color: var(--ink-2); }
+      .dex-gallery { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 10px; }
+      .dex-gal-title { font-size: 15px; margin: 0 0 4px; }
+      .dex-gal-cat { font-size: 13px; margin: 12px 0 6px; color: var(--ink-2); }
+      .dex-gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; }
+      .dex-gal-item { margin: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: center; position: relative; }
+      .dex-gal-item::after { content: '★'; position: absolute; top: 7px; right: 10px; font-size: 12px; color: var(--pink); text-shadow: 0 1px 3px rgba(255, 255, 255, .85); }
+      .dex-gal-item img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; }
+      .dex-gal-item figcaption { font-size: 11px; line-height: 1.35; margin-top: 5px; color: var(--ink-1, inherit); word-break: break-all; }
       /* Phase 3：阶段目标 / 粉丝 / 赞助 */
       .title-badge { display: inline-block; background: var(--gold); color: #fff; font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 1px 9px; margin-left: 4px; vertical-align: 2px; }
       .prog-row { margin-bottom: 9px; }
@@ -190,7 +260,7 @@
       .prog-head .pg-v { color: var(--ink-2); font-size: 12px; }
       .prog-head .pg-v.done { color: var(--green); font-weight: 700; }
       .progbar { height: 7px; border-radius: 99px; background: var(--line); overflow: hidden; }
-      .progbar > i { display: block; height: 100%; background: var(--gold); border-radius: 99px; transition: width .3s; }
+      .progbar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--purple), var(--pink)); border-radius: 99px; transition: width .3s; }
       .progbar > i.done { background: var(--green); }
       .stage-done-item { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 6px 2px; border-bottom: 1px solid var(--line); }
       .stage-done-item:last-child { border-bottom: none; }
@@ -206,7 +276,7 @@
       .career-line:last-child { margin-bottom: 0; }
       .train-opt {
         width: 100%; text-align: left; background: var(--panel); border: 1.5px solid var(--line);
-        border-radius: 11px; padding: 10px 13px; margin-bottom: 8px; color: var(--ink);
+        border-radius: 14px; padding: 10px 13px; margin-bottom: 8px; color: var(--ink);
       }
       .train-opt:hover:not(:disabled) { border-color: var(--red); }
       .train-opt .t { font-weight: 700; font-size: 14px; }
@@ -218,10 +288,11 @@
         background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px;
         height: 190px; overflow-y: auto; padding: 10px 13px; font-size: 13px;
       }
-      .logbox p { margin: 0 0 5px; }
-      .logbox .dim { color: var(--ink-2); }
-      .logbox .good { color: var(--green); font-weight: 700; }
-      .logbox .bad { color: var(--red); font-weight: 700; }
+      /* C4：日志色块分级——普通＝灰块、好事＝金块、坏事＝红块（左侧色条＋同色浅底，文字分级沿用原色） */
+      .logbox p { margin: 0 0 5px; padding: 4px 8px 4px 9px; border-left: 4px solid #c3c9d4; background: rgba(130, 140, 158, .07); border-radius: 0 8px 8px 0; }
+      .logbox .dim { color: var(--ink-2); border-left-color: #d8dce3; }
+      .logbox .good { color: var(--green); font-weight: 700; border-left-color: var(--gold); background: rgba(217, 164, 32, .12); }
+      .logbox .bad { color: var(--red); font-weight: 700; border-left-color: var(--red); background: rgba(217, 56, 46, .08); }
       .record-line { font-size: 13px; color: var(--ink-2); margin-top: 10px; }
       .record-line b { color: var(--ink); }
 
@@ -231,92 +302,47 @@
       .round-banner .rb { font-family: "Oswald", sans-serif; font-size: 30px; font-weight: 700; letter-spacing: .06em; }
       .round-banner .rt { color: var(--ink-2); font-size: 13px; }
       .fighters { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
-      .fcard { background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px; }
+      .fcard { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 9px 12px; }
       .fcard .fname { font-weight: 900; font-size: 15px; display: flex; justify-content: space-between; }
       .fcard .fname .corner { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; color: #fff; }
-      .corner.red { background: var(--red); } .corner.blue { background: var(--blue); }
+      .corner.red { background: var(--red); } .corner.blue { background: var(--purple); }
       .fbar { height: 12px; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 6px; }
       .fbar > i { display: block; height: 100%; background: var(--hp); transition: width .25s; }
       .fbar.stam { height: 8px; } .fbar.stam > i { background: var(--stam); }
       .fnums { font-size: 12px; color: var(--ink-2); display: flex; justify-content: space-between; margin-top: 3px; }
-      .vs { font-family: "Oswald", sans-serif; font-weight: 700; font-size: 20px; color: var(--ink-2); }
+      .vs { font-family: "Oswald", sans-serif; font-weight: 700; font-size: 20px; color: var(--purple); }
 
-      /* 擂台 */
+      /* 擂台（B1 打磨：同世界实景图作底，旧 CSS 台面/围绳退役隐藏，DOM 保留兼容） */
       .ring {
-        position: relative; height: 230px; border-radius: var(--radius); overflow: hidden;
+        position: relative; height: 250px; border-radius: var(--radius); overflow: hidden;
         background: #232c3e;
         border: 1px solid var(--line);
       }
-      .ring .canvas-floor {
-        position: absolute; left: 0; right: 0; bottom: 0; height: 42%;
-        background: linear-gradient(180deg, #57606e, #414a58);
-        border-top: 4px solid #c8ccd4;
-      }
-      .ring .ropes { position: absolute; left: 0; right: 0; top: 34%; height: 3px; background: #d9382e; opacity: .85; }
-      .ring .ropes.b2 { top: 44%; background: #e8e8e8; }
-      .ring .ropes.b3 { top: 54%; background: #2f6fd0; }
+      .ring .ring-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 62%; }
+      .ring .canvas-floor, .ring .ropes { display: none; }
+      /* A2 第一步：双方真实立绘平铺对峙（立绘为竖版全身图，cover+顶部对齐取全身） */
       .fighter {
-        position: absolute; bottom: 16%; width: 74px; height: 128px;
+        position: absolute; bottom: 9%; width: 96px; height: 182px;
         transition: left .45s ease;
       }
       .fighter .fig { position: relative; width: 100%; height: 100%; animation: bob 1s ease-in-out infinite; }
       @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-      .fighter .head {
-        position: absolute; left: 50%; top: 0; transform: translateX(-50%);
-        width: 30px; height: 30px; border-radius: 50%; background: #f2c49b; border: 2px solid rgba(0,0,0,.25);
+      .fighter .fig-img {
+        width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block;
+        filter: drop-shadow(0 7px 7px rgba(8, 10, 18, .45));
       }
-      .fighter .hair {
-        position: absolute; left: 50%; top: -3px; transform: translateX(-50%);
-        width: 34px; height: 16px; border-radius: 16px 16px 4px 4px;
-      }
-      .fighter.me .hair { background: #3a2a20; }
-      .fighter.foe .hair { background: #6b4a2f; }
-      .fighter .ponytail {
-        position: absolute; top: 2px; width: 9px; height: 34px; border-radius: 6px; background: #3a2a20;
-      }
-      .fighter.me .ponytail { left: 8px; transform: rotate(18deg); }
-      .fighter.foe .ponytail { display: none; }
-      .fighter .torso {
-        position: absolute; left: 50%; top: 32px; transform: translateX(-50%);
-        width: 30px; height: 42px; border-radius: 9px 9px 5px 5px;
-      }
-      .fighter.me .torso { background: #e8483f; }
-      .fighter.foe .torso { background: #3f74c9; }
-      .fighter .shorts {
-        position: absolute; left: 50%; top: 72px; transform: translateX(-50%);
-        width: 32px; height: 18px; border-radius: 4px;
-      }
-      .fighter.me .shorts { background: #fff; border: 2px solid #e8483f; }
-      .fighter.foe .shorts { background: #20304a; border: 2px solid #3f74c9; }
-      .fighter .leg { position: absolute; top: 88px; width: 9px; height: 34px; border-radius: 5px; background: #f2c49b; }
-      .fighter .leg.l { left: 22px; transform: rotate(7deg); }
-      .fighter .leg.r { right: 22px; transform: rotate(-7deg); }
-      .fighter .shoe { position: absolute; top: 118px; width: 16px; height: 8px; border-radius: 4px; }
-      .fighter .shoe.l { left: 15px; } .fighter .shoe.r { right: 15px; }
-      .fighter.me .shoe { background: #e8483f; } .fighter.foe .shoe { background: #3f74c9; }
-      .fighter .arm {
-        position: absolute; top: 38px; width: 30px; height: 10px; border-radius: 6px; background: #f2c49b;
-        transform-origin: left center; transition: transform .12s;
-      }
-      .fighter .arm.front { z-index: 3; }
-      .fighter.me .arm { left: 34px; }
-      .fighter.foe .arm { right: 34px; transform-origin: right center; }
-      .fighter.me .arm.back { left: 30px; top: 46px; opacity: .75; }
-      .fighter.foe .arm.back { right: 30px; top: 46px; opacity: .75; }
-      .fighter .glove {
-        position: absolute; top: 50%; width: 17px; height: 17px; border-radius: 50% 50% 45% 45%;
-        transform: translateY(-50%); border: 2px solid rgba(0,0,0,.22);
-      }
-      .fighter.me .glove { right: -14px; background: #d92323; }
-      .fighter.foe .glove { left: -14px; background: #2456a6; }
-      .fighter.me.punching .arm.front { transform: rotate(-6deg) scaleX(1.9); }
-      .fighter.foe.punching .arm.front { transform: rotate(6deg) scaleX(1.9); }
+      .fighter.foe .fig-img { transform: scaleX(-1); } /* 对手镜像，面向我方 */
+      /* 出拳：整图向对手方向短促前冲（替代旧 CSS 手臂伸长） */
+      .fighter.me.punching .fig-img { animation: lungeMe .18s ease-out; }
+      .fighter.foe.punching .fig-img { animation: lungeFoe .18s ease-out; }
+      @keyframes lungeMe { 0% { transform: translateX(0); } 35% { transform: translateX(15px); } 100% { transform: translateX(0); } }
+      @keyframes lungeFoe { 0% { transform: scaleX(-1) translateX(0); } 35% { transform: scaleX(-1) translateX(15px); } 100% { transform: scaleX(-1) translateX(0); } }
       .fighter.hit .fig { animation: shake .3s; }
-      .fighter.hit .head, .fighter.hit .torso { filter: brightness(1.7) sepia(1) hue-rotate(-40deg) saturate(3); }
+      .fighter.hit .fig-img { filter: brightness(1.55) sepia(.55) hue-rotate(-35deg) saturate(2.6) drop-shadow(0 7px 7px rgba(8, 10, 18, .45)); }
       @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
       .fighter.down .fig { transform: rotate(82deg) translateY(28px); transform-origin: bottom center; transition: transform .5s; animation: none; }
       .fighter .dmg-pop {
-        position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+        position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 7;
         font-family: "Oswald", sans-serif; font-weight: 700; font-size: 19px; color: #ffd34d;
         text-shadow: 0 1px 3px rgba(0,0,0,.6); opacity: 0; pointer-events: none; white-space: nowrap;
       }
@@ -343,13 +369,13 @@
       @keyframes shakeLg { 0%,100% { transform: translate(0,0); } 15% { transform: translate(7px,-4px); } 30% { transform: translate(-7px,3px); } 45% { transform: translate(5px,4px); } 60% { transform: translate(-5px,-3px); } 75% { transform: translate(3px,2px); } 90% { transform: translate(-2px,-1px); } }
       /* 出拳速度线 */
       .speedline {
-        position: absolute; top: 40px; width: 52px; height: 24px; opacity: 0; pointer-events: none; z-index: 2;
+        position: absolute; top: 56px; width: 52px; height: 24px; opacity: 0; pointer-events: none; z-index: 2;
         background: repeating-linear-gradient(90deg, rgba(255,255,255,.9) 0 9px, rgba(255,255,255,0) 9px 18px);
         -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%, #000 75%, transparent);
         mask-image: linear-gradient(90deg, transparent, #000 40%, #000 75%, transparent);
       }
-      .fighter.me .speedline { left: 62px; }
-      .fighter.foe .speedline { right: 62px; transform: scaleX(-1); }
+      .fighter.me .speedline { left: 88px; }
+      .fighter.foe .speedline { right: 88px; transform: scaleX(-1); }
       .fighter.lined .speedline { animation: lineFlash .16s ease-out; }
       @keyframes lineFlash { 0% { opacity: 0; } 25% { opacity: .95; } 100% { opacity: 0; } }
       /* 打击粒子 */
@@ -429,18 +455,27 @@
       .break-tac small { display: block; font-weight: 400; color: var(--ink-2); font-size: 11.5px; margin-top: 2px; }
       .break-tac.active { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); background: var(--panel); }
       .style-badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; background: var(--blue); color: #fff; }
-      .style-badge.power { background: #b02720; } .style-badge.speed { background: #1f9d66; } .style-badge.guardcounter { background: #6a4fc0; } .style-badge.balanced { background: #5a6478; }
+      .style-badge.power { background: #c22a72; } .style-badge.speed { background: #1f9d66; } .style-badge.guardcounter { background: #6a4fc0; } .style-badge.balanced { background: #6d5f8a; }
       /* 角色池：对手立绘（赛前弹窗 / 战斗界面）与国内排名榜 */
-      .mode-foe-img { display: block; margin: 0 auto 10px; height: 180px; max-width: 100%; object-fit: contain; }
+      .mode-foe-img { display: block; margin: 0 auto 10px; height: 180px; max-width: 100%; object-fit: contain; border-radius: 14px; background: var(--lav); box-shadow: 0 0 0 2px var(--line), 0 10px 22px rgba(74, 42, 122, .22); }
+      /* D1：对手台词（赛前弹窗 / 结算弹窗共用气泡样式） */
+      .modal .foe-line { margin: 10px 0 2px; padding: 9px 12px; border-left: 3px solid var(--red); border-radius: 0 10px 10px 0; background: var(--panel-2); color: var(--ink); font-size: 14px; line-height: 1.55; text-align: left; }
+      .modal .foe-line:empty { display: none; }
       .foe-portrait { width: 40px; height: 56px; object-fit: cover; object-position: top; border-radius: 7px; border: 1px solid var(--line); vertical-align: middle; margin-right: 8px; background: var(--panel); }
-      .rank-board { max-height: 420px; overflow-y: auto; }
-      .rank-row { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
-      .rank-row:last-child { border-bottom: none; }
-      .rank-row img { width: 26px; height: 34px; object-fit: cover; object-position: top; border-radius: 5px; flex: none; background: var(--panel-2); }
-      .rank-row .rr-rank { width: 36px; font-weight: 700; flex: none; }
+      /* 改版去报表感：排名榜改为游戏式选手条——名次奖牌徽章＋圆形头像＋名字＋信息，不再是表格线 */
+      .rank-board { max-height: 430px; overflow-y: auto; }
+      .rank-row { display: flex; align-items: center; gap: 10px; padding: 6px 9px; font-size: 13.5px; background: var(--panel-2); border-radius: 12px; margin-bottom: 5px; }
+      .rank-row:last-child { margin-bottom: 0; }
+      .rank-row img { width: 34px; height: 34px; object-fit: cover; object-position: top; border-radius: 50%; flex: none; background: var(--panel); border: 2px solid var(--purple); }
+      .rr-badge { flex: none; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; background: var(--lav); color: var(--purple); border: 1.5px solid var(--line); }
+      .rr-badge.r1 { background: linear-gradient(135deg, #f6c945, #d9940a); color: #4a2f00; border-color: #b97e06; box-shadow: 0 0 0 2px rgba(217, 164, 32, .25); }
+      .rr-badge.r2 { background: linear-gradient(135deg, #f4f6fa, #b9c2d0); color: #3d4657; border-color: #9aa6ba; }
+      .rr-badge.r3 { background: linear-gradient(135deg, #eda76a, #b06a28); color: #46260a; border-color: #96601f; }
+      .rr-badge.wide { width: auto; height: 24px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; }
       .rank-row .rr-name { font-weight: 700; flex: 1; min-width: 0; }
       .rank-row .rr-meta { color: var(--ink-2); font-size: 12px; flex: none; white-space: nowrap; }
-      .rank-row.me { background: var(--panel-2); border-radius: 8px; }
+      .rank-row.me { background: linear-gradient(90deg, rgba(242, 123, 181, .22), rgba(123, 75, 181, .13)); box-shadow: inset 3px 0 0 var(--red); }
+      .rank-row.me img { border-color: var(--pink); }
       .rank-row.reserve { opacity: .65; }
       /* Phase 4：击倒读秒遮罩 */
       .down-overlay {
@@ -452,17 +487,17 @@
       .down-overlay .down-count { font-family: "Oswald", sans-serif; font-weight: 700; font-size: 84px; line-height: 1.05; color: #ffcf3f; text-shadow: 0 3px 0 #7a1005, 0 8px 22px rgba(0,0,0,.6); }
       .down-overlay .down-sub { font-size: 13px; color: #e8ecf2; }
       .fighter.broken-guard .fig::before {
-        content: '破防!'; position: absolute; top: -20px; left: 50%; transform: translateX(-50%); z-index: 6;
+        content: '破防!'; position: absolute; top: -24px; left: 50%; transform: translateX(-50%); z-index: 6;
         font-size: 12px; font-weight: 900; color: #fff; background: var(--red); border-radius: 99px; padding: 1px 9px; white-space: nowrap;
       }
       /* 回合间 */
-      .break-panel { display: none; margin-top: 14px; border: 1.5px dashed var(--gold); border-radius: var(--radius); padding: 14px 16px; background: var(--panel); }
+      .break-panel { display: none; margin-top: 14px; border: 1.5px dashed var(--purple); border-radius: var(--radius); padding: 14px 16px; background: var(--panel); }
       .break-panel.open { display: block; }
       .break-panel h3 { margin: 0 0 8px; font-size: 15px; }
       .break-panel p { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
       .break-btns { display: flex; flex-wrap: wrap; gap: 8px; }
       .break-btns button { border: 1.5px solid var(--line); background: var(--panel-2); color: var(--ink); border-radius: 10px; padding: 8px 14px; font-weight: 700; font-size: 13px; }
-      .break-btns button:hover:not(:disabled) { border-color: var(--gold); }
+      .break-btns button:hover:not(:disabled) { border-color: var(--pink); }
 
       /* 模式选择与键位 */
       .mode-list { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
@@ -495,18 +530,78 @@
         padding: 5px 10px; border-radius: 8px; pointer-events: none;
       }
       .mini-keys b { color: #ffd34d; }
-      /* 格挡抱架姿态 */
-      .fighter.guarding .arm.front { transform: rotate(-42deg) scaleX(.8); }
-      .fighter.foe.guarding .arm.front { transform: rotate(42deg) scaleX(.8); }
-      .fighter.me.guarding .arm.front { transform: rotate(-42deg) scaleX(.8); }
-      /* 格挡护盾弧：格挡中在身前显示半透明护弧，触屏/键盘共用同一视觉反馈 */
+      /* 格挡护盾弧：格挡中在身前显示半透明护弧，触屏/键盘共用同一视觉反馈（A2 后按立绘尺寸放大） */
       .fighter.guarding .fig::after {
-        content: ''; position: absolute; top: 24px; width: 26px; height: 58px; z-index: 4;
+        content: ''; position: absolute; top: 36px; width: 32px; height: 104px; z-index: 4;
         border-radius: 50%; border: 3px solid rgba(255,255,255,.9); background: rgba(110,175,255,.28);
         box-shadow: 0 0 10px rgba(110,175,255,.55);
       }
-      .fighter.me.guarding .fig::after { right: -8px; }
-      .fighter.foe.guarding .fig::after { left: -8px; }
+      .fighter.me.guarding .fig::after { right: -10px; }
+      .fighter.foe.guarding .fig::after { left: -10px; }
+      /* 姿势帧批次（A2 第二步）：格挡护盾弧弹出感强化——出现瞬间放大回弹，格挡触发更可见 */
+      .fighter.guarding .fig::after { animation: guardPop .18s ease-out; }
+      @keyframes guardPop { 0% { transform: scale(.75); opacity: .35; } 100% { transform: scale(1); opacity: 1; } }
+      /* 对手受击后仰回弹：位移＋倾斜＋回弹曲线，比通用 stumble 更明显（JS 在命中时给 figFoe 加 .recoiling） */
+      .fighter.foe.recoiling .fig { animation: foeRecoil .38s cubic-bezier(.2, 2.2, .4, 1); }
+      @keyframes foeRecoil {
+        0% { transform: translateX(0) rotate(0); }
+        35% { transform: translateX(15px) rotate(4.5deg); }
+        65% { transform: translateX(-4px) rotate(-1.2deg); }
+        100% { transform: translateX(0) rotate(0); }
+      }
+      /* 对手出拳拳风弧光：JS 按粒子体系生成 span.arc-slash 挂在对手身前，一闪后自回收 */
+      .arc-slash {
+        position: absolute; width: 26px; height: 48px; border-radius: 50%; pointer-events: none; z-index: 6;
+        border: 3px solid transparent; border-left-color: rgba(255, 255, 255, .92);
+        filter: drop-shadow(0 0 5px rgba(160, 200, 255, .8));
+        animation: arcSlash .2s ease-out forwards;
+      }
+      @keyframes arcSlash {
+        0% { opacity: 0; transform: rotate(-26deg) translateX(8px) scale(.8); }
+        30% { opacity: 1; }
+        100% { opacity: 0; transform: rotate(6deg) translateX(-6px) scale(1.12); }
+      }
+
+      /* ---------- 打磨批次 4：B2 打击反馈补强 ---------- */
+      /* 出拳残影：JS 克隆出拳方当前姿势图生成半透明 img.fig-ghost，滞后朝出拳反方向漂移淡出后自回收 */
+      .fig-ghost {
+        position: absolute; z-index: 3; object-fit: cover; object-position: top center;
+        opacity: .45; pointer-events: none; animation: ghostFade .18s ease-out forwards;
+      }
+      @keyframes ghostFade {
+        0% { opacity: .45; transform: translateX(0); }
+        100% { opacity: 0; transform: translateX(-11px); }
+      }
+      .fig-ghost.foe { animation-name: ghostFadeFoe; }
+      @keyframes ghostFadeFoe {
+        0% { opacity: .45; transform: scaleX(-1) translateX(0); }
+        100% { opacity: 0; transform: scaleX(-1) translateX(-11px); }
+      }
+      /* 命中点星形闪光：JS 在接触点生成 span.hit-flash，星芒造型一闪后自回收 */
+      .hit-flash {
+        position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; z-index: 6; pointer-events: none;
+        background: radial-gradient(circle, #ffffff 0 16%, #ffd34d 42%, rgba(255, 138, 40, 0) 72%);
+        clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+        animation: hitFlash .2s ease-out forwards;
+      }
+      @keyframes hitFlash {
+        0% { opacity: 0; transform: scale(.45) rotate(0deg); }
+        35% { opacity: 1; }
+        100% { opacity: 0; transform: scale(1.4) rotate(26deg); }
+      }
+      /* 连击计数演出：飘字上方「N 连击」小字（字号由 JS 按连段内联放大），弹跳后上浮淡出自回收 */
+      .combo-pop {
+        position: absolute; top: -44px; left: 50%; z-index: 7; pointer-events: none; white-space: nowrap;
+        font-family: "Oswald", "Noto Sans SC", sans-serif; font-weight: 700; letter-spacing: .05em;
+        color: #ff8a3c; text-shadow: 0 1px 3px rgba(0,0,0,.65), 0 0 12px rgba(255, 138, 40, .45);
+        animation: comboPop .7s ease-out forwards;
+      }
+      @keyframes comboPop {
+        0% { opacity: 0; transform: translate(-50%, 9px) scale(.65); }
+        25% { opacity: 1; transform: translate(-50%, 0) scale(1.14); }
+        45% { transform: translate(-50%, -2px) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -18px) scale(1); }
+      }
 
       /* ---------- 触屏操作（安卓等触屏设备） ---------- */
       .touch-ui {
@@ -556,7 +651,8 @@
       @media (max-width: 560px) {
         .fighters { grid-template-columns: 1fr 1fr; }
         .fighters .vs { display: none; }
-        .ring { height: 200px; }
+        .ring { height: 218px; }
+        .fighter { width: 80px; height: 152px; }
         .ko-text { font-size: 64px; }
       }
 
@@ -570,12 +666,18 @@
         background: var(--panel); color: var(--ink); border-radius: 16px; max-width: 520px; width: 100%;
         max-height: 88vh; overflow-y: auto; padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,.3);
       }
-      .modal h2 { margin: 0 0 10px; font-size: 20px; font-weight: 900; }
+      .modal h2 { margin: 0 0 10px; font-size: 20px; font-weight: 900; font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em; padding-bottom: 9px;
+        background: linear-gradient(90deg, var(--pink) 0 33%, var(--panel) 33% 66%, var(--purple) 66% 100%) bottom / 100% 3px no-repeat; }
       .modal h3 { margin: 16px 0 6px; font-size: 15px; }
       .modal p, .modal li { font-size: 14px; color: var(--ink-2); }
       .modal ul { margin: 6px 0; padding-left: 20px; }
       .modal .big-result { font-family: "Oswald", sans-serif; font-size: 34px; font-weight: 700; text-align: center; margin: 6px 0; }
       .modal .big-result.win { color: var(--red); } .modal .big-result.lose { color: var(--ink-2); }
+      /* 改版：胜利结算加金腰带缎带（金色点缀，仅 .win 时出现，纯 CSS 不动结算逻辑） */
+      .modal .big-result.win { position: relative; padding-top: 30px; }
+      .modal .big-result.win::before { content: '★ ★ ★'; position: absolute; top: 2px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+        font-size: 11px; letter-spacing: .35em; padding: 4px 12px 4px 16px; border-radius: 99px; color: #503800;
+        background: linear-gradient(90deg, #b97e06, #f6c945 30%, #ffe98a 50%, #f6c945 70%, #b97e06); box-shadow: 0 2px 8px rgba(185, 126, 6, .45); }
       .settle-table { width: 100%; font-size: 14px; border-collapse: collapse; margin: 10px 0; }
       .settle-table td { padding: 5px 4px; border-bottom: 1px solid var(--line); }
       .settle-table td:last-child { text-align: right; font-weight: 700; }
@@ -602,6 +704,7 @@
       .story-head { display: flex; gap: 14px; align-items: flex-start; }
       .story-img { width: 104px; height: 148px; object-fit: cover; object-position: top center; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel-2); flex: none; }
       .story-name { font-weight: 900; font-size: 16px; margin: 2px 0 2px; }
+      .story-name::before { content: '★ '; color: var(--pink); }
       .story-role { font-size: 12px; color: var(--ink-2); margin: 0 0 8px; }
       .story-text { font-size: 14.5px; line-height: 1.75; color: var(--ink); white-space: pre-wrap; margin: 0; }
       .story-fx { display: none; margin-top: 12px; font-size: 13.5px; background: var(--panel-2); border-radius: 9px; padding: 9px 12px; color: var(--ink); }
@@ -624,10 +727,11 @@
       .rel-hearts .off { color: var(--line); }
       .rel-desc { font-size: 12.5px; color: var(--ink-2); margin: 3px 0 0; line-height: 1.55; }
       .primary-btn {
-        flex: 1; background: var(--red); color: #fff; border: none; border-radius: 11px;
+        flex: 1; background: linear-gradient(135deg, var(--red), var(--purple)); color: #fff; border: none; border-radius: 11px;
         padding: 12px; font-weight: 900; font-size: 15px;
+        box-shadow: 0 3px 10px rgba(168, 30, 92, .28), inset 0 1px 0 rgba(255, 255, 255, .22);
       }
-      .primary-btn:hover { background: var(--red-dark); }
+      .primary-btn:hover { filter: brightness(.92); }
       .secondary-btn {
         flex: 1; background: var(--panel-2); color: var(--ink); border: 1.5px solid var(--line);
         border-radius: 11px; padding: 12px; font-weight: 700; font-size: 15px;
@@ -641,7 +745,7 @@
       .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
       /* Phase 5：装备图片（正方形、单品居中，src 按 data-gear-img 映射到 assets/equipment/） */
-      .gear-img { width: 56px; height: 56px; aspect-ratio: 1 / 1; object-fit: contain; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); flex: none; }
+      .gear-img { width: 56px; height: 56px; aspect-ratio: 1 / 1; object-fit: contain; border: 1px solid var(--line); border-radius: 13px; background: var(--lav); flex: none; }
       .gear-img.lg { width: 76px; height: 76px; }
       .gear-slot .gear-img { display: block; margin: 0 auto 6px; }
       .dex-item.locked .gear-img { opacity: .45; }
@@ -650,10 +754,188 @@
       .bag-btns { display: flex; flex-direction: column; gap: 6px; flex: none; }
       .bag-btns button { border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: 13px; }
       .bag-btns button:not(:disabled):hover { border-color: var(--red); }
-      .custom-box { margin-top: 14px; border: 1.5px dashed var(--gold); border-radius: 12px; padding: 12px; }
+      .custom-box { margin-top: 14px; border: 1.5px dashed var(--purple); border-radius: 14px; padding: 12px; }
       .cs-lab { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
       .cs-lab select { width: 100%; margin-top: 4px; padding: 9px; border: 1.5px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--ink); font: inherit; font-size: 14px; }
       .custom-preview { font-size: 13.5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; line-height: 1.7; }
       .mat-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
       .mat-chip { font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); border-radius: 99px; padding: 3px 10px; }
       .foot-note { text-align: center; color: var(--ink-2); font-size: 12px; margin-top: 22px; }
+
+      /* ---------- 打磨批次 3：演出与收集（B3 / C3 / D3 / D4） ---------- */
+      /* C3：主要按钮统一按下反馈（回弹缩放；禁用态不触发，:active 规则在文件末尾保证覆盖各按钮自有样式） */
+      button { transition: transform .08s ease-out; }
+      button:active:not(:disabled) { transform: scale(.97); }
+
+      /* B3：开场入场——双方立绘从两侧滑入（ring.intro 期间；quick＝自动模式缩短版） */
+      @keyframes enterLeft { from { transform: translateX(-72px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      @keyframes enterRight { from { transform: translateX(72px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      .ring.intro .fighter.me { animation: enterLeft .55s ease-out; }
+      .ring.intro .fighter.foe { animation: enterRight .55s ease-out; }
+      .ring.intro.quick .fighter.me, .ring.intro.quick .fighter.foe { animation-duration: .3s; }
+      /* B3：VS 名字横幅（双方名字＋VS，居中浮层，不拦截操作；动画结束停在透明态，JS 超时兜底移除） */
+      .vs-banner {
+        position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 9;
+        display: flex; align-items: center; gap: 12px; max-width: 94%;
+        padding: 10px 18px; border-radius: 12px; pointer-events: none; opacity: 0;
+        background: rgba(16, 20, 32, .78); border: 1px solid rgba(255, 255, 255, .22);
+        box-shadow: 0 10px 28px rgba(5, 8, 16, .45);
+      }
+      .vs-banner .vsb-name { font-family: "Oswald", "Noto Sans SC", sans-serif; font-weight: 700; font-size: 19px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .vs-banner .vsb-name.foe { color: #ffd9d4; }
+      .vs-banner .vsb-vs { font-family: "Oswald", sans-serif; font-weight: 700; font-size: 15px; color: #10131c; background: var(--gold); border-radius: 8px; padding: 2px 9px; }
+      @keyframes vsBannerIn {
+        0% { opacity: 0; transform: translate(-50%, -50%) scale(.82); }
+        16% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(1.03); }
+      }
+      .vs-banner.show { animation: vsBannerIn 1.15s ease-out forwards; }
+      .vs-banner.show.quick { animation-duration: .6s; }
+      /* B3：回合开始镜头推近（scale 1→1.04→1，transform 实现；与震屏同为 animation，后定义者优先，回合初无震屏不冲突） */
+      @keyframes ringZoom { 0% { transform: scale(1); } 35% { transform: scale(1.04); } 100% { transform: scale(1); } }
+      .ring.zooming { animation: ringZoom .9s ease-in-out; }
+
+      /* D3：成就类别徽章（CSS 圆形徽章＋emoji 字形，按类别配色；未解锁灰显） */
+      .ach-badge {
+        display: inline-flex; align-items: center; justify-content: center; flex: none;
+        width: 22px; height: 22px; border-radius: 50%; margin-right: 7px; vertical-align: -6px;
+        font-size: 12px; line-height: 1; color: #fff; background: var(--ink-2);
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .35), 0 1px 3px rgba(10, 12, 20, .25);
+      }
+      .ach-badge.cat-battle { background: linear-gradient(135deg, var(--pink), var(--red)); }
+      .ach-badge.cat-career { background: linear-gradient(135deg, #f6c945, #d9940a); }
+      .ach-badge.cat-gear { background: linear-gradient(135deg, #a678e8, var(--purple)); }
+      .ach-badge.cat-story { background: linear-gradient(135deg, #f79ac4, #e0569a); }
+      .ach-badge.off { filter: grayscale(.85); opacity: .45; box-shadow: none; }
+
+      /* D3：对手名鉴网格（52 人：50 对手＋前辈＋经纪人） */
+      .foe-dex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(106px, 1fr)); gap: 10px; }
+      .foe-dex-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 8px 8px 9px; text-align: center; position: relative; }
+      .foe-dex-item::after { content: '★'; position: absolute; top: 12px; left: 12px; font-size: 12px; color: var(--pink); text-shadow: 0 1px 3px rgba(255, 255, 255, .85); }
+      .foe-dex-item img { width: 100%; height: 118px; object-fit: cover; object-position: top center; border-radius: 8px; display: block; background: var(--panel); }
+      .foe-dex-item .fd-name { font-weight: 700; font-size: 13.5px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .foe-dex-item .fd-rank { font-size: 12px; font-weight: 700; color: var(--purple); }
+      .foe-dex-item .fd-line { font-size: 11.5px; color: var(--ink-2); line-height: 1.45; }
+      .foe-dex-item.unmet img { opacity: .42; filter: grayscale(.55); }
+      .foe-dex-item.unmet .fd-name, .foe-dex-item.unmet .fd-rank, .foe-dex-item.unmet .fd-line { opacity: .55; }
+      .foe-dex-item .fd-unmet {
+        position: absolute; top: 14px; right: 14px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+        color: #fff; background: rgba(16, 20, 32, .72); border-radius: 99px; padding: 2px 8px;
+      }
+      .foe-dex-item .fd-staff {
+        position: absolute; top: 14px; right: 14px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+        color: #10131c; background: var(--gold); border-radius: 99px; padding: 2px 8px;
+      }
+
+      /* D4：回忆列表的「重看」按钮（dex-item 内的行内按钮统一样式） */
+      .dex-item > button { flex: none; border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: 13px; }
+      .dex-item > button:hover { border-color: var(--pink); }
+
+      /* ---------- 打磨批次 4：C5 主界面信息架构 ---------- */
+      /* 分区折叠开关：卡片标题右端小按钮；.folded 时只留标题行（内容仍在 DOM，渲染不受影响） */
+      .fold-btn {
+        margin-left: auto; flex: none; width: 28px; height: 24px; padding: 0;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+        color: var(--ink-2); font-size: 13px; line-height: 1; font-family: inherit; letter-spacing: 0;
+      }
+      .fold-btn:hover { border-color: var(--red); color: var(--red); }
+      .card.folded > *:not(h2) { display: none !important; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .ring.intro .fighter.me, .ring.intro .fighter.foe, .vs-banner.show, .ring.zooming { animation: none; }
+        .vs-banner.show { opacity: 0; }
+        button { transition: none; }
+      }
+
+      /* ---------- 界面架构批：多场景分屏 / 标题 / 画廊 / 存档 / 设置 ---------- */
+      #trainView, #shopView, #matchView, #galleryView, #savesView, #settingsView { display: none; }
+      /* 场景内列表常驻显示（取代旧单页里的 .open 展开机制） */
+      #trainView .train-list, #shopView .train-list { display: block; max-height: none; overflow: visible; }
+
+      /* 场景导航：围绳色胶囊排，与顶栏成套；当前场景高亮 */
+      .scene-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      .scene-nav button {
+        border: 1.5px solid var(--line); background: var(--panel); color: var(--ink);
+        border-radius: 99px; padding: 8px 15px; font-weight: 700; font-size: 13.5px;
+        box-shadow: var(--shadow); font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em;
+        display: inline-flex; align-items: center; gap: 6px;
+      }
+      .scene-nav button .sn-ic { color: var(--pink); font-size: 12px; }
+      .scene-nav button:hover { border-color: var(--red); color: var(--red); }
+      .scene-nav button.active { background: linear-gradient(135deg, var(--red), var(--purple)); border-color: var(--red-dark); color: #fff; }
+      .scene-nav button.active .sn-ic { color: #ffd9ec; }
+      /* 标题屏不显示顶栏/导航/页脚；战斗中不显示场景导航 */
+      body[data-view="title"] .topbar, body[data-view="title"] .scene-nav, body[data-view="title"] .foot-note { display: none; }
+      body[data-view="battle"] .scene-nav { display: none; }
+
+      /* 标题屏：全站最用心的一屏——大立绘＋代表色渐变标题字＋围绳纹理 */
+      .title-screen {
+        margin-top: 14px; text-align: center; padding: 30px 18px 26px; position: relative; overflow: hidden;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow);
+      }
+      .title-screen::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(560px 300px at 50% -60px, rgba(242, 123, 181, .30), transparent 70%), radial-gradient(500px 260px at 85% 110%, rgba(123, 75, 181, .20), transparent 70%); }
+      .title-rope { height: 7px; border-radius: 99px; margin: 0 auto 20px; max-width: 520px; position: relative;
+        background: repeating-linear-gradient(90deg, var(--pink) 0 34px, #ffffff 34px 44px, var(--purple) 44px 78px, #ffffff 78px 88px); }
+      .title-portrait { width: min(240px, 62vw); aspect-ratio: 3 / 4; object-fit: cover; object-position: top; border-radius: 18px; position: relative;
+        border: 3px solid transparent; background: linear-gradient(var(--panel), var(--panel)) padding-box, linear-gradient(160deg, var(--pink), var(--purple)) border-box;
+        box-shadow: 0 0 34px rgba(242, 123, 181, .40), 0 16px 34px rgba(74, 42, 122, .25); }
+      .game-title { margin: 18px 0 4px; font-family: "Oswald", "Noto Sans SC", sans-serif; font-size: clamp(38px, 9.5vw, 58px); font-weight: 700; letter-spacing: .1em; position: relative;
+        filter: drop-shadow(0 3px 0 rgba(74, 42, 122, .18)); }
+      /* 正式名「心跳在左，拳头在右」两段分色：左半粉（心跳）、右半紫（拳头），与新名概念一致 */
+      .game-title .gt-l { background: linear-gradient(92deg, var(--red) 5%, var(--pink) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .game-title .gt-comma { color: var(--purple); }
+      .game-title .gt-r { background: linear-gradient(92deg, var(--pink) 5%, var(--purple) 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .game-title::after { content: '★ ★ ★'; display: block; font-size: 13px; letter-spacing: .5em; margin-top: 6px; color: var(--pink); -webkit-text-fill-color: var(--pink); }
+      .title-sub { color: var(--ink-2); font-size: 14.5px; margin: 8px 0 22px; position: relative; }
+      .title-menu { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 0 auto; position: relative; }
+      .title-btn { flex: none; width: 100%; padding: 14px; font-size: 16px; border-radius: 13px; }
+      .title-slot { color: var(--ink-2); font-size: 12.5px; margin: 18px 0 0; position: relative; }
+
+      /* 比赛屏：报名按钮独占一行沿用 .act-btn.match 的满宽样式 */
+      .match-actions { grid-template-columns: 1fr; }
+
+      /* 画廊：页签＋立绘网格＋放大弹窗 */
+      .gal-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+      .gal-tabs button { border: 1.5px solid var(--line); background: var(--panel-2); color: var(--ink); border-radius: 99px; padding: 7px 16px; font-weight: 700; font-size: 13.5px; }
+      .gal-tabs button.active { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+      .gal-h3 { font-size: 15px; margin: 0 0 10px; }
+      .gal-h3 .tag { font-size: 11px; font-weight: 500; color: var(--ink-2); }
+      .gal-portraits { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+      .gal-portrait { margin: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 6px; text-align: center; cursor: pointer; position: relative; }
+      .gal-portrait::after { content: '★'; position: absolute; top: 8px; right: 11px; font-size: 12px; color: var(--pink); text-shadow: 0 1px 3px rgba(255, 255, 255, .85); }
+      .gal-portrait img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: top; border-radius: 10px; display: block; }
+      .gal-portrait figcaption { font-size: 11.5px; margin-top: 5px; color: var(--ink-2); }
+      .img-modal { text-align: center; }
+      .img-modal img { max-width: 100%; max-height: 68vh; border-radius: 14px; box-shadow: 0 0 0 2px var(--line), 0 14px 30px rgba(74, 42, 122, .3); }
+      .img-modal-cap { font-weight: 700; margin: 12px 0 0; }
+
+      /* 设置屏：开关＋滑杆行、关于、危险区 */
+      .set-row { display: flex; align-items: center; gap: 12px; padding: 13px 2px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+      .set-txt { flex: 1 1 180px; min-width: 0; }
+      .set-name { font-weight: 900; font-size: 15px; display: block; }
+      .set-desc { font-size: 12.5px; color: var(--ink-2); }
+      .set-toggle { flex: none; width: 58px; padding: 8px 0; border-radius: 99px; border: 1.5px solid var(--line); background: var(--panel-2); color: var(--ink-2); font-weight: 900; font-size: 13.5px; }
+      .set-toggle.on { background: linear-gradient(135deg, var(--red), var(--purple)); border-color: var(--red-dark); color: #fff; }
+      .set-range { flex: 1 1 120px; accent-color: var(--purple); height: 28px; }
+      .set-val { flex: none; width: 30px; text-align: right; font-weight: 700; }
+      .set-about { padding: 14px 2px 4px; font-size: 13.5px; color: var(--ink-2); }
+      .set-about p { margin: 0 0 6px; }
+      .set-about b { color: var(--ink); }
+      .danger-zone { margin-top: 14px; border: 1.5px dashed var(--red); border-radius: 14px; padding: 13px 15px; background: rgba(209, 46, 119, .05); }
+      .danger-zone h3 { margin: 0 0 6px; font-size: 15px; color: var(--red); }
+      .danger-zone p { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
+      .danger-btn { border: 1.5px solid var(--red); background: var(--panel); color: var(--red); border-radius: 10px; padding: 10px 16px; font-weight: 900; font-size: 14px; }
+      .danger-btn:hover { background: var(--red); color: #fff; }
+      .save-slot-auto { font-size: 12.5px; color: var(--ink-2); padding: 4px 0; }
+
+      /* 设置「减少动效」：手动版 prefers-reduced-motion——关掉过渡/动画（含残影/入场/视图过渡） */
+      body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation: none !important; transition: none !important; }
+      body.reduce-motion .vs-banner.show { opacity: 0; }
+
+      /* PWA 应用壳：禁止橡皮筋滚动/下拉刷新（更像原生应用），standalone 全屏时避开刘海/手势条安全区 */
+      html, body { overscroll-behavior: none; }
+      @media (display-mode: standalone) {
+        body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+      }

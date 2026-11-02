@@ -4,17 +4,30 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <link rel="icon" href="data:," />
-    <title>拳击养成 · Phase 7</title>
+    <meta name="description" content="二次元美少女拳击养成经营游戏：从无名新人打起，一路登上世界冠军的擂台。" />
+    <link rel="icon" type="image/png" href="assets/icons/favicon.png" />
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#4a2a7a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="心跳在左" />
+    <title>心跳在左，拳头在右</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/main.css" />
   </head>
   <body>
+    <!-- 场景背景层（A1）：按界面语义切换的同世界场景图，内容卡片均为不透明面板，正文可读性不受影响 -->
+    <div class="scene-bg" aria-hidden="true"><img id="sceneBgImg" src="assets/scenes/gym.webp" alt="" /></div>
     <div class="wrap">
       <!-- 顶部状态栏 -->
       <header class="topbar">
+        <div class="tb-rope" aria-hidden="true"></div>
+        <img class="tb-glove" src="assets/equipment_pool/gloves/glove_compact_star_pink.webp" alt="" aria-hidden="true" />
+        <span class="tb-stars" aria-hidden="true">★★★</span>
         <div class="tb-item"><span class="lbl">日期</span><span class="val num" id="tbDay">Day 1</span></div>
         <div class="tb-item" id="testBadgeWrap" style="display:none"><span class="test-badge">测试档</span></div>
         <div class="tb-item"><span class="lbl">行动点</span><span class="ap-pips" id="tbAp"></span></div>
@@ -35,6 +48,160 @@
           <button class="ghost-btn" id="btnReset">重新开始</button>
         </div>
       </header>
+      <!-- 界面架构批：场景导航（图标＋文字，代表色风，与顶栏围绳条成套；标题/战斗时隐藏） -->
+      <nav class="scene-nav" id="sceneNav" aria-label="场景导航">
+        <button data-nav="daily"><span class="sn-ic">★</span>据点</button>
+        <button data-nav="train"><span class="sn-ic">✦</span>训练</button>
+        <button data-nav="shop"><span class="sn-ic">◆</span>商店</button>
+        <button data-nav="match"><span class="sn-ic">⚡</span>比赛</button>
+        <button data-nav="status"><span class="sn-ic">♥</span>状态</button>
+        <button data-nav="gallery"><span class="sn-ic">✧</span>画廊</button>
+        <button data-nav="saves"><span class="sn-ic">▤</span>存档</button>
+        <button data-nav="settings"><span class="sn-ic">⚙</span>设置</button>
+      </nav>
+
+
+
+      <!-- 标题画面（界面架构批：启动先到此屏；继续=有档时进游戏，新的开始=当前槽新开生涯） -->
+      <div id="titleView">
+        <section class="title-screen">
+          <div class="title-rope" aria-hidden="true"></div>
+          <img class="title-portrait" id="titlePortrait" src="assets/portrait.webp" alt="主角立绘：粉发高马尾的少女拳手" />
+          <h1 class="game-title"><span class="gt-l">心跳在左</span><span class="gt-comma">，</span><span class="gt-r">拳头在右</span></h1>
+          <p class="title-sub">从无名新人打起，一路登上世界冠军的擂台</p>
+          <div class="title-menu">
+            <button class="primary-btn title-btn" id="btnTitleContinue">继续游戏</button>
+            <button class="secondary-btn title-btn" id="btnTitleNew">新的开始</button>
+            <button class="secondary-btn title-btn" id="btnTitleSaves">读取存档</button>
+            <button class="secondary-btn title-btn" id="btnTitleGallery">画廊</button>
+            <button class="secondary-btn title-btn" id="btnTitleSettings">设置</button>
+          </div>
+          <p class="title-slot" id="titleSlotInfo"></p>
+        </section>
+      </div>
+
+      <!-- 训练场景（独立屏：训练计划在此制定与结算） -->
+      <div id="trainView" style="display:none">
+        <section class="card">
+          <h2>训练 <span class="tag">2 AP · 5 点自由组合 · 一次结算</span></h2>
+          <p class="week-note">在拳馆训练室里把今天的计划排满：点项目加入计划（可重复选），凑满或不满 5 点都可以开始。训练只在这里结算，日常据点里点「训练」也是来这块屏。</p>
+              <div class="train-list" id="trainList"></div>
+          <div class="modal-btns" style="margin-top:12px">
+            <button class="secondary-btn" id="btnTrainBack">← 回到据点</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- 商店场景（独立屏：经日常「外出」确认后进入，每次进店 2 AP 的规则不变） -->
+      <div id="shopView" style="display:none">
+        <section class="card">
+          <h2>体育用品店 <span class="tag">装备与消耗品 · 底部可定制拳套</span></h2>
+              <div class="train-list" id="shopList"></div>
+        </section>
+      </div>
+
+      <!-- 比赛场景（独立屏：报名入口＋国内排名榜） -->
+      <div id="matchView" style="display:none">
+        <section class="card">
+          <h2>比赛 <span class="tag">每周第 7 天开放 · 报名免费 0 AP</span></h2>
+          <p class="week-note" id="matchWeekNote"></p>
+          <div class="actions match-actions">
+                <button class="act-btn" id="btnMatch">
+                  <span class="t"><span><span class="btn-star">★</span>报名比赛</span> <span class="cost">免费 · 0 AP</span></span>
+                  <span class="d" id="matchDesc">每周第 7 天开放</span>
+                </button>
+          </div>
+          <p class="shop-note" style="margin-top:10px">报名后选择战斗模式：手动操作（亲自上场）/ 自动观看（AI 代打＋战术指令）/ 模拟跳过（按实力判定）。对手来自 50 人角色池，排名与你相近（±5 名）。</p>
+        </section>
+        <section class="card">
+          <h2>国内排名榜 <span class="tag">角色池 · 每周按成长重排</span></h2>
+          <div class="rank-board" id="rankBoard"></div>
+        </section>
+      </div>
+
+      <!-- 画廊场景（独立屏：立绘 / 装备图鉴 / 设计款式 / 对手名鉴 / 回忆 五页签，收集内容唯一渲染处） -->
+      <div id="galleryView" style="display:none">
+        <section class="card">
+          <h2>画廊 <span class="tag">收集与回忆 · 点图可放大</span></h2>
+          <div class="gal-tabs" role="tablist">
+            <button data-galtab="portrait" class="active">立绘</button>
+            <button data-galtab="gear">装备图鉴</button>
+            <button data-galtab="design">设计款式</button>
+            <button data-galtab="foes">对手名鉴</button>
+            <button data-galtab="mem">回忆</button>
+          </div>
+          <div class="gal-panel" data-galpanel="portrait">
+            <p class="shop-note">主角全立绘（默认立绘＋发型 / 脸型 / 服装变体共 21 张），点任意一张放大看。</p>
+            <div class="gal-portraits" id="galPortraits"></div>
+          </div>
+          <div class="gal-panel" data-galpanel="gear" style="display:none">
+            <h3 class="gal-h3">装备图鉴 <span class="tag" id="dexCount"></span></h3>
+            <div id="stDex"></div>
+          </div>
+          <div class="gal-panel" data-galpanel="design" style="display:none">
+            <div id="galDesign"></div>
+          </div>
+          <div class="gal-panel" data-galpanel="foes" style="display:none">
+            <h3 class="gal-h3">对手名鉴 <span class="tag" id="foeDexCount">全 52 人 · 交过手的会点亮</span></h3>
+            <div id="stFoeDex"></div>
+          </div>
+          <div class="gal-panel" data-galpanel="mem" style="display:none">
+            <h3 class="gal-h3">回忆 <span class="tag" id="memCount">剧情重看 · 只读回放，不重复结算</span></h3>
+            <div id="stMemories"></div>
+          </div>
+          <div class="modal-btns" style="margin-top:14px">
+            <button class="secondary-btn" id="btnGalleryBack">← 返回</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- 存档场景（正式功能屏：3 槽卡片，读取 / 覆盖保存 / 删除；后端为既有槽位交换机制） -->
+      <div id="savesView" style="display:none">
+        <section class="card">
+          <h2>存档 <span class="tag">3 个存档槽 · 切换前当前进度自动存回本槽</span></h2>
+          <p class="shop-note">「读取」= 切换到该槽继续游戏；「覆盖保存」= 把当前进度复制存入该槽留备份；「删除」= 清空该槽（不可恢复）。当前槽的进度一直在自动保存。</p>
+        <p class="cf-note" id="saveTestNote" style="display:none">测试档进行中：为保证「恢复主存档」能准确回到开启测试档前的那个槽，测试期间不能切换 / 复制存档槽。请先点顶部「恢复主存档」结束测试档。</p>
+        <div id="saveSlotList"></div>
+          <div class="modal-btns" style="margin-top:14px">
+            <button class="secondary-btn" id="btnSavesBack">← 返回</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- 设置场景（正式功能屏：独立设置 key，即改即生效、刷新保留） -->
+      <div id="settingsView" style="display:none">
+        <section class="card">
+          <h2>设置 <span class="tag">即改即生效 · 与存档分开保存</span></h2>
+          <div class="set-row">
+            <div class="set-txt"><span class="set-name">音乐</span><span class="set-desc">日常 / 战斗两套合成 BGM</span></div>
+            <button class="set-toggle on" id="setMusicOn" role="switch" aria-checked="true">开</button>
+            <input class="set-range" type="range" id="setMusicVol" min="0" max="100" step="1" value="80" />
+            <span class="set-val num" id="setMusicVolVal">80</span>
+          </div>
+          <div class="set-row">
+            <div class="set-txt"><span class="set-name">音效</span><span class="set-desc">出拳、铃声、购买、点击等合成音效（与战斗面板静音键联动）</span></div>
+            <button class="set-toggle on" id="setSfxOn" role="switch" aria-checked="true">开</button>
+            <input class="set-range" type="range" id="setSfxVol" min="0" max="100" step="1" value="90" />
+            <span class="set-val num" id="setSfxVolVal">90</span>
+          </div>
+          <div class="set-row">
+            <div class="set-txt"><span class="set-name">减少动效</span><span class="set-desc">关掉场景过渡、出拳残影等动画效果（手动版 prefers-reduced-motion）</span></div>
+            <button class="set-toggle" id="setReduceMotion" role="switch" aria-checked="false">关</button>
+          </div>
+          <div class="set-about">
+            <p><b>心跳在左，拳头在右 v0.9.0</b> · 二次元美少女拳击养成经营游戏</p>
+            <p>从无名新人打起：训练、打工、买装备、打比赛，从国内第 50 名一路登上世界冠军的擂台。进度自动保存在本浏览器（3 个存档槽），设置单独保存、互不影响。</p>
+          </div>
+          <div class="danger-zone">
+            <h3>危险区</h3>
+            <p>重置当前存档槽：该槽的日期、属性、金钱、战绩会被全部清空，从 Day 1 重新出道；其他存档槽不受影响。需要两次确认，无法撤销。</p>
+            <button class="danger-btn" id="btnSettingsReset">重置当前存档</button>
+          </div>
+          <div class="modal-btns" style="margin-top:14px">
+            <button class="secondary-btn" id="btnSettingsBack">← 返回</button>
+          </div>
+        </section>
+      </div>
 
       <!-- 日常视图 -->
       <div id="dailyView">
@@ -50,12 +217,12 @@
             </section>
           </div>
           <div>
-            <section class="card">
+            <section class="card" id="secActions">
               <h2>今日行动</h2>
               <p class="week-note" id="weekNote"></p>
               <div class="actions">
                 <button class="act-btn" id="btnTrain">
-                  <span class="t">训练 <span class="cost">2 AP</span></span>
+                  <span class="t"><span><img class="btn-ic" src="assets/equipment_pool/gloves/glove_classic2_lightning_purple.webp" alt="" aria-hidden="true" />训练</span> <span class="cost">2 AP</span></span>
                   <span class="d">制定训练计划（5 点自由组合），一次结算</span>
                 </button>
                 <button class="act-btn" id="btnOut">
@@ -70,36 +237,30 @@
                   <span class="t">休息 <span class="cost">1 AP</span></span>
                   <span class="d">体力 +30，伤病 −10，心态 +5</span>
                 </button>
-                <button class="act-btn" id="btnMatch">
-                  <span class="t">报名比赛 <span class="cost">免费 · 0 AP</span></span>
-                  <span class="d" id="matchDesc">每周第 7 天开放</span>
-                </button>
                 <button class="act-btn sleep" id="btnSleep">
                   <span class="t">睡觉 · 结束今天（体力 +40）</span>
                 </button>
               </div>
-              <div class="train-list" id="trainList"></div>
               <div class="train-list" id="outList">
                 <button class="train-opt" data-out="shop"><span class="t">体育用品店</span><span class="d"> 购买拳套/护齿/战靴/护头/战袍/护腕和消耗品（购买后自动存入背包，装备自动换上）</span></button>
                 <button class="train-opt" data-out="hospital"><span class="t">医院治疗</span><span class="d"> 伤病 −30 · 花费 ¥500（外出 2 AP）</span></button>
                 <button class="train-opt" data-out="relax"><span class="t">散心</span><span class="d"> 看电影 / 逛街 / 吃美食：心态 +20，体力 +10，花费 ¥300</span></button>
               </div>
-              <div class="train-list" id="shopList"></div>
               <div class="train-list" id="relaxList">
                 <button class="train-opt" data-relax="看电影"><span class="t">看电影</span><span class="d"> 心态 +20 · 体力 +10 · ¥300</span></button>
                 <button class="train-opt" data-relax="逛街"><span class="t">逛街</span><span class="d"> 心态 +20 · 体力 +10 · ¥300</span></button>
                 <button class="train-opt" data-relax="吃美食"><span class="t">吃美食</span><span class="d"> 心态 +20 · 体力 +10 · ¥300</span></button>
               </div>
             </section>
-            <section class="card">
-              <h2>生涯阶段 <span class="tag">分阶段目标 · 影响力与赞助</span></h2>
+            <section class="card" id="secGoal">
+              <h2>生涯阶段 <span class="tag">分阶段目标 · 影响力与赞助</span><button class="fold-btn" data-fold="secGoal" aria-expanded="true" title="折叠 / 展开本分区">▾</button></h2>
               <div id="careerDaily"></div>
               <div class="modal-btns" style="margin-top:10px">
                 <button class="secondary-btn" id="btnCareerStatus">查看阶段与赞助 →</button>
               </div>
             </section>
-            <section class="card">
-              <h2>动态日志</h2>
+            <section class="card" id="secLog">
+              <h2>动态日志<button class="fold-btn" data-fold="secLog" aria-expanded="true" title="折叠 / 展开本分区">▾</button></h2>
               <div class="logbox" id="dailyLog"></div>
               <p class="record-line" id="recordLine"></p>
             </section>
@@ -112,7 +273,10 @@
         <section class="card">
           <div class="status-top">
             <div>
-              <img class="portrait" id="portraitImg" src="assets/portrait.webp" alt="主角正式立绘：粉发高马尾、粉紫训练服与紫色拳套的少女拳手（v8 漫画风）" />
+              <div class="fighter-card">
+                <img class="portrait" id="portraitImg" src="assets/portrait.webp" alt="主角正式立绘：粉发高马尾、粉紫训练服与紫色拳套的少女拳手（v8 漫画风）" />
+                <div class="file-ribbon">★ 选手档案 ★</div>
+              </div>
               <div class="app-panel" id="appPanel">
                 <div class="app-group"><div class="app-label">发型</div><div class="app-row">
                   <button class="app-btn" data-app-dim="hair" data-app-val="ponytail">高马尾</button>
@@ -195,19 +359,11 @@
               <h2>关系 <span class="tag">好感 · 可选线，不理会也无惩罚</span></h2>
               <div id="stRelations"></div>
             </section>
-            <section class="card">
-              <h2>国内排名榜 <span class="tag">角色池 · 每周按成长重排</span></h2>
-              <div class="rank-board" id="rankBoard"></div>
-            </section>
           </div>
           <div>
             <section class="card">
               <h2>当前装备 <span class="tag">点击打开背包切换</span></h2>
               <div class="gear-slots" id="stGear"></div>
-            </section>
-            <section class="card">
-              <h2>装备图鉴 <span class="tag" id="dexCount"></span></h2>
-              <div id="stDex"></div>
             </section>
             <section class="card">
               <h2>背包</h2>
@@ -221,6 +377,17 @@
             <section class="card">
               <h2>工坊 · 打造拳套 <span class="tag">拆解攒材料 · 手工费 ¥200</span></h2>
               <div id="stCraft"></div>
+            </section>
+            <section class="card">
+              <h2>收藏与记录 <span class="tag">已整合进画廊屏</span></h2>
+              <p class="shop-note">立绘、装备图鉴、设计款式、对手名鉴与剧情回忆都收进了「画廊」屏统一陈列，这里只留入口。</p>
+              <div class="plan-foot" style="flex-wrap:wrap">
+                <button class="secondary-btn" id="btnGoGalleryDex">装备图鉴</button>
+                <button class="secondary-btn" id="btnGoGalleryDesign">设计款式</button>
+                <button class="secondary-btn" id="btnGoGalleryFoes">对手名鉴</button>
+                <button class="secondary-btn" id="btnGoGalleryMem">剧情回忆</button>
+                <button class="secondary-btn" id="btnGoMatchRank">比赛 · 排名榜</button>
+              </div>
             </section>
             <section class="card">
               <h2>赞助 <span class="tag">同时只能签一家 · 每周第 1 天发周薪</span></h2>
@@ -259,6 +426,7 @@
         </div>
 
         <div class="ring" id="ring">
+          <img class="ring-bg" id="ringBg" src="assets/scenes/ring_side.webp" alt="" />
           <div class="canvas-floor"></div>
           <div class="ropes"></div><div class="ropes b2"></div><div class="ropes b3"></div>
           <div class="dist-bar" id="distBar" style="display:none">距离：中</div>
@@ -266,30 +434,17 @@
           <div class="fighter me" id="figMe" style="left:18%">
             <div class="dmg-pop" id="popMe"></div>
             <div class="speedline"></div>
-            <div class="fig">
-              <div class="ponytail"></div><div class="hair"></div><div class="head"></div>
-              <div class="arm back"><span class="glove"></span></div>
-              <div class="torso"></div><div class="shorts"></div>
-              <div class="leg l"></div><div class="leg r"></div>
-              <div class="shoe l"></div><div class="shoe r"></div>
-              <div class="arm front"><span class="glove"></span></div>
-            </div>
+            <div class="fig"><img class="fig-img" id="figMeImg" src="assets/portrait.webp" alt="" /></div>
           </div>
           <div class="fighter foe" id="figFoe" style="left:68%">
             <div class="dmg-pop" id="popFoe"></div>
             <div class="speedline"></div>
-            <div class="fig">
-              <div class="hair"></div><div class="head"></div>
-              <div class="arm back"><span class="glove"></span></div>
-              <div class="torso"></div><div class="shorts"></div>
-              <div class="leg l"></div><div class="leg r"></div>
-              <div class="shoe l"></div><div class="shoe r"></div>
-              <div class="arm front"><span class="glove"></span></div>
-            </div>
+            <div class="fig"><img class="fig-img" id="figFoeImg" alt="" /></div>
           </div>
           <div class="ko-flash" id="koFlash"></div>
           <div class="ko-text" id="koText">K.O.!</div>
           <div class="down-overlay" id="downOverlay"><div class="down-who" id="downWho">击倒！</div><div class="down-count" id="downCount">3</div><div class="down-sub" id="downSub">读秒中…站起来就能继续</div></div>
+          <div class="vs-banner" id="vsBanner" aria-hidden="true"><span class="vsb-name me" id="vsbMe"></span><span class="vsb-vs">VS</span><span class="vsb-name foe" id="vsbFoe"></span></div>
         </div>
 
         <div class="fight-status" id="fightStatus">
@@ -471,6 +626,7 @@
         <h2>选择战斗模式</h2>
         <img class="mode-foe-img" id="modeFoeImg" alt="" />
         <p>本场对手：<b id="modeFoeInfo">—</b><br />重要比赛推荐<b>手动操作</b>，亲自上场把握胜负。</p>
+        <p class="foe-line" id="modeFoeLine"></p>
         <div class="mode-list">
           <button class="mode-opt" data-mode="manual">
             <span class="t">手动操作<span class="rec">推荐</span></span>
@@ -535,6 +691,7 @@
         <h2 id="settleTitle">比赛结束</h2>
         <div class="big-result" id="settleResult">胜利</div>
         <p id="settleDesc" style="text-align:center"></p>
+        <p class="foe-line" id="settleFoeLine"></p>
         <table class="settle-table" id="settleTable"></table>
         <div class="modal-btns">
           <button class="primary-btn" id="btnSettleOk">回到日常</button>
@@ -598,20 +755,6 @@
       </div>
     </div>
 
-    <!-- 存档槽弹窗（Phase 9：3 个存档槽，槽位交换实现，当前槽本体仍是 SAVE_KEY） -->
-    <div class="modal-mask" id="saveModal">
-      <div class="modal">
-        <h2>存档槽</h2>
-        <p>共 3 个存档槽。切换到其他槽时，当前进度会先自动存回本槽，不会丢失；切回本槽即可继续。把当前进度「复制到此槽」可以留一份备份。</p>
-        <p class="cf-note" id="saveTestNote" style="display:none">测试档进行中：为保证「恢复主存档」能准确回到开启测试档前的那个槽，测试期间不能切换 / 复制存档槽。请先点顶部「恢复主存档」结束测试档。</p>
-        <div id="saveSlotList"></div>
-        <div class="modal-btns">
-          <button class="secondary-btn" id="btnCloseSaves">关闭</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 重置确认弹窗 -->
     <div class="modal-mask" id="resetModal">
       <div class="modal">
         <h2>重新开始？</h2>
@@ -619,6 +762,18 @@
         <div class="modal-btns">
           <button class="secondary-btn" id="btnCancelReset">取消</button>
           <button class="primary-btn" id="btnConfirmReset">确认重开</button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- 画廊立绘放大弹窗 -->
+    <div class="modal-mask" id="imgModal">
+      <div class="modal img-modal">
+        <img id="imgModalImg" alt="" />
+        <p class="img-modal-cap" id="imgModalCap"></p>
+        <div class="modal-btns">
+          <button class="primary-btn" id="btnImgClose">关闭</button>
         </div>
       </div>
     </div>
@@ -633,5 +788,13 @@
     <script src="js/ui.js"></script>
     <script src="js/battle.js"></script>
     <script src="js/game.js"></script>
+    <script>
+      // PWA：注册 Service Worker（离线缓存）。不支持/受限环境（file://、预览沙箱等）静默降级，不影响游玩。
+      if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('sw.js').catch(function () { /* 静默降级 */ });
+        });
+      }
+    </script>
   </body>
 </html>
