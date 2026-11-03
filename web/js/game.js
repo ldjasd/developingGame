@@ -171,28 +171,56 @@
       });
       S.rank = newRank;
     }
-    /* 每周成长：按成长类型给全池（含候补）加 rating，再按 rating 重排全榜；
-       玩家名次由「参考 rating」被动决定且每周至多漂移 ±3。基准线 0.70/周与旧公式周数项对齐。
-       Phase 9 数值总调（2026-11-02，见 PHASE9_BALANCE.md）：各成长类型周增量全线 +0.15，
-       修「第 10 周偏易」（池成长跟不上玩家练满速度）；只动 growthDelta，rating 映射
-       （rosterRatingFor / 重排参考线仍 0.70/周）与战斗公式未动。复测（tests/balance-retest.mjs，
-       真实 tick 各 400 场分批平均，两轮独立复测）：第 1 周 50.5%~54.3%／进 R2 70.8%~71.0%、
-       第 10 周 51.3%~51.8%、第 20 周 54.0%~54.8%，模拟 vs 自动差 ≤6 个百分点。 */
+    /* 每周成长：按成长类型给全池（含候补）加 rating，再按 rating 重排全榜。
+       Phase 9 数值总调（2026-11-02，见 PHASE9_BALANCE.md）：各成长类型周增量曾全线 +0.15。
+       修复批次 A（2026-11-03，GAME_AUDIT2 F1「排名跑步机」）：全类型再 −0.30/周——旧池增速
+       （均值 ≈0.9/周）跑赢旧玩家锚（+0.7/周由名次反推），全胜玩家被锁在 45~50 名约 27 周；
+       本批同时把玩家参考 rating 改挂真实战绩（playerRefRating），名次周漂移钳制 ±3 放宽到 ±6。 */
     function growthDelta(growth, week) {
       switch (growth) {
-        case 'steady':   return 0.85 + rnd(-0.15, 0.25);
-        case 'early':    return week <= 8 ? 1.10 + rnd(0, 0.3) : week <= 20 ? 0.90 : 0.65 + rnd(-0.1, 0.1);
-        case 'late':     return week <= 8 ? 0.60 : week <= 20 ? 1.10 : 1.30 + rnd(0, 0.3);
-        case 'volatile': return 0.85 + rnd(-1.1, 1.1);
-        case 'genius':   return 1.10 + rnd(0, 0.35);
-        case 'veteran':  return 0.50 + rnd(-0.15, 0.15);
-        default:         return 0.85;
+        case 'steady':   return 0.55 + rnd(-0.15, 0.25);
+        case 'early':    return week <= 8 ? 0.80 + rnd(0, 0.3) : week <= 20 ? 0.60 : 0.35 + rnd(-0.1, 0.1);
+        case 'late':     return week <= 8 ? 0.30 : week <= 20 ? 0.80 : 1.00 + rnd(0, 0.3);
+        case 'volatile': return 0.55 + rnd(-1.1, 1.1);
+        case 'genius':   return 0.80 + rnd(0, 0.35);
+        case 'veteran':  return 0.20 + rnd(-0.15, 0.15);
+        default:         return 0.55;
       }
     }
+    /* 修复批次 A：玩家参考 rating —— 只由真实战绩与时间决定，不再由旧名次反推：
+       ref = 9.3（新秀基准，与 rosterRatingFor 第 50 名截距一致）
+           + 0.45 ×（周 − 1）        赛季漂移：不打比赛也会被池子甩开的部分由它托底；五成胜率者总净增速 ≈ 0.625/周，略高于邻位成员平均成长（约 0.55~0.60），故缓慢爬升
+           + 0.90 × 胜场 − 0.55 × 负场
+           + 0.10 ×（胜场 − 负场）    净胜场形势项（下限 −3，避免一波连败把 rating 砸穿）
+           + 0.30 × max(0, 最近击败对手 rating − 当周梯底)，封顶 +3.5   含金量：赢强者涨得快（settleNow 维护 S.lastBeaten，覆盖式）
+       含金量项两个口径都踩过坑：① 用「历史最强」是只涨不跌的棘轮；② 参照固定梯底 9.3 会把全池的
+       rating 通胀（第 29 周连中游成员都摸到上限 30）算成玩家含金量——五成胜率探针两种都雪崩登顶。
+       正解：覆盖式「最近击败」× 参照当周梯底（9.3 + 0.55×(周−1)，即池子本周的第 50 名期望 rating），
+       只有真正赢下高于本梯队水位的人才涨含金量，且随玩家回落自然消退。
+       上限 = 池成员上限 + 1（保证登顶可达；池上限第 20 周后随周 +0.3，见 rosterRatingCap）；下限 6 与池一致。
+       目标曲线（audit2_rank 微测 + audit2_career 实跑验证）：全胜约 2~3 名/周净进、13~16 周登顶；
+       五成胜率缓慢爬升不倒退、不登顶。 */
+    var REF_BASE = 9.3, REF_DRIFT = 0.45, REF_WIN = 0.90, REF_LOSS = 0.55, REF_FORM = 0.10, REF_BEAT = 0.30;
+    function playerRefRating(week) {
+      var wins = S.wins || 0, losses = S.losses || 0;
+      var wk0 = Math.max(0, (week || 1) - 1);
+      var beatBase = REF_BASE + 0.55 * wk0; // 当周梯底：池子本周第 50 名的期望 rating
+      var beat = (typeof S.lastBeaten === 'number' && S.lastBeaten > beatBase) ? (S.lastBeaten - beatBase) : 0;
+      var ref = REF_BASE + REF_DRIFT * wk0
+        + REF_WIN * wins - REF_LOSS * losses
+        + Math.max(-3, REF_FORM * (wins - losses))
+        + Math.min(3.5, REF_BEAT * beat);
+      return clamp(Math.round(ref * 100) / 100, 6, rosterRatingCap(week) + 1);
+    }
+    /* 池子 rating 上限：第 20 周前为 30（初始梯最高 24，前 20 周无人摸得到）；之后每周 +0.3 抬升。
+       不抬升的后果（五成探针实测）：约第 35 周起大量成员堆死在 30.0，梯队间距消失，玩家 ref
+       一越过 29.5 就一次性跳过整堆人「悬崖登顶」——生涯不设上限，上限本身也必须随生涯走。 */
+    function rosterRatingCap(week) { return 30 + 0.3 * Math.max(0, (week || 1) - 20); }
     function weeklyRosterGrowth(newWeek) {
       ensureRoster();
       var oldRank = S.rank;
-      S.roster.forEach(function (m) { m.rating = clamp(Math.round((m.rating + growthDelta(m.growth, newWeek)) * 100) / 100, 6, 30); });
+      var capW = rosterRatingCap(newWeek);
+      S.roster.forEach(function (m) { m.rating = clamp(Math.round((m.rating + growthDelta(m.growth, newWeek)) * 100) / 100, 6, capW); });
       // 候补规则：第 3 周胡小桃强制入榜顶替末位；此后候补 rating 高出末位 0.5 以上则互换
       var reserve = null, lastRanked = null;
       S.roster.forEach(function (m) {
@@ -207,40 +235,71 @@
           var lr = lastRanked.rank; lastRanked.rank = 0; reserve.rank = lr;
         }
       }
-      // 重排：玩家参考 rating = 9.3 + (50 − 旧名次) × 0.3 + 0.7 × (周 − 1)（截距与 rating 映射一致）；池内成员按 rating 降序填其余名次
-      var ref = 9.3 + (50 - oldRank) * 0.3 + 0.7 * (newWeek - 1);
+      // 重排：玩家参考 rating 改挂真实战绩（playerRefRating）；池内成员按 rating 降序填其余名次。
+      // 修复批次 A：周漂移钳制 ±3 → ±6——旧钳制会把比赛赢来的名次在重排时系统性收回，是跑步机的一半成因。
+      var ref = playerRefRating(newWeek);
       var above = 0;
       S.roster.forEach(function (m) { if (m.rating > ref) above++; });
-      var newRank = clamp(clamp(1 + above, Math.max(1, oldRank - 3), Math.min(50, oldRank + 3)), 1, 50);
+      var newRank = clamp(clamp(1 + above, Math.max(1, oldRank - 6), Math.min(50, oldRank + 6)), 1, 50);
       var ranked = S.roster.filter(function (m) { return m.rank > 0; }).sort(function (a, b) { return b.rating - a.rating; });
       var ri = 1;
       ranked.forEach(function (m) { if (ri === newRank) ri++; m.rank = ri; ri++; });
       S.rank = newRank;
-      if (newRank !== oldRank) dailyLog('第 ' + newWeek + ' 周排名重排：池内选手一周成长后，你的国内排名变为第 ' + newRank + ' 名（原第 ' + oldRank + ' 名）。', newRank < oldRank ? 'good' : 'bad');
+      if (newRank !== oldRank) dailyLog('本周排名重排：第 ' + oldRank + ' 名 → 第 ' + newRank + ' 名（池内选手一周成长后重排）。', newRank < oldRank ? 'good' : 'bad');
     }
     /* Phase 4：反击方向 → 加成拳种（后闪→直拳 / 下闪→上勾 / 侧闪→摆拳） */
     var COUNTER_PREF = { back: 'straight', down: 'upper', side: 'hook' };
     var COUNTER_PREF_TXT = { back: '后闪→直拳', down: '下闪→上勾拳', side: '侧闪→摆拳' };
     function comboBonusPct(combo) { if (combo <= 1) return 0; if (combo === 2) return 5; if (combo === 3) return 15; return 25; } // 2连+5%、3连+15%、4连及以上+25%封顶
     /* Phase 4 修订：KO 重创槽 —— 有效命中积累（格挡只积一半），满 100 直接 KO。
-       阈值口径（用户拍板，勿动）：单次 KO ≥当前 HP 30%、击倒带 25%~30%。
+       【KO 体系定型（2026-11-03，KO_AUDIT.md）：用户亲口推翻旧「单发百分比」规则——
+       单次 KO（≥当前 HP 30%）与 25%~30% 击倒带已删除（专项实测：单发 KO 占中后期终局 94%+、
+       HP 打空路径实际 0%，败者普遍剩几十点 HP 被百分比规则半途带走，即玩家感知的「突然就 KO」）。
+       现行终结只有四条：重创满 100 KO / HP 归零 KO / 单回合 3 次击倒 TKO / 点数判定；
+       击倒改由重创刻度触发（跨 25/50/75，见 battle.js dealDamage 的刻度击倒接线）。】
        积累曲线（2026-11-03 重构，tests/trauma-ab.mjs 同种子 A/B 定型，记录见 tests/TRAUMA_CURVE.md）：
        旧曲线是拳种固定值（刺6/直12/上勾18/摆18/击腹12），与伤害脱钩——核查实测（第 1 周 n=596）
        43% 的命中是「≤3 点伤害却 +≥10 重创」，且重创 KO 100% 挤在第 1 回合（衰减使中后盘攒不满）。
-       新曲线：单次积累 = TRAUMA_K ×（本次净伤害 ÷ 防守方当前 HP）× 拳种权重，小数内部累积（显示取整）；
-       防守方血越低、同等伤害积得越多，重创 KO 因此摊到全场。定版前后全样本核查对照
-       （trauma-audit，旧曲线 n=596 → 新曲线 n=600）：重创 KO 占全部终局 6.7%→9.6%、
+       现曲线：单次积累 = TRAUMA_K ×（本次净伤害 ÷ 分母）× 拳种权重，小数内部累积（显示取整）；
+       分母 = max(当前 HP, TRAUMA_HP_FLOOR × 最大 HP)（KO 定型·分母下限：HP 高于 40% 时与旧曲线
+       逐点一致，低于 40% 后积累不再加速，堵住「越残攒得越快」的第二条塌陷通道）。
+       定版前后全样本核查对照（trauma-audit，旧曲线 n=596 → 新曲线 n=600）：重创 KO 占全部终局 6.7%→9.6%、
        回合分布 R1/R2/R3 由 40/0/0 变为 21/19/17、输家 HP% 反占优 20%→7%、胜率 65.3%→66.3%（带内）。
-       备选「按最大 HP 折算」已淘汰（第 1 周伤害占比仅 0.5~2.5%，K 拉满也攒不满，见 TRAUMA_CURVE.md）。 */
+       备选「按最大 HP 全程折算」已淘汰（第 1 周伤害占比仅 0.5~2.5%，K 拉满也攒不满，见 TRAUMA_CURVE.md）。 */
     var PUNCH_KO = { jab: 6, straight: 12, upper: 18, hook: 18, body: 12 }; // 新曲线中只作拳种权重（以直拳 12 归一为 1.0）
     var KO_DECAY = 6; // 重创槽每秒衰减（A/B 验过 4/秒会让重创 KO 占比暴涨到 26.7%，保持 6）
     var TRAUMA_K = 70; // 重创曲线标定系数：伤害占当前 HP 比例 × 70 × 拳种权重
+    var TRAUMA_HP_FLOOR = 0.40; // KO 定型（KO_AUDIT.md）：重创分母下限（占防守方最大 HP 的比例）——分母取 max(当前 HP, 40%×最大 HP)，残血后积累不再加速
     function traumaGain(key, dmg, def, hpBefore, halved) {
       var w = (PUNCH_KO[key] || 10) / 12;
-      var gain = TRAUMA_K * (dmg / Math.max(1, hpBefore)) * w;
+      var denom = Math.max(1, hpBefore, def && def.hpMax ? def.hpMax * TRAUMA_HP_FLOOR : 0);
+      var gain = TRAUMA_K * (dmg / denom) * w;
       if (halved) gain /= 2; // 被格挡（未穿透）只积一半，口径不变
+      if (def && def.traumaTakenMul) gain *= def.traumaTakenMul; // 修复批次 A：陪练等特殊对手的重创积累减免（如练习赛 0.45）
       return Math.max(0, gain);
     }
+    /* 修复批次 A（GAME_AUDIT2 F2「属性通胀」）：训练收益边际递减 + 属性软上限。
+       旧版训练线性无上限：生涯模拟 6 周属性和 632、20 周力量 652，对手 rating 封顶约 30，
+       第 2 周起比赛退化为 R1 一拳 KO。本批：每次训练的属性增量按「该属性当前值」分段打折——
+       <30 全额 / 30~59 半额 / 60~79 四分之一 / 80+ 八分之一，且基础属性硬顶 100（软上限带：
+       60 后收益已降到 1/4 以下，实际可达区间约 80~100）。第 1 周属性都在 30 以下，早期数值一字未动。
+       结算演出/预览试算都走 applyTrainingApply，保证「预览 = 实结」；心态效率修正仍在 doPlanTrain 后段按总增量另行应用。 */
+    var ATTR_HARD_CAP = 100;
+    function trainGainFactor(v) { return v < 30 ? 1 : v < 60 ? 0.5 : v < 80 ? 0.25 : 0.125; }
+    function applyTrainingApply(s, t) {
+      var before = {};
+      ATTRS.forEach(function (a) { before[a.key] = s.attrs[a.key]; });
+      var msg = t.apply(s);
+      ATTRS.forEach(function (a) {
+        var k = a.key, d = s.attrs[k] - before[k];
+        if (d > 0) s.attrs[k] = Math.min(ATTR_HARD_CAP, Math.round((before[k] + d * trainGainFactor(before[k])) * 10) / 10);
+        else if (d < 0) s.attrs[k] = Math.max(0, s.attrs[k]); // 现有训练 apply 只增不减，此为兜底
+      });
+      return msg;
+    }
+    /* 修复批次 A（m5）：体力透支伤病陡峭化——旧口径每透支 10 点 +5 伤病，重训练硬练几乎无代价，
+       轻训练（养打结合）没有生态位。新口径：透支部分按 0.8/点折算伤病（透支 10 ≈ +8、25 ≈ +20）。 */
+    function overdraftInjury(over) { return over > 0 ? Math.round(over * 0.8) : 0; }
     var BREAK_TACTICS = { attack: { name: '强攻' }, balanced: { name: '均衡' }, guard: { name: '稳守' } };
     function freshRoundStats() { return { meHits: 0, foeHits: 0, meDmg: 0, foeDmg: 0, meMaxCombo: 0, foeMaxCombo: 0 }; }
     function decayTrauma(dt) { if (!B) return; B.meTrauma = Math.max(0, (B.meTrauma || 0) - KO_DECAY * dt); B.foeTrauma = Math.max(0, (B.foeTrauma || 0) - KO_DECAY * dt); }
@@ -262,7 +321,7 @@
         day: 1, ap: 6, money: 100, stamina: 100, injury: 0, fame: 0, rank: 50,
         roster: buildRoster(50, 1), // 角色池：新档按名册顺序建池（玩家第 50 名，胡小桃候补）
         influence: 1, stage: 1, completedStages: [], winStreak: 0, champWinBase: null, titles: [], sponsor: null,
-        wins: 0, losses: 0, koWins: 0, achievements: {}, facedFoes: [], lastMatchDay: 0, deathFight: false, testMode: false,
+        wins: 0, losses: 0, koWins: 0, lastBeaten: 0, achievements: {}, facedFoes: [], lastMatchDay: 0, deathFight: false, testMode: false,
         name: '小拳', mind: 60, scoutedForDay: 0,
         gear: { gloves: null, guard: null, boots: null, head: null, robe: null, wrist: null },
         owned: [], enh: {},
@@ -636,6 +695,9 @@
         if (typeof S.stage !== 'number' || isNaN(S.stage)) S.stage = Math.min(7, S.completedStages.length + 1);
         S.stage = clamp(Math.round(S.stage), 1, 7);
         if (typeof S.winStreak !== 'number' || isNaN(S.winStreak) || S.winStreak < 0) S.winStreak = 0;
+        // 修复批次 A 兼容：lastBeaten（最近击败对手的 rating）缺失/为 0 时按当前名次窗口上沿的初始 rating 近似补齐
+        // （注意：defaultState 合并会先给出 lastBeaten: 0，必须把「有胜场却为 0」也当缺失处理）
+        if (!(typeof S.lastBeaten === 'number' && S.lastBeaten > 0)) S.lastBeaten = (typeof S.bestBeaten === 'number' && S.bestBeaten > 0) ? S.bestBeaten : ((S.wins > 0) ? rosterRatingFor(clamp(S.rank + 3, 1, 50), weekOf(S.day)) : 0);
         if (S.champWinBase !== null && typeof S.champWinBase !== 'number') S.champWinBase = null;
         if (S.sponsor && !sponsorById(S.sponsor)) S.sponsor = null;
         if (typeof S.deathFight !== 'boolean') S.deathFight = false; // TKO 死战设置：老存档默认关
@@ -1170,13 +1232,8 @@
         toast('下回合战术：' + BREAK_TACTICS[B.nextRoundMod].name);
       });
     });
-    /* 第一批整改·调试入口下架：TKO死战开关按钮已从出货界面移除（S.deathFight 字段与判定逻辑保留，默认关）。 */
-    var deathToggleEl = $('btnDeathToggle');
-    if (deathToggleEl) deathToggleEl.addEventListener('click', function () {
-      S.deathFight = !S.deathFight;
-      save(); render();
-      toast(S.deathFight ? 'TKO死战：开——第3次击倒时自动死战到底（伤害+10%，再倒判负，赛后伤病+10）' : 'TKO死战：关——第3次击倒时直接判负');
-    });
+    /* KO 定型清理（2026-11-03）：TKO 死战开关按钮早已从出货界面移除、index.html 无 btnDeathToggle 元素，
+       此处的切换 handler 已成孤儿（永不绑定），删除；S.deathFight 字段与 decideTKO 判定逻辑保留（默认关，KO_AUDIT 定型口径）。 */
     $('btnSettleOk').addEventListener('click', function () {
       $('settleModal').classList.remove('open');
       $('figMe').classList.remove('down'); $('figFoe').classList.remove('down');

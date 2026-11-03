@@ -20,6 +20,30 @@
       if (w <= 2) base -= 2; // P0-3：新手缓冲——前两周对手整体稍弱
       function v(spread) { return Math.max(4, Math.round(base + rnd(-spread, spread) + rnd(0, Math.min(5, w)))); }
       var attrs = { power: v(3), endurance: v(3), will: v(3), speed: v(3), accuracy: v(3), footwork: v(3), defense: v(3), technique: v(3) };
+      /* 修复批次 A（GAME_AUDIT2 F2）：对手属性与玩家实际强度部分挂钩——只上抬、不下压：
+         rating 基数仍决定下限（弱玩家面对的窗口对手不变），但玩家变强后窗口对手同步变强，
+         保证任何周数都存在五五开到七三开的对手。进攻系（力量/速度/精准/技术/意志/步伐）向玩家
+         综合强度（battleBaseAttrs 八维均值，含装备与伤病）看齐；耐久系（耐久/防守）向玩家的
+         伤害来源看齐（0.6×玩家力量 + 0.4×综合），避免高力量构筑把对手 HP 打成纸。死区 3 点、
+         追赶系数 0.55、单项上抬封顶 +34。 */
+      var pea = battleBaseAttrs();
+      var pAvg = ATTRS.reduce(function (sum, a) { return sum + pea[a.key]; }, 0) / ATTRS.length;
+      var durTgt = pea.power * 0.6 + pAvg * 0.4;
+      var powTgt = pea.defense * 0.6 + pAvg * 0.4; // 对手力量挂玩家防守侧（与耐久侧对称）：否则均衡成长的玩家会被自己抬高的 pAvg 反噬成互秒
+      ATTRS.forEach(function (a) {
+        var tgt = (a.key === 'endurance' || a.key === 'defense') ? durTgt : (a.key === 'power' ? powTgt : pAvg);
+        var cur = attrs[a.key];
+        if (cur < tgt - 3) attrs[a.key] = Math.round(cur + Math.min(34, (tgt - 3 - cur) * 0.55));
+      });
+      /* 修复批次 A 追加硬指标（用户亲玩指出）：第 1~3 周正式赛反秒杀下限保护。通用挂钩对新手太温和
+         （目标线 D7 实测对手耐久仅 9~11、HP 约 240，平均 1.39 回合、61% 是 R1 单发 KO 收尾），故早期
+         另设与玩家力量挂钩的耐久/防守地板：耐久 ≥ 1.0×玩家力量 + 6、防守 ≥ 0.6×玩家力量 + 5。
+         只抬耐久系、不动对手进攻——胜负关系不变，只把过程拉回 R2~R3；非力量构筑力量低、地板随之低，
+         其比赛本来就长，不受影响。第 4 周起地板退出、回到通用挂钩曲线。 */
+      if (w <= 3) {
+        attrs.endurance = Math.max(attrs.endurance, Math.round(pea.power * 1.0 + 6));
+        attrs.defense = Math.max(attrs.defense, Math.round(pea.power * 0.6 + 5));
+      }
       var prof = {}; PUNCH_KEYS.forEach(function (k) { prof[k] = Math.max(0, Math.min(5, Math.floor(w / 3) + Math.floor(rnd(-1, 2)))); }); // P0-2 联调：熟练度成长由 w/2 放缓到 w/3，避免高周对手伤害乘数失控
       // 风格取角色固有风格；排名越高（名次数字越小）风格越鲜明（intensity 0.55~1.3，与旧版同公式）
       var intensity = clamp(0.55 + (50 - rank) / 50 * 0.6 + w * 0.03, 0.55, 1.3);
@@ -47,6 +71,7 @@
     function calcBlockChance(def) { // 对手抱架格挡概率：基数 0.16 + 稳守反击战术 0.08 + 防守反击型风格加成
       var ch = 0.16 + (def.tactic === 'counter' ? 0.08 : 0);
       if (def.style === 'guardcounter') ch += styleVal(def, 'blockAdd', 0);
+      if (def.practice) ch += 0.15; // 修复批次 A：陪练以守带攻、多格挡——让新手完整试一遍出拳/破防/距离
       return clamp(ch, 0.05, 0.45);
     }
     // 风格参数按鲜明度插值：intensity=0 时无风格，=1 时全额
@@ -98,7 +123,7 @@
       var member = null;
       S.roster.forEach(function (m) { if (m.key === 'opp_rookie') member = m; });
       if (!member) member = S.roster.filter(function (m) { return m.rank > 0; })[0]; // 兜底：名册异常时取任意在榜成员的壳
-      var attrs = { power: 7, endurance: 8, will: 7, speed: 7, accuracy: 7, footwork: 7, defense: 6, technique: 6 }; // 陪练放水：全面低于新人初始 10，赢面大但不是木桩
+      var attrs = { power: 7, endurance: 16, will: 10, speed: 7, accuracy: 7, footwork: 8, defense: 10, technique: 6 }; // 陪练放水：进攻全面低于新人初始 10，但耐久/防守/意志上调——她是来「喂招」的，能扛、能陪打满程（修复批次 A：旧版耐久 8 被 R1 重创 KO，教学战教不到东西）
       var prof = {}; PUNCH_KEYS.forEach(function (k) { prof[k] = 0; });
       return {
         name: member.name, key: member.key,
@@ -109,7 +134,7 @@
         hpMax: 100 + attrs.endurance * 14, hp: 100 + attrs.endurance * 14,
         stam: 100, hits: 0, dmg: 0, used: {}, tactic: 'attack', speechBuff: false,
         style: member.style, styleIntensity: 0.55,
-        practice: true
+        practice: true, traumaTakenMul: 0.45 // 修复批次 A：陪练重创积累只吃 45%——教学战要打到 R2~R3 自然分胜负，不被重创槽 R1 抬走
       };
     }
     function openPracticeIntro() {
@@ -207,7 +232,8 @@
         meCounterUntil: -1, meCounterDir: '', foeCounterUntil: -1, foeCounterDir: '',
         meBrokenUntil: -1, foeBrokenUntil: -1,
         meDownsRound: 0, foeDownsRound: 0,
-        meTrauma: 0, foeTrauma: 0, pendingKO: null, koKind: '',
+        meTrauma: 0, foeTrauma: 0, koKind: '',
+        meDownMarks: {}, foeDownMarks: {}, // KO 定型：本回合已兑现的重创刻度（25/50/75），跨回合在 endBreak 重置，防衰减回落再跨越刷同一刻度
         meDeathFight: false, foeDeathFight: false,
         roundStats: freshRoundStats(), meRoundMod: 'balanced', nextRoundMod: 'balanced',
         meBodyHits: 0, foeBodyHits: 0,
@@ -228,6 +254,7 @@
       B.mindStamMul = S.mind < 20 ? 1.1 : 1;
       if (B.mindTense) ATTRS.forEach(function (a) { B.me.attrs[a.key] = Math.round(B.me.attrs[a.key] * 0.95 * 10) / 10; });
       B.foe.tactic = ['attack', 'counter', 'points'][Math.floor(Math.random() * 3)];
+      if (B.practice) B.foe.tactic = 'counter'; // 修复批次 A：陪练固定稳守反击（多格挡、少出拳），且回合间不重掷（见 endBreak）
       showScene('battle'); // 界面架构批：统一场景管理器切战斗屏（背景 ring_wide 由映射处理；顺带收起可能开着的状态/比赛屏）
       // A2 第二步：我方战斗内改用姿势帧（抱架图起手，动作中按事件切换姿势）；对手取角色池立绘
       preloadPoses();
@@ -255,6 +282,7 @@
       // 重置上一场的特效状态
       $('ring').classList.remove('slowmo', 'frozen', 'shake-sm', 'shake-lg');
       $('figMe').classList.remove('down'); $('figFoe').classList.remove('down');
+      _meRigDown = false; if (_meRig) _meRig.toStance('guard'); // 纸偶复位（新一场从抱架起手）
       $('figMe').style.transform = ''; $('figFoe').style.transform = '';
       $('figMe').style.left = B.man.mX + '%'; $('figFoe').style.left = B.man.fX + '%';
       $('figMe').querySelector('.fig').style.top = '0px'; $('figFoe').querySelector('.fig').style.top = '0px';
@@ -263,7 +291,7 @@
       var foeStyleTxt = B.foe.style ? FOE_STYLES[B.foe.style].name : '';
       if (mode === 'manual') {
         blog('比赛开始！第 1 回合。对手「' + B.foe.name + '」是' + foeStyleTxt + '（战术：' + TACTICS[B.foe.tactic].name + '）。', 'dim');
-        blog('连贯命中攒连击加伤害；闪避后 1 秒内出拳是反击；对手格挡时击腹可破防，破防接直拳。KO 看重创槽：有效命中按「伤害占对手当前 HP 的比例」积累（打得越重、对方血越低，积得越多；上勾/摆拳权重最高，被格挡只积一半，每秒衰减' + KO_DECAY + '），满100直接KO；单次伤害≥当前HP 30%也直接KO；单次25%~30%击倒读秒，本回合3次击倒触发TKO判定（' + (S.deathFight ? '死战：自动死战到底' : '直接判负') + '）。', 'dim');
+        blog('连贯命中攒连击加伤害；闪避后 1 秒内出拳是反击；对手格挡时击腹可破防，破防接直拳。KO 看重创槽：有效命中按伤害积累重创（按对方当前 HP 折算，血量低于 40% 后不再加速；上勾/摆拳权重最高，被格挡只积一半，每秒衰减' + KO_DECAY + '），重创跨过 25/50/75 会把人打倒读秒（同一回合每个刻度只倒一次）、满 100 直接 KO；把对方 HP 打空也是 KO；本回合 3 次击倒触发 TKO 判定（' + (S.deathFight ? '死战：自动死战到底' : '直接判负') + '）。', 'dim');
         blog(isTouch
           ? '手动操作：左手摇杆移动，右手大按钮出前手/后手拳，金边按钮可直接出摆拳/上勾/击腹；格挡按住生效（出现护盾弧），闪避/垫步点按触发。'
           : '手动操作：A/D 移动贴近对手，J/K 出拳，U 直接上勾、B 直接击腹，空格格挡，Shift+方向闪避。按 H 看键位。', 'dim');
@@ -340,11 +368,48 @@
       if (_posePreloaded) return; _posePreloaded = true;
       Object.keys(POSES).forEach(function (k) { var im = new Image(); im.src = POSE_DIR + POSES[k]; });
     }
+    /* ================= 骨骼纸偶驱动（主角试点，js/rig.js） =================
+       ME_RIG=true：主角改由纸偶渲染（figMeImg 仍照常切 src 作回退层＋冒烟锚点，CSS 将其隐藏）。
+       回退：把 ME_RIG 改为 false 即恢复姿势帧渲染（纸偶容器不建、img 恢复显示）。 */
+    var ME_RIG = true;
+    var _meRig = null, _meRigDown = false;
+    function rigTimeScale() { // 顿帧/慢动作与舞台特效同源：frozen=冻结、slowmo=0.35 倍速
+      var ring = $('ring'); if (!ring) return 1;
+      if (ring.classList.contains('frozen')) return 0;
+      if (ring.classList.contains('slowmo')) return 0.35;
+      return 1;
+    }
+    function ensureMeRig() {
+      if (!ME_RIG || typeof RigEngine === 'undefined') return null;
+      if (_meRig) return _meRig;
+      var host = $('meRig'); if (!host) return null;
+      _meRig = RigEngine.createRig(host, { char: 'me', reducedMotion: (typeof SETTINGS !== 'undefined' && !!SETTINGS.reduceMotion), timeScale: rigTimeScale });
+      if (_meRig) { var fm = $('figMe'); if (fm) fm.classList.add('rig-on'); }
+      return _meRig;
+    }
+    function driveMeRig(name, holdMs) {
+      var rig = ensureMeRig(); if (!rig) return;
+      if (name === 'guard') {
+        if (_meRigDown) { _meRigDown = false; rig.play('getup'); }
+        else rig.toStance('guard');
+      } else if (name === 'block') {
+        if (holdMs > 0) rig.play('blockHit'); else rig.toStance('block');
+      } else if (name === 'hit') {
+        var fm = $('figMe');
+        if (fm && fm.classList.contains('down')) { _meRigDown = true; rig.play('down'); }
+        else rig.play('hit');
+      } else if (name === 'victory') {
+        rig.play('victory');
+      } else {
+        rig.play(name); // jab/straight/hook/upper/body/dodge 与纸偶动作同名
+      }
+    }
     function setMePose(name, holdMs) {
       var img = $('figMeImg'); if (!img) return;
       var src = POSE_DIR + (POSES[name] || POSES.guard);
       if (img.getAttribute('src') !== src) img.src = src;
       img.style.objectPosition = POSE_FOCUS[name] || 'center top';
+      driveMeRig(name, holdMs);
       if (!B) return;
       if (B._poseTimer) { clearTimeout(B._poseTimer); B._poseTimer = null; }
       if (holdMs > 0) {
@@ -357,6 +422,21 @@
     // B2：出拳残影——克隆出拳方当前姿势图生成 1~2 帧半透明残影，滞后于本体朝出拳反方向错开，动画结束自回收
     function spawnAfterimage(figEl) {
       var ring = $('ring'); if (!ring || !figEl) return;
+      if (ME_RIG && figEl.id === 'figMe') {
+        // 纸偶残影：克隆纸偶当前帧 DOM 快照作残影（姿势图在纸偶模式下隐藏，克隆它会与纸偶不一致）
+        var host = $('meRig'); var rr = host ? host.querySelector('.rig-root') : null;
+        if (rr) {
+          var g2 = rr.cloneNode(true);
+          g2.classList.add('fig-ghost');
+          g2.style.left = figEl.offsetLeft + 'px';
+          g2.style.top = figEl.offsetTop + 'px';
+          g2.style.width = figEl.offsetWidth + 'px';
+          g2.style.height = figEl.offsetHeight + 'px';
+          ring.appendChild(g2);
+          setTimeout(function () { g2.remove(); }, 190);
+          return;
+        }
+      }
       var img = figEl.querySelector('.fig-img');
       if (!img || !img.getAttribute('src')) return;
       var g = document.createElement('img');
@@ -479,11 +559,13 @@
       else { B.foeCounterUntil = B.time + 1; B.foeCounterDir = c; }
     }
     function resetCombo(isMeAttacker) { if (!B) return; if (isMeAttacker) B.comboMe = 0; else B.comboFoe = 0; }
-    function startKnockdown(defIsMe, dmg, hpBefore) {
+    /* KO 定型（2026-11-03，KO_AUDIT.md）：本函数只剩「执行击倒」一层（读秒状态机/计数/TKO 标记与旧版逐行一致）；
+       旧的 HP% 击倒带判定（当前 HP 25%~30%）已随单发百分比体系删除——是否击倒由 dealDamage 的
+       重创刻度接线决定（跨 25/50/75 刻度时调用本函数），本函数不再做任何百分比判定。 */
+    function startKnockdown(defIsMe) {
       if (!B || B.phase !== 'fight') return false;
       var def = defIsMe ? B.me : B.foe;
       if (def.hp <= 0) return false;
-      if (!(dmg >= 10 && dmg >= hpBefore * 0.25 && dmg < hpBefore * 0.30)) return false; // 击倒带：当前HP 25%~30%（用户拍板，与单次 KO 阈值 30% 衔接）
       var inDeath = defIsMe ? B.meDeathFight : B.foeDeathFight;
       if (inDeath) { def.hp = 0; B.koKind = 'deathfight-down'; B.tkoReason = '死战中再次被击倒，直接判负'; blog('第' + B.round + '回合：' + (defIsMe ? '你在死战中再次被击倒——直接判负！' : '对手在死战中再次被击倒——直接判负！'), defIsMe ? 'bad' : 'good'); return true; }
       if (defIsMe) { B.meDownsRound += 1; B.meDowns = (B.meDowns || 0) + 1; }
@@ -503,7 +585,7 @@
       $('downOverlay').classList.add('go');
       SFX.heavy(); shakeRing(true);
       B._countShown = 3; SFX.countTick(3); // Phase 9：读秒开始即第一记计数音，后续每秒一记在 tickDown
-      blog('第' + B.round + '回合：' + (defIsMe ? '你被重击击倒了！' : '对手被击倒了！') + '裁判开始读秒（本回合第 ' + downs + ' 次击倒' + (B.downIsTKO ? '，已达 3 次，读秒后 TKO 判定' : '') + '）。', defIsMe ? 'bad' : 'good');
+      blog('第' + B.round + '回合：' + (defIsMe ? '你的重创值冲破刻度，被击倒了！' : '对手重创值冲破刻度，被击倒了！') + '裁判开始读秒（本回合第 ' + downs + ' 次击倒' + (B.downIsTKO ? '，已达 3 次，读秒后 TKO 判定' : '') + '）。', defIsMe ? 'bad' : 'good');
       renderBattle();
       return true;
     }
@@ -594,6 +676,7 @@
       var freq = 0.24 + att.attrs.speed * 0.012; // P0 联调：自动模式基础出拳频率 0.30→0.24，拉长回合内交锋节奏
       if (!isMeAttacking) freq *= 1.15 * styleVal(att, 'freqMul', 1); // 对手风格：速度型出拳快 / 力量型略慢
       if (att.tactic === 'counter') freq *= 0.6;
+      if (att.practice) freq *= (B.round === 1 ? 0.45 : 0.65); // 修复批次 A：陪练少进攻（R1 尤其收着），把回合让给新手练手
       if (!isMeAttacking && att.style === 'guardcounter') freq *= 1.25; // 防守反击型平时收着，抓反击时不降频
       if (att.stam < 30) freq *= 0.7;
       if (Math.random() > freq) { att.stam = Math.min(100, att.stam + 0.92); return; }
@@ -672,7 +755,7 @@
       if (B.meRoundMod === 'attack') mult *= isMeAttacking ? 1.1 : 1.1;
       else if (B.meRoundMod === 'guard') mult *= isMeAttacking ? 0.9 : 0.9;
       var raw = att.attrs.power * p.coef * (1 + lv * 0.05) * rnd(0.9, 1.1) * mult; // P0 联调：熟练度伤害系数每级 +10%→+5%，抑制高周乘法膨胀
-      var dmg = Math.max(1, Math.round(raw - def.attrs.defense * 1.0)); // P0 联调：防守减伤权重 0.5→1.0
+      var dmg = Math.max(1, Math.round(raw - Math.min(def.attrs.defense * 1.0, raw * 0.7))); // P0 联调：防守减伤权重 0.5→1.0；KO 定型 F2（KO_AUDIT.md）：减伤封顶 raw 的 70%，净伤害至少保留 raw 的 30% 再走其余修正——拆掉「力量低的拳 raw 低于对手防守、每拳恒打 1 点」的地板（实测恒 1 点命中 32%→约 3.5%）
       var weakHit = false;
       if (isMeAttacking && B.foe.weakness && B.foe.weakness === key) { dmg = Math.max(1, Math.round(dmg * 1.3)); weakHit = true; } // 录像研究侦察的弱点
       if (def.dmgTakenMul) dmg = Math.max(1, Math.round(dmg * def.dmgTakenMul)); // 护齿减伤
@@ -728,15 +811,18 @@
       if (!B.roundStats) B.roundStats = freshRoundStats();
       if (isMeAttacking) { B.roundStats.meHits += 1; B.roundStats.meDmg += dmg; if (comboNow > B.roundStats.meMaxCombo) B.roundStats.meMaxCombo = comboNow; if (key === 'body') B.meBodyHits = (B.meBodyHits || 0) + 1; }
       else { B.roundStats.foeHits += 1; B.roundStats.foeDmg += dmg; if (comboNow > B.roundStats.foeMaxCombo) B.roundStats.foeMaxCombo = comboNow; if (key === 'body') B.foeBodyHits = (B.foeBodyHits || 0) + 1; }
-      // KO 重创槽：有效命中积累，格挡命中只积一半，穿透格挡算全额（积累量由 traumaGain 按曲线计算）
+      // KO 重创槽：有效命中积累，格挡命中只积一半，穿透格挡算全额（积累量由 traumaGain 按曲线计算，分母带 40% 最大 HP 下限）
+      var traumaBefore = isMeAttacking ? (B.foeTrauma || 0) : (B.meTrauma || 0); // KO 定型：刻度跨越判定需要命中前的重创值
       var koAdd = traumaGain(key, dmg, def, hpBefore, guarding && !pierce);
       if (window.__hitLog) window.__hitLog.push([dmg, koAdd, key, (guarding && !pierce) ? 1 : 0]); // 测试埋点（trauma-ab 用，平时不存在该数组、零开销）
       var traumaAfter = 0;
       if (isMeAttacking) { B.foeTrauma = clamp((B.foeTrauma || 0) + koAdd, 0, 100); traumaAfter = B.foeTrauma; }
       else { B.meTrauma = clamp((B.meTrauma || 0) + koAdd, 0, 100); traumaAfter = B.meTrauma; }
+      /* KO 定型（2026-11-03，KO_AUDIT.md）：终结只剩两条在此判定——重创满 100 KO / HP 归零 KO
+         （另两条：单回合 3 次击倒 TKO 在读秒状态机、点数在 finishBattle）。旧「单发 ≥ 当前 HP 30% 直接 KO」
+         已按用户裁定删除：单拳再重也只做扣 HP、积重创、（跨刻度时）击倒三件事。 */
       var koTriggered = '';
       if (traumaAfter >= 100) { koTriggered = 'trauma'; def.hp = 0; B.koKind = 'trauma'; }
-      else if (dmg >= 10 && hpBefore > 0 && dmg >= hpBefore * 0.30) { koTriggered = 'single'; def.hp = 0; B.koKind = 'single'; } // 单次 KO 阈值：当前HP 30%（用户拍板；第二轮回炉曾越权抬高，已恢复）
       else if (def.hp <= 0) { koTriggered = 'hp'; B.koKind = 'hp'; }
       if (key === 'body') def.stam = Math.max(0, def.stam - dmg * 0.6); // 击腹双倍削体力（含基础命中削减）
       def.stam = Math.max(0, def.stam - 1);
@@ -775,9 +861,22 @@
         (pierce ? '（击腹穿透格挡 70%！' + (isMeAttacking ? '对手' : '你') + '破防 1.5 秒，格挡失效）' : guarding ? '（被格挡，大幅减伤，连击被打断）' : '') +
         (straightVsBroken ? '（破防中直拳 +20%！）' : '') + '。',
         isMeAttacking ? 'good' : 'bad');
-      if (koTriggered || traumaAfter >= 60) blog('重创值：' + (isMeAttacking ? '对手 ' + Math.round(traumaAfter) : '你 ' + Math.round(traumaAfter)) + ' / 100（+' + Math.round(koAdd) + (guarding && !pierce ? '，格挡只积一半' : '') + '）' + (koTriggered === 'trauma' ? '——重创槽满格，直接 KO！' : koTriggered === 'single' ? '——单次伤害达到当前 HP 的 30%，重击 KO！' : koTriggered === 'hp' ? '——HP 归零，KO！' : '，逼近 KO！'), koTriggered ? (isMeAttacking ? 'good' : 'bad') : 'dim');
-      // 击倒判定：未触发 KO 时，单次 25%~30% 进读秒（≥30% 已在上方直接 KO）
-      if (!koTriggered) startKnockdown(!isMeAttacking, dmg, hpBefore);
+      if (koTriggered || traumaAfter >= 60) blog('重创值：' + (isMeAttacking ? '对手 ' + Math.round(traumaAfter) : '你 ' + Math.round(traumaAfter)) + ' / 100（+' + Math.round(koAdd) + (guarding && !pierce ? '，格挡只积一半' : '') + '）' + (koTriggered === 'trauma' ? '——重创槽满格，直接 KO！' : koTriggered === 'hp' ? '——HP 归零，KO！' : '，逼近 KO！'), koTriggered ? (isMeAttacking ? 'good' : 'bad') : 'dim');
+      /* 击倒判定（KO 定型·刻度击倒）：未触发 KO、防守方 HP 尚存时，本次命中令其重创跨过
+         25/50/75 任一刻度 → 击倒读秒（走 startKnockdown 执行层：确定性起身、沿用现行起身回复）。
+         防刷：同一刻度本回合内只兑现一次（B.meDownMarks/foeDownMarks，endBreak 跨回合重置）——
+         衰减回落后再跨越同一刻度不重复击倒；一拳跨多个刻度也只倒一次、跨过的刻度一并标记。
+         口径注记：KO_AUDIT 的 CF 候选模拟用 floor(trauma/25) 变化判定（允许同回合回落再跨越重触发），
+         本实装按任务书取「本回合不重复」——预期差异仅 TKO 占比略降、HP 终局略升，回合/R1 指标不受影响，
+         复测对照见 KO_AUDIT.md 实装记录。 */
+      if (!koTriggered && B.phase === 'fight' && def.hp > 0) {
+        var marks = isMeAttacking ? (B.foeDownMarks || (B.foeDownMarks = {})) : (B.meDownMarks || (B.meDownMarks = {}));
+        var crossedMark = false;
+        [25, 50, 75].forEach(function (t) {
+          if (traumaBefore < t && traumaAfter >= t && !marks[t]) { marks[t] = true; crossedMark = true; }
+        });
+        if (crossedMark) startKnockdown(!isMeAttacking);
+      }
     }
 
     function moveFighters() {
@@ -900,6 +999,7 @@
       B.phase = 'fight';
       B.round += 1;
       B.meDownsRound = 0; B.foeDownsRound = 0; // Phase 4：每回合击倒计数重置
+      B.meDownMarks = {}; B.foeDownMarks = {}; // KO 定型：刻度击倒的「本回合已兑现刻度」同步重置（新回合可重新跨刻度击倒）
       B.roundStats = freshRoundStats();
       if (B.mode === 'manual') {
         B.meRoundMod = B.nextRoundMod || 'balanced';
@@ -909,8 +1009,8 @@
       B.timeLeft = ROUND_SECONDS;
       B.me.speechBuff = B.pendingSpeech === true;
       B.pendingSpeech = false;
-      // 对手每回合可能换战术
-      if (Math.random() < 0.4) {
+      // 对手每回合可能换战术（练习赛陪练不换：整场稳守带攻，行为可预期才教得到东西）
+      if (!B.practice && Math.random() < 0.4) {
         B.foe.tactic = ['attack', 'counter', 'points'][Math.floor(Math.random() * 3)];
         blog('对手调整了战术：' + TACTICS[B.foe.tactic].name + '。', 'dim');
       }
@@ -946,8 +1046,6 @@
       else if (B.koKind === 'deathfight-down' && B.me.hp <= 0) { win = false; how = 'TKO 落败（死战中再次被击倒）'; $('figMe').classList.add('down'); }
       else if (B.koKind === 'trauma' && B.foe.hp <= 0) { win = true; how = 'KO 获胜！（重创值满格 100，积累终结）'; $('figFoe').classList.add('down'); }
       else if (B.koKind === 'trauma' && B.me.hp <= 0) { win = false; how = '被 KO 了……（你的重创值满格 100）'; $('figMe').classList.add('down'); }
-      else if (B.koKind === 'single' && B.foe.hp <= 0) { win = true; how = 'KO 获胜！（单次重击达到对手当前 HP 的 30%）'; $('figFoe').classList.add('down'); }
-      else if (B.koKind === 'single' && B.me.hp <= 0) { win = false; how = '被 KO 了……（单次重击达到你当前 HP 的 30%）'; $('figMe').classList.add('down'); }
       else if (B.tkoReason && B.foe.hp <= 0 && B.downFighter === 'foe') { win = true; how = 'TKO 获胜！（对手' + B.tkoReason + '）'; $('figFoe').classList.add('down'); }
       else if (B.tkoReason && B.me.hp <= 0 && B.downFighter === 'me') { win = false; how = 'TKO 落败（你' + B.tkoReason + '）'; $('figMe').classList.add('down'); }
       else if (B.foe.hp <= 0) { win = true; how = 'KO 获胜！（HP 归零）'; $('figFoe').classList.add('down'); }
@@ -1038,7 +1136,11 @@
       if (B.foe && B.foe.key) {
         var foeMember = null;
         S.roster.forEach(function (m) { if (m.key === B.foe.key) foeMember = m; });
-        if (foeMember) foeMember.rating = clamp(Math.round((foeMember.rating + (win ? -0.3 : 0.3)) * 100) / 100, 6, 30);
+        if (foeMember) {
+          // 修复批次 A：玩家参考 rating 的含金量项——「最近击败对手」的 rating（覆盖式，取微调前的值）
+          if (win) S.lastBeaten = foeMember.rating;
+          foeMember.rating = clamp(Math.round((foeMember.rating + (win ? -0.3 : 0.3)) * 100) / 100, 6, 30);
+        }
       }
       // D3：对手名鉴「已交手」记录（三模式共用此结算点；仅供名鉴点亮展示，不参与任何数值/判定）
       if (B.foe && B.foe.key) {
@@ -1097,7 +1199,7 @@
       if (downInj) rows += '<tr><td>被击倒 ' + B.meDowns + ' 次</td><td>伤病 +' + downInj + '</td></tr>';
       if (koInj) rows += '<tr><td>被 KO 的代价</td><td>伤病 +' + koInj + '</td></tr>';
       if (deathInj) rows += '<tr><td>死战到底的代价</td><td>伤病 +' + deathInj + '</td></tr>';
-      if (B.koKind) rows += '<tr><td>终结方式</td><td>' + (B.koKind === 'trauma' ? '重创值满格 KO' : B.koKind === 'single' ? '单次重击 KO（≥当前HP 30%）' : B.koKind === 'tko-giveup' ? 'TKO（死战关，直接判负）' : B.koKind === 'deathfight-down' ? '死战中再次击倒判负' : B.koKind === 'sim' ? 'KO（模拟）' : 'HP 归零 KO') + '</td></tr>';
+      if (B.koKind) rows += '<tr><td>终结方式</td><td>' + (B.koKind === 'trauma' ? '重创值满格 KO' : B.koKind === 'tko-giveup' ? 'TKO（死战关，直接判负）' : B.koKind === 'deathfight-down' ? '死战中再次击倒判负' : B.koKind === 'sim' ? 'KO（模拟）' : B.koKind === 'sim-tko' ? 'TKO（模拟）' : 'HP 归零 KO') + '</td></tr>';
       rows += '<tr><td>心态</td><td>' + (mindDelta > 0 ? '+' : '') + mindDelta + '（当前 ' + Math.round(S.mind) + ' · ' + mindTierName(S.mind) + '）</td></tr>';
       rows += '<tr><td>体力</td><td>降至 15，先好好休息</td></tr>';
       rows += '<tr><td>今日剩余行动点</td><td>' + S.ap + ' AP（报名免费，赛后保留）</td></tr>';
@@ -1128,16 +1230,28 @@
       S.lastMatchDay = S.day; // 报名免费（0 AP），只记录今日已比赛
       B.bandage = !!S.buffs.bandage; S.buffs.bandage = false;
       if (S.mind >= 20 && S.mind < 40) ATTRS.forEach(function (a) { B.me.attrs[a.key] = Math.round(B.me.attrs[a.key] * 0.95 * 10) / 10; }); // 心态紧张修正
-      function score(f) {
-        var a = f.attrs;
-        var profSum = 0; PUNCH_KEYS.forEach(function (k) { profSum += f.prof[k]; });
-        return a.power * 1.4 + a.endurance * 1.1 + a.speed + a.accuracy + a.footwork * 0.8 + a.defense * 0.9 + a.technique + a.will * 0.6 + profSum * 2.2;
+      /* KO 定型（2026-11-03，KO_AUDIT.md 实装记录）：模拟跳过按新引擎实测分布重标定，不再用旧评分线性式＋45% 平直 KO 抽签。
+         胜率改走 TTK 竞赛：以与引擎同构的 DPS 模型（出拳率 0.24+速度*0.012、命中率 clamp(0.70+(精准-步法)*0.01)、
+         格挡期望 *0.85、单拳净伤害走 F2 地板 max(1, raw-min(防守, raw*0.7))）估算双方击杀回合数 ttkMe/ttkFoe，
+         winP = clamp(logistic(2.0*(ttkFoe-ttkMe-0.2)/0.6) - 0.03*max(0, 对手防守-我方力量-6) + 弱点 0.05, 0.02, 0.98)；
+         KO 率 koP = clamp(1.75 - 0.271*minTTK, 0.02, 0.99)；KO 终结回合按 minTTK 采样（见下）。
+         标定数据（ko-impl-verify 确定性口径 8 环境，拟合脚本 tests/ko-sim-fit.mjs）：胜率平均误差 7.4pp（旧制 25~41pp）、KO 率误差 ≤1.8pp；
+         spd/t6 两类构筑仍高估约 19~22pp（DPS 模型对熟练度缩放的刻画偏差），属已知遗留，见 KO_AUDIT 实装记录。 */
+      function profAvg(f) { var s = 0; PUNCH_KEYS.forEach(function (k) { s += f.prof[k] || 0; }); return s / PUNCH_KEYS.length; }
+      function simNetDmg(att, def) {
+        var raw = att.attrs.power * (1 + profAvg(att) * 0.05) * 1.05;
+        return Math.max(1, raw - Math.min(def.attrs.defense * 1.0, raw * 0.7));
       }
-      /* P1-1 对齐：模拟与自动原是两套未对齐的模型（同状态模拟 53% vs 自动 24.5%）。
-         对齐方法——校准模拟公式参数：保留评分结构，把基准与缩放按自动战斗引擎的实测胜率标定
-         （基准 0.50→0.46 是对手出拳频率优势在真实引擎中的等效值，缩放 120→240）。回炉实测差距收窄到 15 个百分点以内。 */
-      var SIM_SCALE = 240;
-      var winP = clamp(0.46 + (score(me) - score(foe)) / SIM_SCALE + (foe.weakness ? 0.05 : 0), 0.08, 0.92);
+      function simDps(att, def, isFoe) {
+        var attempts = Math.min(90 * (0.24 + att.attrs.speed * 0.012) * (isFoe ? 1.15 : 1), 40);
+        var hc = Math.min(0.95, Math.max(0.30, 0.70 + (att.attrs.accuracy - def.attrs.footwork) * 0.01)) * 0.9;
+        return attempts * hc * 0.85 * simNetDmg(att, def);
+      }
+      var ttkMe = foe.hpMax / Math.max(1, simDps(me, foe, false));
+      var ttkFoe = me.hpMax / Math.max(1, simDps(foe, me, true));
+      var raceD = ttkFoe - ttkMe;
+      var defPen = Math.max(0, foe.attrs.defense - me.attrs.power - 6);
+      var winP = clamp(1 / (1 + Math.exp(-2.0 * (raceD - 0.2) / 0.6)) - 0.03 * defPen + (foe.weakness ? 0.05 : 0), 0.02, 0.98);
       var win = Math.random() < winP;
       var totalPunches = Math.round(rnd(24, 44));
       var weights = PUNCH_KEYS.map(function (k) { return 1 + me.prof[k] * 1.6; });
@@ -1147,13 +1261,25 @@
       me.dmg = Math.round(me.hits * rnd(6, 10));
       foe.hits = Math.round(totalPunches * rnd(0.4, 0.6));
       foe.dmg = Math.round(foe.hits * rnd(6, 10));
-      var ko = Math.random() < 0.45;
-      var r = 1 + Math.floor(Math.random() * 3);
+      if (win && me.dmg < foe.dmg) { var swapD = me.dmg; me.dmg = foe.dmg; foe.dmg = swapD; } // 展示口径：胜者总伤害不低于负者
+      if (!win && foe.dmg < me.dmg) { var swapD2 = me.dmg; me.dmg = foe.dmg; foe.dmg = swapD2; }
+      var minTTK = Math.min(ttkMe, ttkFoe);
+      var ko = Math.random() < clamp(1.75 - 0.271 * minTTK, 0.02, 0.99);
+      var r = 3;
+      if (ko) {
+        var pR1 = clamp(1.62 - 0.55 * minTTK, 0, 0.97);
+        var pR2 = clamp(1.30 - 0.22 * minTTK, 0.60, 0.99);
+        var rollR = Math.random();
+        r = rollR < pR1 ? 1 : (rollR < pR1 + (1 - pR1) * pR2 ? 2 : 3);
+      }
+      B.round = r;
       var how;
       if (ko) {
-        B.koKind = 'sim'; // P2-16：模拟路径也要设置终结方式，结算表显示「KO（模拟）」行
-        if (win) { foe.hp = 0; me.hp = Math.round(me.hpMax * rnd(0.3, 0.8)); how = '第 ' + r + ' 回合 KO 获胜！（模拟）'; }
-        else { me.hp = 0; foe.hp = Math.round(foe.hpMax * rnd(0.3, 0.8)); how = '第 ' + r + ' 回合被 KO 落败（模拟）'; }
+        var tkoP = clamp(0.02 + 0.10 * Math.max(0, Math.abs(raceD) - 1.2), 0.02, 0.33); // 引擎实测：TKO 占 KO 终局比例随悬殊度上升（弱档弃权/3 击倒）
+        var isTKO = Math.random() < tkoP;
+        B.koKind = isTKO ? 'sim-tko' : 'sim'; // P2-16：模拟路径也要设置终结方式，结算表显示「KO（模拟）」行
+        if (win) { foe.hp = 0; me.hp = Math.round(me.hpMax * rnd(0.3, 0.8)); how = '第 ' + r + ' 回合 ' + (isTKO ? 'TKO' : 'KO') + ' 获胜！（模拟）'; }
+        else { me.hp = 0; foe.hp = Math.round(foe.hpMax * rnd(0.3, 0.8)); how = '第 ' + r + ' 回合被 ' + (isTKO ? 'TKO' : 'KO') + ' 落败（模拟）'; }
       } else {
         how = '点数判定' + (win ? '获胜' : '落败') + '（模拟）';
       }
@@ -1380,7 +1506,7 @@
       M.foePunchT -= dt;
       if (M.foePunchT <= 0) {
         var w = weekOf(S.day);
-        M.foePunchT = Math.max(0.33, (rnd(0.55, 1.0) - w * 0.03) * 0.87) * (foe.tactic === 'counter' ? 1.5 : 1) / styleVal(foe, 'freqMul', 1);
+        M.foePunchT = Math.max(0.33, (rnd(0.55, 1.0) - w * 0.03) * 0.87) * (foe.tactic === 'counter' ? 1.5 : 1) / styleVal(foe, 'freqMul', 1) * (foe.practice ? (B.round === 1 ? 2.2 : 1.6) : 1); // 修复批次 A：手动模式陪练同样少进攻（出拳间隔拉长）
         if (B.time < (B.foeCounterUntil || -1)) M.foePunchT = Math.min(M.foePunchT, 0.45); // 有反击窗口时抢着出拳
         if (dist <= 19 && foe.stam >= 6) foePunchManual(dist);
       }

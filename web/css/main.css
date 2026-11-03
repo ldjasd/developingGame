@@ -1115,10 +1115,11 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
   background: color-mix(in srgb, var(--panel) 96%, transparent);
   border-left: 1px solid var(--line); box-shadow: -14px 0 40px rgba(10, 4, 26, .4);
   transform: translateX(105%); transition: transform .3s ease;
-  padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom)) 14px; /* RC 毛边③：右侧内边距加宽，关闭按钮完整落在抽屉内 */
 }
 .log-drawer.open { transform: translateX(0); }
-.log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.log-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding-right: 4px; }
+.log-head .ghost-btn { flex: none; white-space: nowrap; }
 .log-head h2 { margin: 0; font-size: 16px; }
 .log-drawer .battle-log { flex: 1 1 auto; min-height: 0; max-height: none; }
 /* —— 开战准备层 —— */
@@ -1157,9 +1158,12 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
 .br-sub { display: flex; gap: 8px; margin-top: 10px; }
 .br-sub button { flex: 1; }
 @media (max-width: 560px) {
-  #battleView .fighters { padding: 6px 8px 4px; }
+  /* RC 毛边②：ROUND pill 缩小上移＋对位卡下移避让，名牌不再被 pill 压住内侧 */
+  #battleView .fighters { padding: 38px 8px 4px; }
   #battleView .fighter { width: min(56cqh, 46cqw); }
-  #battleView .round-banner .rb { font-size: 17px; }
+  #battleView .round-banner { top: 2px; padding: 1px 10px 3px; }
+  #battleView .round-banner .rb { font-size: 15px; }
+  #battleView .round-banner .rt { font-size: 10px; }
   .br-side img { height: min(26dvh, 210px); }
 }
 /* —— 窄屏战斗紧凑化（实测修正：对位卡/触屏区/指令区抢高会把擂台压扁） —— */
@@ -1173,6 +1177,12 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
   #battleView .fbar.ko { height: 8px; }
   #battleView .fnums { font-size: 10px; white-space: nowrap; overflow: hidden; margin-top: 2px; }
   #battleView .ko-row { font-size: 10px; white-space: nowrap; overflow: hidden; margin-top: 3px; }
+  /* RC 毛边②：flex 子项缺 min-width:0 会把整页撑出横向溢出、右侧文案被卡缘裁——名牌/数值/重创行一律可缩略 */
+  #battleView .fname > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #battleView .fnums > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #battleView .ko-row > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #battleView .ko-row > .num { flex: none; }
+  #battleView .ko-decay { display: none; } /* 窄屏重创行只留「满100直接KO」，「· 每秒衰减6」收起 */
   #battleView .joy-label { display: none; }
   #battleView .joy-base { width: 92px; height: 92px; }
   #battleView .tbtn.small { width: 50px; height: 50px; font-size: 12px; }
@@ -2152,3 +2162,13 @@ body[data-view="settings"] #settingsView { display: flex !important; }
   flex: none; border: 1px solid rgba(255, 209, 102, .7); background: transparent; color: #ffd970;
   font-weight: 700; font-size: 13px; border-radius: 99px; padding: 6px 14px; cursor: pointer;
 }
+
+/* ===== 骨骼纸偶（主角试点）：容器显隐与舞台特效接管 ===== */
+.rig-host { position: absolute; inset: 0; display: none; pointer-events: none; }
+#figMe.rig-on .rig-host { display: block; }
+#figMe.rig-on #figMeImg { visibility: hidden; } /* 姿势帧仅作回退层（src 照常切换） */
+#figMe.rig-on .fig { animation: none; } /* 呼吸由纸偶承担，关 CSS bob */
+#figMe.rig-on.hit .fig { animation: shake .3s; } /* 受击抖动保留（作用于 .fig 层，纸偶随之抖） */
+#figMe.rig-on.stumbling .fig { animation: stumble .32s ease-out; }
+#figMe.rig-on.down .fig { transform: none; animation: none; } /* 倒地由纸偶 down 动作承担，关整图旋转 */
+#figMe.rig-on.hit .rig-host { filter: brightness(1.55) sepia(.55) hue-rotate(-35deg) saturate(2.6) drop-shadow(0 7px 7px rgba(8, 10, 18, .45)); } /* 受击红闪从姿势图转挂纸偶容器 */

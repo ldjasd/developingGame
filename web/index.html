@@ -14,9 +14,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="心跳在左" />
     <title>心跳在左，拳头在右</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+    <!-- 字体自托管（RC 毛边④）：原 Google Fonts 外链在受限网络会加载失败（RELEASE_WEB 差距 #4），
+         改为本地 assets/fonts/ 子集 woff2（fonttools 子集化：语料＝游戏全部文案＋项目文档＋GB2312 一级汉字；
+         Oswald 为 latin 可变字体一份覆盖 500~700）。缺字时按 css 字体栈回退系统字体，不影响游玩。 -->
+    <style>
+      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/fonts/noto-sans-sc-400.woff2") format("woff2"); }
+      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 500; font-display: swap; src: url("assets/fonts/noto-sans-sc-500.woff2") format("woff2"); }
+      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 700; font-display: swap; src: url("assets/fonts/noto-sans-sc-700.woff2") format("woff2"); }
+      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 900; font-display: swap; src: url("assets/fonts/noto-sans-sc-900.woff2") format("woff2"); }
+      @font-face { font-family: "Oswald"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("assets/fonts/oswald.woff2") format("woff2"); }
+    </style>
     <link rel="stylesheet" href="css/main.css" />
   </head>
   <body>
@@ -495,7 +502,7 @@
             <div class="fnums"><span>HP <span class="num" id="meHpNum">150</span></span><span>战术：<b id="meTacticName">强攻压制</b></span></div>
             <div class="fbar stam"><i id="meStamBar" style="width:100%"></i></div>
             <div class="fnums"><span>体力 <span class="num" id="meStamNum">100</span></span><span>命中 <span class="num" id="meHits">0</span> · 伤害 <span class="num" id="meDmg">0</span></span></div>
-            <div class="ko-row"><span><b>重创值（KO槽）</b> 满100直接KO · 每秒衰减6</span><span class="num" id="meKoNum">0 / 100</span></div>
+            <div class="ko-row"><span><b>重创值（KO槽）</b> 满100直接KO<span class="ko-decay"> · 每秒衰减6</span></span><span class="num" id="meKoNum">0 / 100</span></div>
             <div class="fbar ko" id="meKoWrap"><i id="meKoBar" style="width:0%"></i></div>
           </div>
           <div class="vs">VS</div>
@@ -505,7 +512,7 @@
             <div class="fnums"><span>HP <span class="num" id="foeHpNum">150</span></span><span>战术：<b id="foeTacticName">—</b></span></div>
             <div class="fbar stam"><i id="foeStamBar" style="width:100%"></i></div>
             <div class="fnums"><span>体力 <span class="num" id="foeStamNum">100</span></span><span>命中 <span class="num" id="foeHits">0</span> · 伤害 <span class="num" id="foeDmg">0</span></span></div>
-            <div class="ko-row"><span><b>重创值（KO槽）</b> 满100直接KO · 每秒衰减6</span><span class="num" id="foeKoNum">0 / 100</span></div>
+            <div class="ko-row"><span><b>重创值（KO槽）</b> 满100直接KO<span class="ko-decay"> · 每秒衰减6</span></span><span class="num" id="foeKoNum">0 / 100</span></div>
             <div class="fbar ko" id="foeKoWrap"><i id="foeKoBar" style="width:0%"></i></div>
           </div>
         </div>
@@ -519,7 +526,7 @@
           <div class="fighter me" id="figMe" style="left:18%">
             <div class="dmg-pop" id="popMe"></div>
             <div class="speedline"></div>
-            <div class="fig"><img class="fig-img" id="figMeImg" src="assets/portrait.webp" alt="" /></div>
+            <div class="fig"><img class="fig-img" id="figMeImg" src="assets/portrait.webp" alt="" /><div class="rig-host" id="meRig"></div></div>
           </div>
           <div class="fighter foe" id="figFoe" style="left:68%">
             <div class="dmg-pop" id="popFoe"></div>
@@ -687,9 +694,9 @@
           <li><b>反击窗口</b>：闪避成功后 1 秒内出拳是反击，伤害 +30% 并飘「反击！」。按闪避方向出对应拳种加成更高 +40%：后闪→直拳、下闪（下潜）→上勾拳、侧闪→摆拳（勾拳）。自动模式下闪开对手的拳同样会开窗口，AI 也会用。</li>
           <li><b>破防克制</b>：高位格挡防不住击腹拳——对格挡中的对手打击腹，伤害按 70% 穿透（普通拳被格挡只剩 30%），并把对手打入 1.5 秒<b>破防</b>：期间他格挡失效，你的直拳再 +20%。看到「破防!」就接直拳。</li>
           <li><b>对手风格</b>：每场对手随机一种风格，名牌有标注——<b>力量型</b>（摆拳/上勾多、伤害高、耗体力大、移动慢）、<b>速度型</b>（刺拳/直拳连发、出拳快、单拳偏轻）、<b>防守反击型</b>（格挡闪避多、闪避后爱打反击）。排名越高（名次越靠前），风格越鲜明。</li>
-          <li><b>KO 重创槽</b>：双方各有一条重创值（0~100，拳手卡片可见）。有效命中按「本次伤害占对手当前 HP 的比例」积累：打得越重积得越多，对方血越低、同样的拳积得也越多；上勾拳/摆拳权重最高，刺拳最轻；被格挡的命中只积一半；每秒衰减 6 点。槽满 100 → 直接 KO。所以把对手打进残血后连续压制，就能靠重创槽终结，不必非等一发大重击。</li>
-          <li><b>单次 KO / HP KO</b>：单次伤害 ≥ 对手当前 HP 的 30%（且 ≥10）→ 直接 KO（重击终结，慢动作）；HP 归零 → KO。</li>
-          <li><b>击倒 / 读秒</b>：单次伤害 ≥ 当前 HP 的 25% 但不足 30%（且 ≥10 点）→ 击倒：倒地读秒 3 秒，数完起身继续，HP 回到至少 20%。读秒时双方都不能动。</li>
+          <li><b>KO 重创槽</b>：双方各有一条重创值（0~100，拳手卡片可见）。有效命中按「本次伤害占对手当前 HP 的比例」积累：打得越重积得越多（对方血量低于 40% 后不再加速）；上勾拳/摆拳权重最高，刺拳最轻；被格挡的命中只积一半；每秒衰减 6 点。槽满 100 → 直接 KO。持续压制攒重创，是最稳的终结路线。</li>
+          <li><b>HP KO / TKO</b>：把对手 HP 打空 → KO；同一回合内把对手击倒 3 次 → TKO 判定。没有「一发入魂」的百分比秒杀——单拳再重，也只扣 HP、积重创、至多把人打倒。</li>
+          <li><b>击倒 / 读秒</b>：重创值跨过 25 / 50 / 75 任一刻度 → 击倒：倒地读秒 3 秒，数完起身继续，HP 回到至少 20%（同一回合内每个刻度只触发一次击倒）。读秒时双方都不能动。</li>
           <li><b>TKO 判定</b>：同一回合内第 3 次被击倒，直接判负——读秒不会等人，回合内尽量别让自己第二次倒下。</li>
           <li><b>回合间休整（1 分钟）</b>：手动模式回合间 60 秒真实倒计时，可点 [跳过] 立即进入下一回合，也可等满；期间可改下回合战术——强攻（伤害 +10%/防御 −10%）、稳守（防御 +10%/伤害 −10%）、均衡（默认，无修正）。面板显示本回合战况总结（双方命中/伤害/击倒/最高连击）、敌人特点（风格＋本场倾向如“摆拳用得多”）和 1~2 条简短提示（如点数领先“稳住别浪”、被击倒过“注意防守”、击腹命中多“继续打身体”、体力见底“别空挥”）。自动模式同样显示总结面板，5 秒后自动继续（也可跳过），战术沿用原有强攻/稳守反击/游走。</li>
         </ul>
@@ -897,7 +904,7 @@
           </div>
         </div>
         <p class="br-line" id="brFoeLine"></p>
-        <p class="br-rule">胜负规则：打空对方 HP，或把<b>重创槽</b>打满 100 都会 K.O.（有效命中积累重创，被格挡只积一半）；单发伤害 ≥ 对方当前 HP 的 <b>30%</b> 也直接 K.O.，25%～30% 会击倒读秒。撑满回合则按点数判。</p>
+        <p class="br-rule">胜负规则：打空对方 HP，或把<b>重创槽</b>打满 100 都会 K.O.（有效命中积累重创，被格挡只积一半）；重创跨过 <b>25 / 50 / 75</b> 会击倒读秒，单回合被击倒 3 次判 TKO。撑满回合则按点数判。</p>
         <p class="br-controls" id="brControls"></p>
         <button class="primary-btn br-start" id="btnBattleStart" type="button">开始战斗</button>
         <div class="br-sub">
@@ -918,6 +925,7 @@
     <script src="js/story-engine.js"></script>
     <script src="js/tools.js"></script>
     <script src="js/ui.js"></script>
+    <script src="js/rig.js"></script>
     <script src="js/battle.js"></script>
     <script src="js/game.js"></script>
     <script>

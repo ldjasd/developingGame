@@ -10,7 +10,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
 const shell = read('index.html');
 const css = read('css/main.css');
-const jsParts = ['js/data.js', 'js/story.js', 'js/audio.js', 'js/story-engine.js', 'js/tools.js', 'js/ui.js', 'js/battle.js', 'js/game.js'].map(read);
+const jsParts = ['js/data.js', 'js/story.js', 'js/audio.js', 'js/story-engine.js', 'js/tools.js', 'js/ui.js', 'js/rig.js', 'js/battle.js', 'js/game.js'].map(read);
 
 // 安全前提：内联内容里不能出现提前闭合标签（源文件本来就是单文件内联版，已验证不存在）
 for (const [name, content, tag] of [['css/main.css', css, '</style'], ['js files', jsParts.join('\n'), '</script']]) {
@@ -25,6 +25,7 @@ const SCRIPT_TAGS = [
   '    <script src="js/story-engine.js"></script>',
   '    <script src="js/tools.js"></script>',
   '    <script src="js/ui.js"></script>',
+  '    <script src="js/rig.js"></script>',
   '    <script src="js/battle.js"></script>',
   '    <script src="js/game.js"></script>',
 ].join('\n');

@@ -5,7 +5,7 @@
 // - 只拦截同源 GET，其余请求（跨域字体等）一律放行、不缓存。
 // 更新机制：发布新版时把 SW_VERSION +1；新 SW 安装后 skipWaiting 立即接管，
 // activate 时删除所有旧版本缓存并 claim 已打开的页面。缓存名带版本号，天然隔离。
-const SW_VERSION = 'boxing-pwa-v16'; // 重创积累曲线修复：traumaGain 改为「净伤害占防守方当前 HP 比例 × 70 × 拳种权重」小数累积（旧拳种固定值与伤害脱钩、重创 KO 全挤 R1 两病消除，A/B 定型见 web/tests/TRAUMA_CURVE.md；用户硬数字未动）；商店商品卡改实底卡面＋图框加深（css/main.css）；含装备图二次元化、新手期重构与框架重构一至五期全部成果
+const SW_VERSION = 'boxing-pwa-v20'; // v20：主角骨骼纸偶试点（js/rig.js + assets/rig/me/ 部件 8 件约 82KB；ME_RIG 开关可回退姿势帧） // KO 定型 CF＋F2（KO_AUDIT.md 实装记录，用户 2026-11-03 批准）：①删除单发 KO（单次净伤害 ≥ 当前 HP 30%）与 HP% 击倒带（25~30%）；②重创分母下限 max(当前HP, 40%×最大HP)，K=70/衰减 6/秒/拳种权重/格挡减半不变；③刻度击倒：重创跨 25/50/75 触发击倒读秒（本回合内同刻度不重复、跨回合重置），终结只剩重创满格 KO／HP 归零 KO／单回合 3 击倒 TKO／点数四条；④F2 伤害地板：防守减伤封顶 raw 的 70%；⑤模拟跳过按新引擎分布重标定（TTK 竞赛胜率＋minTTK 驱动 KO 率/终结回合）；⑥清理死战孤儿 handler 与规则文案同步新口径
 const CACHE_NAME = SW_VERSION;
 
 // 安装时预缓存核心文件（相对路径，itch 子目录 / 任意子路径托管都成立）

@@ -29,7 +29,6 @@
       var bsv = $('btnSaves'); if (bsv && typeof currentSlot === 'function') bsv.textContent = '存档·槽' + currentSlot();
       var bts = $('btnTestSave'); if (bts) bts.classList.toggle('test-on', !!S.testMode);
       $('tbRank').textContent = '第 ' + S.rank + ' 名';
-      var dft = $('btnDeathToggle'); if (dft) { dft.textContent = 'TKO死战：' + (S.deathFight ? '开' : '关'); dft.style.borderColor = S.deathFight ? 'var(--red)' : ''; dft.style.color = S.deathFight ? 'var(--red)' : ''; dft.style.fontWeight = S.deathFight ? '700' : ''; }
       $('tbMind').textContent = Math.round(S.mind) + ' · ' + mindTierName(S.mind);
       var pips = '';
       for (var i = 0; i < 6; i++) pips += '<span class="ap-pip' + (i < S.ap ? '' : ' off') + '"></span>';
@@ -91,7 +90,7 @@
         attrs: Object.assign({}, S.attrs), punchExp: Object.assign({}, S.punchExp),
         injury: S.injury, day: S.day, scoutedForDay: 0
       };
-      planSel.forEach(function (id) { trainingById(id).apply(clone); });
+      planSel.forEach(function (id) { applyTrainingApply(clone, trainingById(id)); }); // 修复批次 A：试算走边际递减口径，与实结一致
       var rawCost = planSel.reduce(function (sum, id) { return sum + trainingById(id).stam; }, 0);
       var effCost = S.buffs.drink ? Math.round(rawCost * 0.7) : rawCost;
       var attrRows = [], punchRows = [];
@@ -105,7 +104,7 @@
       });
       var mindGain = planSel.reduce(function (sum, id) { return sum + (trainingById(id).mind || 0); }, 0);
       var over = Math.max(0, Math.round(effCost - S.stamina));
-      return { attrRows: attrRows, punchRows: punchRows, mindGain: mindGain, scouted: !!clone.scoutedForDay, rawCost: rawCost, effCost: effCost, injEst: Math.floor(over / 10) * 5 };
+      return { attrRows: attrRows, punchRows: punchRows, mindGain: mindGain, scouted: !!clone.scoutedForDay, rawCost: rawCost, effCost: effCost, injEst: overdraftInjury(over) };
     }
     function planUsedPts() { return planSel.reduce(function (sum, id) { var t = trainingById(id); return sum + (t ? t.pts : 0); }, 0); }
     function closeSubLists(except) {
@@ -117,7 +116,7 @@
         attrs: Object.assign({}, S.attrs), punchExp: Object.assign({}, S.punchExp),
         injury: S.injury, day: S.day, scoutedForDay: 0
       };
-      planSel.forEach(function (id) { trainingById(id).apply(clone); });
+      planSel.forEach(function (id) { applyTrainingApply(clone, trainingById(id)); }); // 修复批次 A：试算走边际递减口径，与实结一致
       var rawCost = planSel.reduce(function (sum, id) { return sum + trainingById(id).stam; }, 0);
       var effCost = S.buffs.drink ? Math.round(rawCost * 0.7) : rawCost;
       var rows = [];
@@ -135,7 +134,7 @@
       var used = planUsedPts();
       var html = '<div class="custom-preview" style="margin:2px 0 10px"><b>计划总预览</b>（开始训练前核对）<br />' +
         '行动点：2 AP（' + S.ap + ' → ' + (S.ap - 2) + '）　·　训练点数：' + used + ' / ' + PLAN_POINTS + '<br />' +
-        '体力消耗：' + Math.round(S.stamina) + ' → ' + Math.max(0, Math.round(S.stamina - effCost)) + '（−' + effCost + (S.buffs.drink ? '，能量饮料 −30% 已计入' : '') + (S.stamina - effCost < 0 ? '，<b style="color:var(--red)">将透支 ' + Math.round(effCost - S.stamina) + ' 点，伤病约 +' + Math.floor(Math.round(effCost - S.stamina) / 10) * 5 + '</b>' : '') + '）<br />' +
+        '体力消耗：' + Math.round(S.stamina) + ' → ' + Math.max(0, Math.round(S.stamina - effCost)) + '（−' + effCost + (S.buffs.drink ? '，能量饮料 −30% 已计入' : '') + (S.stamina - effCost < 0 ? '，<b style="color:var(--red)">将透支 ' + Math.round(effCost - S.stamina) + ' 点，伤病约 +' + overdraftInjury(Math.round(effCost - S.stamina)) + '</b>' : '') + '）<br />' +
         '收益合计：' + (rows.length ? rows.join(' · ') : '无') +
         '<br /><span style="color:var(--ink-2)">心态效率修正（高昂 +10% / 疲劳 −15%）会在结算时另行应用；实战陪练的受伤为概率事件，预览不计。</span>' +
         (used < PLAN_POINTS ? '<br /><b>提示：计划未满 5 点也可以直接开始（AP 照常消耗 2 点），也可以继续点上面的项目补满。</b>' : '') +
@@ -251,7 +250,7 @@
       var names = planSel.map(function (id) { return trainingById(id).name; }).join('、');
       planSel.forEach(function (id) {
         var t = trainingById(id);
-        var msg = t.apply(S);
+        var msg = applyTrainingApply(S, t); // 修复批次 A：属性增量走边际递减 + 软上限（apply 本体不变）
         dailyLog('Day ' + S.day + ' · ' + t.name + '：' + msg, 'good');
       });
       // 心态效率修正：高昂 +10% / 疲劳 −15%（对属性与熟练度经验的增量生效）
@@ -268,15 +267,23 @@
       S.ap -= 2;
       var tutT = tutorialState(); if (!tutT.goalDone && S.day <= 7) tutT.trainings = (tutT.trainings || 0) + 1; // 新手期重构：首周目标「训练 ×3」计数（按结算次数）
       var newStam = stamBefore - cost, over = 0, injAdd = 0;
-      if (newStam < 0) { over = -newStam; injAdd = Math.floor(over / 10) * 5; S.injury = Math.min(100, S.injury + injAdd); }
+      if (newStam < 0) { over = -newStam; injAdd = overdraftInjury(over); S.injury = Math.min(100, S.injury + injAdd); } // 修复批次 A（m5）：透支伤病陡峭化（0.8/点）
       S.stamina = Math.max(0, newStam);
+      // 修复批次 A（m5）：重负荷（3 点）项目在低体力下硬练的磨损伤——结算体力 <35 时每个重负荷 +3 伤病，给轻训练（养打结合）留生态位
+      var heavyN = planSel.reduce(function (n, id) { return n + (trainingById(id).pts >= 3 ? 1 : 0); }, 0);
+      var wearInj = 0;
+      if (heavyN > 0 && S.stamina < 35) {
+        wearInj = heavyN * 3;
+        S.injury = Math.min(100, S.injury + wearInj);
+        dailyLog('低体力下硬练重负荷，身体发出警告：伤病 +' + wearInj + '（磨损伤）。', 'bad');
+      }
       if (drinkNote) dailyLog(drinkNote, 'good');
       if (over > 0) { toast('体力透支 ' + over + ' 点！伤病 +' + injAdd + '，悠着点'); dailyLog('训练体力透支 ' + over + ' 点，伤病 +' + injAdd + '。', 'bad'); }
       dailyLog('Day ' + S.day + ' · 训练计划完成：' + names + '（体力 −' + cost + '）', 'good');
       planSel = [];
       render();
       // 框架重构三期：结算先在训练舞台内演出收益（结算层），玩家点「回据点」才走原收尾三步（见 finishTrainResult）
-      showTrainResult(snapAttrs, snapExp, snapMind, cost, over, injAdd, names);
+      showTrainResult(snapAttrs, snapExp, snapMind, cost, over, injAdd + wearInj, names);
     }
     /* 框架重构三期：训练结算演出层——立绘＋属性 +N 跳字 chips（增量取自结算前后快照差，含心态效率修正后的实际值）。
        render() 不碰本层（默认 hidden、renderPlan 不操作它），层在玩家确认后才收起。 */
