@@ -11,9 +11,17 @@
       return S.story;
     }
     var storyQueue = [];
+    /* 第一批整改·事件进度门禁（实玩 S5）：文案前提涉及「打过比赛 / 粉丝 / 被认出来」的事件在 story.js 里打了 needMatch 标，
+       必须等玩家完成首场比赛（胜+负 ≥ 1）后才可触发——杜绝没打过比赛先收到「看了你的比赛」的粉丝信这类出戏。 */
+    function storyGateOk(id) {
+      var def = STORY_EVENTS[id];
+      if (!def || !def.needMatch) return true;
+      return ((S.wins || 0) + (S.losses || 0)) >= 1;
+    }
     function queueStory(id) {
       storyState();
       if (!STORY_EVENTS[id]) return;
+      if (!storyGateOk(id)) return;
       if (S.story.seenEvents.indexOf(id) >= 0) return;
       if (storyQueue.indexOf(id) >= 0) return;
       storyQueue.push(id);
@@ -23,7 +31,7 @@
     function triggerDailyEvent(chance) {
       storyState();
       if (Math.random() >= chance) return false;
-      var pool = DAILY_EVENT_IDS.filter(function (id) { return S.story.seenEvents.indexOf(id) < 0; });
+      var pool = DAILY_EVENT_IDS.filter(function (id) { return S.story.seenEvents.indexOf(id) < 0 && storyGateOk(id); });
       if (!pool.length) return false;
       queueStory(pool[Math.floor(Math.random() * pool.length)]);
       return showStoryEventIfPending();
@@ -200,12 +208,9 @@
       if (!proState) return;
       var st = proState;
       if (st.step === 0) {
-        var pages = [
-          '放学路上，你钻进了常去的街机厅。角落里那台拳击测力机刚换了新榜单——第一名的分数，高得有点离谱。',
-          '你摸了摸口袋里剩下的游戏币。反正只是玩玩。你这样想着，站到了测力机前，握紧了拳头。'
-        ];
-        storySet('assets/portrait.webp', '旁白', '序章 · 一', pages[st.page]);
-        storyBtns([{ label: st.page < pages.length - 1 ? '继续' : '站到测力机前', fn: function () { if (st.page < pages.length - 1) { st.page++; renderProScene(); } else { st.step = 1; renderProScene(); } } }]);
+        // 新手期重构·序章瘦身：开场旁白 2 页并 1 页（骨架不变：街机厅＋测力机新榜单＋站到机前）
+        storySet('assets/portrait.webp', '旁白', '序章 · 一', '放学路上，你钻进了常去的街机厅。角落里那台拳击测力机刚换了新榜单——第一名的分数，高得有点离谱。你摸了摸口袋里剩下的游戏币，反正只是玩玩，站到了测力机前，握紧了拳头。');
+        storyBtns([{ label: '站到测力机前', fn: function () { st.step = 1; renderProScene(); } }]);
       } else if (st.step === 1) {
         $('storyTitle').textContent = '序章 · 拳击测力机';
         storySet('assets/portrait.webp', '拳击测力机', '投币 1 枚 · 共 3 拳取最高分', '力量条会来回冲刺。在你感觉最猛的那一瞬间，按下「出拳！」——打完 3 拳，就能继续。');
@@ -228,28 +233,20 @@
         storyBtns(btns);
       } else if (st.step === 2) {
         $('storyTitle').textContent = '序章 · 藤原梢';
-        var pages2 = [
-          { t: '身后有人说话：「……小姑娘。刚才那拳，再打一次，我看看。」', img: 'senior' },
-          { t: '「我叫藤原梢，以前是打职业的。你那一拳，腰、腿、肩是一条线——没人教过你吧？这叫天赋，浪费在游戏机上可惜了。」', img: 'senior' }
-        ];
-        var pg = pages2[st.page];
-        storySet(STORY_CHARS.senior.img, '藤原梢', '退役拳手', pg.t);
-        if (st.page < pages2.length - 1) {
-          storyBtns([{ label: '继续', fn: function () { st.page++; renderProScene(); } }]);
-        } else {
-          storyBtns([
-            { label: '「天赋？我只是经常来玩这个……」', fn: function () { proChoice({ aff: { senior: 6 } }, '她哼了一声：「所以才叫天赋。跟我来。」', 3); } },
-            { label: '「姐姐，你也是来打测力机的吗？」', cls: 'secondary-btn', fn: function () { proChoice({ aff: { senior: 4 }, mind: 5 }, '她被逗笑了：「我打过的东西，可比这台机器贵多了。跟我来。」', 3); } }
-          ]);
-        }
+        // 新手期重构·序章瘦身：梢姐搭话 2 页并 1 页，进页即出选项（台词原文两句合并，一字未删）
+        storySet(STORY_CHARS.senior.img, '藤原梢', '退役拳手', '身后有人说话：「……小姑娘。刚才那拳，再打一次，我看看。我叫藤原梢，以前是打职业的。你那一拳，腰、腿、肩是一条线——没人教过你吧？这叫天赋，浪费在游戏机上可惜了。」');
+        storyBtns([
+          { label: '「天赋？我只是经常来玩这个……」', fn: function () { proChoice({ aff: { senior: 6 } }, '她哼了一声：「所以才叫天赋。跟我来。」', 3); } },
+          { label: '「姐姐，你也是来打测力机的吗？」', cls: 'secondary-btn', fn: function () { proChoice({ aff: { senior: 4 }, mind: 5 }, '她被逗笑了：「我打过的东西，可比这台机器贵多了。跟我来。」', 3); } }
+        ]);
       } else if (st.step === 3) {
         renderProSpar();
       } else if (st.step === 4) {
         $('storyTitle').textContent = '序章 · 新的开始';
         var pages4 = [
           { img: 'senior', name: '藤原梢', role: '前辈 · 退役拳手', t: '就这么定了。从今天起，你就是这家拳馆的人了。排名？从最后一名开始——第 50 名。上面 49 个人，都是你要翻过去的山。' },
-          { img: 'manager', name: '栗原真纪', role: '经纪人', t: '合同我带来了。从今天起，我是你的经纪人。先说好——我很严格的。' },
-          { img: 'me', name: '旁白', role: '序章 · 完', t: '拳馆的灯亮着，沙袋还在轻轻晃。你的职业生涯，就从这一天开始。' }
+          // 新手期重构·序章瘦身：经纪人登场与收尾旁白并为一页（原文两句合并，一字未删）
+          { img: 'manager', name: '栗原真纪', role: '经纪人', t: '「合同我带来了。从今天起，我是你的经纪人。先说好——我很严格的。」拳馆的灯亮着，沙袋还在轻轻晃。你的职业生涯，就从这一天开始。' }
         ];
         var p4 = pages4[st.page];
         storySet(p4.img === 'me' ? 'assets/portrait.webp' : STORY_CHARS[p4.img].img, p4.name, p4.role, p4.t);
@@ -297,7 +294,15 @@
         storySet(STORY_CHARS.senior.img, '藤原梢', '试训 · 结束', good
           ? '三个回合走完，你还站着，眼睛还亮着。她摘下手套，拍了拍你的头盔：「……捡到宝了，我这回是真捡到宝了。」'
           : '三个回合走完，你挨了好几下，却一次都没往后退。她看着你，慢慢笑了：「挨打的姿势不好看。但不肯倒的人，我最喜欢。」');
-        storyBtns([{ label: '继续', fn: function () { proChoice({ aff: { senior: good ? 6 : 3 } }, good ? '梢姐对你的评价，比你想的还要高。' : '她嘴上不饶人，却悄悄把你的名字写上了拳馆的名单。', 4); } }]);
+        if (!st.sparRewarded) { // 新手期重构·序章瘦身：试训好感在本页直接结算（原 proChoice 的结果页并入本页 fx 行，省一整页点击；数值不变）
+          st.sparRewarded = true;
+          var sparNotes = applyStoryFx({ aff: { senior: good ? 6 : 3 } });
+          var sparFx = $('storyFx');
+          sparFx.textContent = (good ? '梢姐对你的评价，比你想的还要高。' : '她嘴上不饶人，却悄悄把你的名字写上了拳馆的名单。') + (sparNotes.length ? '（' + sparNotes.join(' · ') + '）' : '');
+          sparFx.classList.add('show');
+          save();
+        }
+        storyBtns([{ label: '继续', fn: function () { proState.step = 4; proState.page = 0; renderProScene(); } }]);
         return;
       }
       var r = rounds[st.sparRound];
@@ -309,7 +314,9 @@
           var fxEl = $('storyFx');
           fxEl.textContent = goodPick ? r.ok : r.ng;
           fxEl.classList.add('show');
-          storyBtns([{ label: st.sparRound >= 2 ? '走完最后一回合' : '下一回合', fn: function () { st.sparRound++; renderProSpar(); } }]);
+          storyBtns([]); // 新手期重构·序章瘦身：选后清空按钮防连点，反馈停留 1.4 秒自动进下一回合（每回合省一次「下一回合」点击）
+          var stRef = st;
+          setTimeout(function () { if (proState === stRef && proState.step === 3) { stRef.sparRound++; renderProSpar(); } }, 1400);
         } };
       }));
     }
@@ -324,6 +331,9 @@
       setScene('gym'); // A1：序章结束回日常复位拳馆
       if (!skipped) queueStory('ev_stage1');
       save(); render();
-      $('helpModal').classList.add('open');
       toast(skipped ? '已跳过序章' : '序章完成，生涯开始！');
+      /* 新手期重构：序章后不再自动弹整屏玩法说明墙（S6）——改为梢姐邀请先打一场练习赛（边打边学），
+         玩法说明改为各场景首次进入时的一句话情境提示（maybeTip），完整版仍在顶栏「玩法说明」与设置里随时可看。
+         练习赛邀请只在此刻弹一次；推掉/错过后入口保留在据点金色按钮，直到打完或打过正式比赛为止。 */
+      if (typeof openPracticeIntro === 'function') openPracticeIntro();
     }

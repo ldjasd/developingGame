@@ -222,13 +222,25 @@
     var COUNTER_PREF = { back: 'straight', down: 'upper', side: 'hook' };
     var COUNTER_PREF_TXT = { back: '后闪→直拳', down: '下闪→上勾拳', side: '侧闪→摆拳' };
     function comboBonusPct(combo) { if (combo <= 1) return 0; if (combo === 2) return 5; if (combo === 3) return 15; return 25; } // 2连+5%、3连+15%、4连及以上+25%封顶
-    /* Phase 4 修订：KO 重创槽 —— 有效命中积累（格挡只积一半），满 100 直接 KO
-       第二轮回炉 P0-1（实测调校）：重创值 刺6/直12/上勾18/摆18/击腹12、衰减 6/秒。
-       阈值恢复复测（第二轮回炉曾越权抬高单次 KO 阈值与击倒带，已恢复用户拍板值 30% / 25%~30%；
-       重创值与衰减经复测无需再动，保持 刺6/直12/上勾18/摆18/击腹12、衰减 6/秒）：第 1 周自动 200 场实测
-       打到第 2 回合 67.5%、第 3 回合或点数 36.0%、重创 KO 34.0%（1000 场复核 69.4% / 39.6% / 32.8%），三线达标。 */
-    var PUNCH_KO = { jab: 6, straight: 12, upper: 18, hook: 18, body: 12 };
-    var KO_DECAY = 6; // 重创槽每秒衰减
+    /* Phase 4 修订：KO 重创槽 —— 有效命中积累（格挡只积一半），满 100 直接 KO。
+       阈值口径（用户拍板，勿动）：单次 KO ≥当前 HP 30%、击倒带 25%~30%。
+       积累曲线（2026-11-03 重构，tests/trauma-ab.mjs 同种子 A/B 定型，记录见 tests/TRAUMA_CURVE.md）：
+       旧曲线是拳种固定值（刺6/直12/上勾18/摆18/击腹12），与伤害脱钩——核查实测（第 1 周 n=596）
+       43% 的命中是「≤3 点伤害却 +≥10 重创」，且重创 KO 100% 挤在第 1 回合（衰减使中后盘攒不满）。
+       新曲线：单次积累 = TRAUMA_K ×（本次净伤害 ÷ 防守方当前 HP）× 拳种权重，小数内部累积（显示取整）；
+       防守方血越低、同等伤害积得越多，重创 KO 因此摊到全场。定版前后全样本核查对照
+       （trauma-audit，旧曲线 n=596 → 新曲线 n=600）：重创 KO 占全部终局 6.7%→9.6%、
+       回合分布 R1/R2/R3 由 40/0/0 变为 21/19/17、输家 HP% 反占优 20%→7%、胜率 65.3%→66.3%（带内）。
+       备选「按最大 HP 折算」已淘汰（第 1 周伤害占比仅 0.5~2.5%，K 拉满也攒不满，见 TRAUMA_CURVE.md）。 */
+    var PUNCH_KO = { jab: 6, straight: 12, upper: 18, hook: 18, body: 12 }; // 新曲线中只作拳种权重（以直拳 12 归一为 1.0）
+    var KO_DECAY = 6; // 重创槽每秒衰减（A/B 验过 4/秒会让重创 KO 占比暴涨到 26.7%，保持 6）
+    var TRAUMA_K = 70; // 重创曲线标定系数：伤害占当前 HP 比例 × 70 × 拳种权重
+    function traumaGain(key, dmg, def, hpBefore, halved) {
+      var w = (PUNCH_KO[key] || 10) / 12;
+      var gain = TRAUMA_K * (dmg / Math.max(1, hpBefore)) * w;
+      if (halved) gain /= 2; // 被格挡（未穿透）只积一半，口径不变
+      return Math.max(0, gain);
+    }
     var BREAK_TACTICS = { attack: { name: '强攻' }, balanced: { name: '均衡' }, guard: { name: '稳守' } };
     function freshRoundStats() { return { meHits: 0, foeHits: 0, meDmg: 0, foeDmg: 0, meMaxCombo: 0, foeMaxCombo: 0 }; }
     function decayTrauma(dt) { if (!B) return; B.meTrauma = Math.max(0, (B.meTrauma || 0) - KO_DECAY * dt); B.foeTrauma = Math.max(0, (B.foeTrauma || 0) - KO_DECAY * dt); }
@@ -260,12 +272,56 @@
         buffs: { drink: false, bandage: false, meal: false },
         appearance: { hair: 'ponytail', face: 'default', body: 'standard', outfit: 'default', lastDim: 'hair' },
         story: { prologueDone: false, seenEvents: [], affinity: { senior: 0, manager: 0, rival: 0, teammate: 0 } },
+        tutorial: { practiceDone: false, tips: [], goalDone: false, trainings: 0 }, // 新手期重构：练习赛/情境提示/首周目标（老存档读档时一律毕业，见 load 兼容段）
         attrs: { power: 10, endurance: 10, will: 10, speed: 10, accuracy: 10, footwork: 10, defense: 10, technique: 10 },
         punchExp: { jab: 0, straight: 0, hook: 0, upper: 0, body: 0 },
         logs: []
       };
     }
     var S = defaultState();
+    /* ================= 新手期重构：练习赛 / 情境提示 / 首周目标 =================
+       S.tutorial = { practiceDone, tips:[已看过的情境提示 key], goalDone, trainings（首周已结算训练次数） }。
+       老存档（无 tutorial 字段）读档时一律置为「已毕业」（见 load 兼容段），绝不触发任何新手流程；
+       tutorialState() 的兜底同样按毕业处理——只有 defaultState() 的新档才带未完成的新手状态。 */
+    function tutorialState() {
+      if (!S.tutorial || typeof S.tutorial !== 'object') S.tutorial = { practiceDone: true, tips: ['train', 'shop', 'match', 'status'], goalDone: true, trainings: 0 };
+      if (!Array.isArray(S.tutorial.tips)) S.tutorial.tips = [];
+      return S.tutorial;
+    }
+    /* 练习赛待打判定：序章已走完、练习赛未打、且还没打过任何正式比赛（打过正式赛练习赛自动作废）。测试档不触发。 */
+    function practicePending() {
+      if (S.testMode) return false;
+      if (!S.story || !S.story.prologueDone) return false;
+      return !tutorialState().practiceDone && (S.wins + S.losses) === 0;
+    }
+    /* 情境提示：第一次进入某场景时弹一句话（看过记档、设置里可重置）。只在已进游戏、序章走完后出现。 */
+    var TIP_TEXTS = {
+      train: '训练：点卡片凑点数（同一项可重复选），凑满 5 点收益最大；选好后点底部「开始训练」，一次结算。',
+      shop: '商店：点商品卡购买，卡上的绿 / 红字是和你现装备的差值；进店这一趟扣 2 AP，慢慢挑。',
+      match: '比赛：每周第 7 天是比赛日，报名免费（0 AP）。比赛前一天在训练里做「录像研究」，能侦察对手的弱点拳种。',
+      status: '状态页：属性、装备、背包、赞助都在这里，不耗行动点——想看随时来看。'
+    };
+    var tipTimer = null;
+    function showTip(text) {
+      var bar = $('tipBar'); if (!bar) return;
+      $('tipText').textContent = text;
+      bar.hidden = false;
+      clearTimeout(tipTimer);
+      tipTimer = setTimeout(function () { bar.hidden = true; }, 9000);
+    }
+    function hideTip() { var bar = $('tipBar'); if (bar) bar.hidden = true; clearTimeout(tipTimer); }
+    function maybeTip(key) {
+      if (!TIP_TEXTS[key]) return;
+      if (!gameEntered) return;
+      if (S.testMode) return;
+      if (!S.story || !S.story.prologueDone) return;
+      if (B) return; // 战斗中不弹
+      var t = tutorialState();
+      if (t.tips.indexOf(key) >= 0) return;
+      t.tips.push(key);
+      showTip(TIP_TEXTS[key]);
+      save();
+    }
     /* ================= Phase 6：捏人 / 换装 / 换发型 =================
        显示规则：立绘图片只由最近一次切换的维度决定（发型 / 脸型 / 服装取最后一次切换的），
        体型只做 CSS 纵向缩放并恒叠加其上。9×3×3 全组合需 81 张图，本期不做全组合拼图，
@@ -600,6 +656,17 @@
             }
           };
         }
+        // 新手期重构·老存档兼容：无 tutorial 字段的旧档一律视为已「毕业」——不弹练习赛邀请、不出情境提示、不显示首周目标，老存档完全不受影响
+        if (!data.tutorial || typeof data.tutorial !== 'object') {
+          S.tutorial = { practiceDone: true, tips: ['train', 'shop', 'match', 'status'], goalDone: true, trainings: 0 };
+        } else {
+          S.tutorial = {
+            practiceDone: data.tutorial.practiceDone === true,
+            tips: Array.isArray(data.tutorial.tips) ? data.tutorial.tips.filter(function (x) { return typeof x === 'string'; }) : [],
+            goalDone: data.tutorial.goalDone === true,
+            trainings: (typeof data.tutorial.trainings === 'number' && data.tutorial.trainings > 0) ? Math.floor(data.tutorial.trainings) : 0
+          };
+        }
         // Phase 9 老存档兼容：成就表缺失/非法时补 {}（只保留已知成就 id 的对象条目）；累计 KO 胜场计数器缺失时从 0 起算（历史 KO 数无从追溯）
         if (!S.achievements || typeof S.achievements !== 'object' || Array.isArray(S.achievements)) S.achievements = {};
         Object.keys(S.achievements).forEach(function (k) {
@@ -776,19 +843,27 @@
       var note = $('saveTestNote'); if (note) note.style.display = locked ? '' : 'none';
       box.innerHTML = [1, 2, 3].map(function (n) {
         var isCur = n === cur;
-        var has = isCur || !!slotData(n);
-        var sum = isCur
-          ? '第 ' + weekOf(S.day) + ' 周 · Day ' + S.day + ' · 排名第 ' + S.rank + ' 名 · 战绩 ' + S.wins + ' 胜-' + S.losses + ' 负 · 金钱 ¥' + S.money + ' · 阶段：' + slotStageName(S) + (S.testMode ? ' · 测试档' : '')
-          : slotSummaryText(n);
-        return '<div class="save-slot' + (isCur ? ' current' : '') + '">' +
-          '<div class="save-slot-head"><span>存档槽 ' + n + '</span>' + (isCur ? '<span class="save-slot-cur">当前槽</span>' : '') + '</div>' +
-          '<div class="save-slot-sum">' + sum + '</div>' +
+        var d = isCur ? S : slotData(n); // 当前槽读内存 S、其余槽读暂存解析（与旧摘要同一数据源）
+        var has = isCur || !!d;
+        var body = d
+          ? '<div class="save-slot-chips">' +
+            '<span class="sv-chip"><i>进度</i>第 ' + weekOf(d.day) + ' 周 · Day ' + d.day + '</span>' +
+            '<span class="sv-chip"><i>排名</i>第 ' + (isCur ? S.rank : (d.rank || 50)) + ' 名</span>' +
+            '<span class="sv-chip"><i>战绩</i>' + (d.wins || 0) + ' 胜 · ' + (d.losses || 0) + ' 负</span>' +
+            '<span class="sv-chip"><i>金钱</i>¥' + (d.money || 0) + '</span>' +
+            '<span class="sv-chip"><i>阶段</i>' + slotStageName(d) + '</span>' +
+            (d.testMode ? '<span class="sv-chip test">测试档</span>' : '') +
+            '</div>'
+          : '<div class="save-slot-empty">空槽位 · 还没有存档</div>';
+        return '<div class="save-slot' + (isCur ? ' current' : '') + (has ? '' : ' empty') + '">' +
+          '<div class="save-slot-head"><span class="save-slot-name"><span class="save-slot-no">SLOT ' + n + '</span>存档槽 ' + n + '</span>' + (isCur ? '<span class="save-slot-cur">当前槽</span>' : '') + '</div>' +
+          body +
           (isCur
             ? '<div class="save-slot-btns"><span class="save-slot-auto">当前进度自动保存在此槽</span></div>'
             : '<div class="save-slot-btns">' +
-              '<button data-slot-switch="' + n + '"' + (locked || !has ? ' disabled' : '') + '>读取</button>' +
-              '<button data-slot-copy="' + n + '"' + (locked ? ' disabled' : '') + '>覆盖保存（存入当前进度）</button>' +
-              '<button data-slot-delete="' + n + '"' + (locked || !has ? ' disabled' : '') + '>删除</button>' +
+              '<button class="sv-btn-load" data-slot-switch="' + n + '"' + (locked || !has ? ' disabled' : '') + '>读取</button>' +
+              '<button class="sv-btn-copy" data-slot-copy="' + n + '"' + (locked ? ' disabled' : '') + '>覆盖保存（存入当前进度）</button>' +
+              '<button class="sv-btn-del" data-slot-delete="' + n + '"' + (locked || !has ? ' disabled' : '') + '>删除</button>' +
               '</div>') +
           '</div>';
       }).join('');
@@ -828,6 +903,7 @@
           $('outList').classList.remove('open');
           renderShop();
           showScene('shop');
+          maybeTip('shop');
           render();
         }
       });
@@ -891,9 +967,9 @@
     }
     function gotoScene(name) { // 场景导航统一入口：各屏的既有守卫/流程在这里分发
       if (name === 'daily') { shopSession = false; showScene('daily'); }
-      else if (name === 'train') { renderPlan(); showScene('train'); }
+      else if (name === 'train') { renderPlan(); showScene('train'); maybeTip('train'); }
       else if (name === 'shop') enterShopFlow();
-      else if (name === 'match') { shopSession = false; showScene('match'); }
+      else if (name === 'match') { shopSession = false; showScene('match'); maybeTip('match'); }
       else if (name === 'status') openStatus();
       else if (name === 'gallery') openGallery();
       else if (name === 'saves') openSaveSlots();
@@ -912,6 +988,9 @@
         b.setAttribute('aria-expanded', String(!folded));
       });
     });
+    /* 框架重构二期：据点二级档案面板（属性/生涯/日志）开合——只切视觉类，内容与渲染逻辑不动 */
+    $('btnHubDetail').addEventListener('click', function () { $('dailyView').classList.add('sheet-open'); });
+    $('btnHubSheetClose').addEventListener('click', function () { $('dailyView').classList.remove('sheet-open'); });
     $('btnTrain').addEventListener('click', function () { gotoScene('train'); }); // 界面架构批：训练改为独立屏
     $('btnOut').addEventListener('click', function () { closeSubLists('outList'); $('outList').classList.toggle('open'); setScene($('outList').classList.contains('open') ? 'street' : 'gym'); }); // A1：外出展开切街道
     Array.prototype.forEach.call(document.querySelectorAll('[data-out]'), function (b) {
@@ -974,6 +1053,12 @@
       });
     });
     $('btnStatus').addEventListener('click', openStatus);
+    $('btnHudMore').addEventListener('click', function () { // 三期遗留毛边：窄屏 HUD 展开/收起（体力/名声/影响力/排名/心态/右侧入口在展开区）
+      var tb = document.querySelector('.topbar');
+      var open = tb.classList.toggle('tb-open');
+      this.textContent = open ? '收起 ▴' : '展开 ▾';
+      this.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
     $('btnBackDaily').addEventListener('click', closeStatus);
     Array.prototype.forEach.call(document.querySelectorAll('[data-app-dim]'), function (b) {
       b.addEventListener('click', function () { setAppearance(b.getAttribute('data-app-dim'), b.getAttribute('data-app-val')); });
@@ -994,20 +1079,39 @@
     $('btnRest').addEventListener('click', confirmRest);
     $('btnSleep').addEventListener('click', confirmSleep);
     $('btnMatch').addEventListener('click', confirmMatch);
-    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); setScene('gym'); }); // A1：取消赛前弹窗复位拳馆
+    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); nextBattlePractice = false; setScene('gym'); }); // A1：取消赛前弹窗复位拳馆；新手期重构：取消练习赛模式选择须清练习标记，防误标下一场正式赛
+    /* 新手期重构：据点练习赛入口（startPractice 在 battle.js）/ 情境提示条关闭 / 设置·帮助区 */
+    $('btnPractice').addEventListener('click', function () { startPractice(); });
+    $('btnTipOk').addEventListener('click', hideTip);
+    $('btnSettingsHelp').addEventListener('click', function () { $('helpModal').classList.add('open'); });
+    $('btnResetTips').addEventListener('click', function () {
+      tutorialState().tips = [];
+      save();
+      toast('新手提示已重置：下次进入训练 / 商店 / 比赛 / 状态时会重新提示');
+    });
     Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
       b.addEventListener('click', function () {
         var m = b.getAttribute('data-mode');
         $('modeModal').classList.remove('open');
-        if (m === 'manual') {
-          keysCtx = 'pre';
-          $('btnKeysMain').textContent = '开始战斗';
-          prepKeysModal();
-          $('keysModal').classList.add('open');
-        } else if (m === 'auto') startBattle('auto');
+        // 框架重构一期：手动/自动先进入开战准备层（对手卡＋规则＋开始按钮），点了才开战；模拟跳过沿用原路径
+        if (m === 'manual' || m === 'auto') openBattleReady(m);
         else simulateBattle();
       });
     });
+    /* 框架重构一期：准备层按钮与实况日志抽屉 */
+    $('btnBattleStart').addEventListener('click', function () { startBattle(readyMode); });
+    $('btnReadyKeys').addEventListener('click', function () {
+      keysCtx = 'pre';
+      $('btnKeysMain').textContent = '开始战斗';
+      prepKeysModal();
+      $('keysModal').classList.add('open');
+    });
+    $('btnReadyBack').addEventListener('click', function () {
+      $('battleReady').hidden = true;
+      $('modeModal').classList.add('open'); // 回到模式选择（pendingFoe 不变，不重新抽对手）
+    });
+    $('btnLogDrawer').addEventListener('click', function () { $('logDrawer').classList.toggle('open'); });
+    $('btnLogClose').addEventListener('click', function () { $('logDrawer').classList.remove('open'); });
     $('btnKeysMain').addEventListener('click', function () {
       $('keysModal').classList.remove('open');
       if (keysCtx === 'pre') startBattle('manual');
@@ -1066,7 +1170,9 @@
         toast('下回合战术：' + BREAK_TACTICS[B.nextRoundMod].name);
       });
     });
-    $('btnDeathToggle').addEventListener('click', function () {
+    /* 第一批整改·调试入口下架：TKO死战开关按钮已从出货界面移除（S.deathFight 字段与判定逻辑保留，默认关）。 */
+    var deathToggleEl = $('btnDeathToggle');
+    if (deathToggleEl) deathToggleEl.addEventListener('click', function () {
       S.deathFight = !S.deathFight;
       save(); render();
       toast(S.deathFight ? 'TKO死战：开——第3次击倒时自动死战到底（伤害+10%，再倒判负，赛后伤病+10）' : 'TKO死战：关——第3次击倒时直接判负');
@@ -1209,8 +1315,9 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
       toast('主存档已恢复');
     }
-    $('btnTestSave').addEventListener('click', confirmStartTest);
-    $('btnRestoreSave').addEventListener('click', confirmRestoreMain);
+    /* 第一批整改·调试入口下架：测试档 / 恢复主存档按钮已从出货界面移除（startTestSave / restoreMainSave 函数保留，仅内部与测试可达，界面不可见、不可达）。 */
+    var testSaveEl = $('btnTestSave'); if (testSaveEl) testSaveEl.addEventListener('click', confirmStartTest);
+    var restoreSaveEl = $('btnRestoreSave'); if (restoreSaveEl) restoreSaveEl.addEventListener('click', confirmRestoreMain);
     $('btnSaves').addEventListener('click', openSaveSlots);
 
     /* ================= 界面架构批：标题 / 导航 / 画廊 / 设置 绑定 ================= */
@@ -1228,6 +1335,9 @@
     $('btnSettingsBack').addEventListener('click', backFromUtility);
     Array.prototype.forEach.call(document.querySelectorAll('[data-galtab]'), function (b) {
       b.addEventListener('click', function () { openGallery(b.getAttribute('data-galtab')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-statab]'), function (b) {
+      b.addEventListener('click', function () { setStatusTab(b.getAttribute('data-statab')); });
     });
     $('btnImgClose').addEventListener('click', function () { $('imgModal').classList.remove('open'); });
     $('imgModal').addEventListener('click', function (e) { if (e.target === this) $('imgModal').classList.remove('open'); });

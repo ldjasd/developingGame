@@ -86,6 +86,10 @@ async function suite(label, dir) {
     ok('全局状态 S 已建立', !!w.S && typeof w.S === 'object');
     ok('新档玩家排名 = 50', w.S.rank === 50, w.S.rank);
     ok('新档 story 已初始化且未走序章', !!w.S.story && w.S.story.prologueDone === false, w.S.story && w.S.story.prologueDone);
+    ok('新档 tutorial 初始化（practiceDone=false / tips 空数组 / goalDone=false / trainings=0）',
+      !!w.S.tutorial && w.S.tutorial.practiceDone === false && Array.isArray(w.S.tutorial.tips) && w.S.tutorial.tips.length === 0 &&
+      w.S.tutorial.goalDone === false && w.S.tutorial.trainings === 0,
+      w.S.tutorial && JSON.stringify(w.S.tutorial));
     ok('新档成就初始化（achievements 为空对象 / koWins=0 / ACHIEVEMENTS ≥20 / checkAchievements 为函数）',
       !!w.S.achievements && typeof w.S.achievements === 'object' && !Array.isArray(w.S.achievements) && Object.keys(w.S.achievements).length === 0 &&
       w.S.koWins === 0 && w.eval('ACHIEVEMENTS.length') >= 20 && w.eval('typeof checkAchievements') === 'function');
@@ -119,6 +123,21 @@ async function suite(label, dir) {
       w.document.getElementById('titleView').style.display === 'none' &&
       w.document.getElementById('storyModal').classList.contains('open'));
     if (w.document.getElementById('storyModal').classList.contains('open')) w.document.getElementById('btnStorySkip').click();
+    // 【新手期重构】序章后不再自动弹玩法说明墙：改为练习赛邀请（storyModal 内的梢姐邀请页）。断言邀请形态后选「先自己逛逛」回到自由操作前提（与旧流程关掉说明墙等价）。
+    ok('序章后是练习赛邀请而非说明墙（helpModal 未打开 / storyTitle 含「练习赛」/ 邀请按钮就位）',
+      !w.document.getElementById('helpModal').classList.contains('open') &&
+      (w.document.getElementById('storyTitle').textContent || '').indexOf('练习赛') >= 0 &&
+      [...w.document.querySelectorAll('#storyChoices button')].some((b) => (b.textContent || '').indexOf('上台') >= 0),
+      w.document.getElementById('storyTitle').textContent);
+    ok('据点首周目标行与练习赛按钮已出线（hubGoal 可见且含「首周目标」/ btnPractice 显示）',
+      w.document.getElementById('hubGoal').hidden === false &&
+      (w.document.getElementById('hubGoal').textContent || '').indexOf('首周目标') >= 0 &&
+      w.document.getElementById('btnPractice').style.display !== 'none',
+      w.document.getElementById('hubGoal').textContent);
+    {
+      const deferBtn = [...w.document.querySelectorAll('#storyChoices button')].find((b) => (b.textContent || '').indexOf('先自己逛逛') >= 0);
+      if (deferBtn) deferBtn.click();
+    }
     if (w.document.getElementById('helpModal').classList.contains('open')) w.document.getElementById('btnCloseHelp').click();
     await sleep(50);
     if (jsdomErrors.length) console.log('  (jsdom 诊断信息，不计失败)', jsdomErrors.slice(0, 3));
@@ -196,6 +215,50 @@ async function suite(label, dir) {
       (w.document.getElementById('modeFoeLine').textContent || '').indexOf('「') > 0,
       w.document.getElementById('modeFoeLine').textContent);
     w.document.getElementById('modeModal').classList.remove('open');
+
+    // 新手期重构：练习赛全链（startPractice → 模式弹窗 → 准备层 → 开战 → 强制终局 → 专属轻量结算）
+    w.eval('startPractice();');
+    ok('练习赛模式弹窗（对手为林小葵 opp_rookie / 标题为练习赛 / 模拟按钮隐藏 / practicePending 仍成立）',
+      w.eval('pendingFoe && pendingFoe.key') === 'opp_rookie' && w.eval('pendingFoe.practice') === true &&
+      (w.document.getElementById('modeTitle').textContent || '').indexOf('练习赛') >= 0 &&
+      w.document.querySelector('#modeModal [data-mode="sim"]').style.display === 'none' &&
+      w.eval('practicePending()') === true,
+      w.eval('pendingFoe && pendingFoe.key'));
+    w.document.querySelector('#modeModal [data-mode="auto"]').click();
+    ok('练习赛准备层（battleReady 显示 / brFoeMeta 含【练习赛】标记）',
+      w.document.getElementById('battleReady').hidden === false &&
+      (w.document.getElementById('brFoeMeta').innerHTML || '').indexOf('练习赛') >= 0,
+      w.document.getElementById('brFoeMeta').innerHTML);
+    {
+      const preMoney = w.S.money, preInj = w.S.injury, preStam = w.S.stamina, preAp = w.S.ap;
+      w.document.getElementById('btnBattleStart').click();
+      ok('练习赛开战（B.practice=true / 对手为陪练版 / lastMatchDay 未写）',
+        w.eval('B && B.practice') === true && w.eval('B.foe.key') === 'opp_rookie' && w.S.lastMatchDay === 0,
+        w.eval('B && String(B.practice)'));
+      w.eval("B.me.used.straight = 5; B.foe.hp = 0; finishBattle();");
+      ok('练习赛结算不计账（战绩 0 / 金钱·伤病·体力·AP 全不变 / 名鉴未点亮 / 粉丝事件门禁仍锁：storyGateOk(daily_15)=false）',
+        w.S.wins + w.S.losses === 0 && w.S.money === preMoney && w.S.injury === preInj && w.S.stamina === preStam && w.S.ap === preAp &&
+        w.S.facedFoes.length === 0 && w.eval("storyGateOk('daily_15')") === false,
+        `${w.S.wins}/${w.S.losses}/${w.S.money}/${w.S.injury}/${w.S.stamina}`);
+      ok('练习赛收益入账（practiceDone=true / 直拳经验 +10 / 结算标题含练习赛）',
+        w.S.tutorial.practiceDone === true && w.S.punchExp.straight === 10 &&
+        (w.document.getElementById('settleTitle').textContent || '').indexOf('练习赛') >= 0,
+        `${w.S.punchExp.straight}/${w.document.getElementById('settleTitle').textContent}`);
+      await sleep(2300);
+      ok('练习赛结算窗弹出', w.document.getElementById('settleModal').classList.contains('open'));
+      w.document.getElementById('btnSettleOk').click();
+      await sleep(30);
+    }
+    // 新手期重构：情境提示（首次进训练屏弹一句话并记档，点「知道了」收起）
+    w.eval("gotoScene('train');");
+    ok('情境提示·训练（tipBar 显示且文案含「训练」要点 / tips 已记 train）',
+      w.document.getElementById('tipBar').hidden === false &&
+      (w.document.getElementById('tipText').textContent || '').indexOf('凑满 5 点') >= 0 &&
+      w.S.tutorial.tips.indexOf('train') >= 0,
+      w.document.getElementById('tipText').textContent);
+    w.document.getElementById('btnTipOk').click();
+    w.eval("gotoScene('daily');");
+    ok('情境提示已收起（tipBar hidden）', w.document.getElementById('tipBar').hidden === true);
 
     // 战斗全局就位（battle 区段拆分前补的断言：手动/自动/模拟三模式入口与战斗主循环）
     ok('战斗全局就位（startBattle/tick/manualTick/renderBattle/finishBattle/playerPunch/tryAttack/dealDamage 为函数，MPUNCH 8 拳种）',
@@ -478,6 +541,18 @@ async function suite(label, dir) {
       oldLoad.w.S.logs.slice(0, 3).map((l) => l.msg));
     oldLoad.w.close();
 
+    // 新手期重构·老存档兼容：删掉 tutorial 字段的存档 → 读档自动「毕业」，绝不触发练习赛/首周目标/情境提示
+    const tutSeedObj = JSON.parse(saved);
+    delete tutSeedObj.tutorial;
+    const tutLoad = await loadPage(origin, JSON.stringify(tutSeedObj));
+    ok('老存档无 tutorial 字段自动毕业（practiceDone/goalDone=true / practicePending=false / 练习按钮隐藏 / 首周目标行隐藏）',
+      tutLoad.w.S.tutorial.practiceDone === true && tutLoad.w.S.tutorial.goalDone === true &&
+      tutLoad.w.eval('practicePending()') === false &&
+      tutLoad.w.document.getElementById('btnPractice').style.display === 'none' &&
+      tutLoad.w.document.getElementById('hubGoal').hidden === true,
+      tutLoad.w.S.tutorial && JSON.stringify(tutLoad.w.S.tutorial));
+    tutLoad.w.close();
+
     // Phase 9 多存档槽：老档自动成槽 1 → 切空槽 2 得新档 → 切回槽 1 无损 → 复制到槽 3 并切过去 → meta 重读保持
     const META_KEY = 'boxing-phase1-save-v1-meta';
     const SLOT2_KEY = 'boxing-phase1-save-v1-slot2';
@@ -586,6 +661,28 @@ async function suite(label, dir) {
       archRe.w.document.getElementById('setMusicVol').value === '35',
       archRe.w.eval('SETTINGS.musicVol') + '/' + archRe.w.eval('SETTINGS.sfxOn'));
     archRe.w.close();
+
+    // 【第一批整改】调试入口下架（顶栏不得出现测试档 / TKO死战 / 恢复主存档按钮）＋日常事件进度门禁（S5）
+    const fix = await loadPage(origin, saved);
+    ok('调试入口下架：顶栏无测试档 / TKO死战 / 恢复主存档按钮（功能函数保留）',
+      !fix.w.document.getElementById('btnTestSave') && !fix.w.document.getElementById('btnDeathToggle') && !fix.w.document.getElementById('btnRestoreSave') &&
+      typeof fix.w.eval('startTestSave') === 'function' && typeof fix.w.eval('restoreMainSave') === 'function');
+    fix.w.eval(`(function () {
+      storyState();
+      S.story.seenEvents = S.story.seenEvents.filter(function (id) { return id !== 'daily_6' && id !== 'daily_15'; });
+      DAILY_EVENT_IDS.forEach(function (id) { if (id !== 'daily_6' && id !== 'daily_15' && S.story.seenEvents.indexOf(id) < 0) S.story.seenEvents.push(id); });
+      storyQueue.length = 0;
+      var sm = document.getElementById('storyModal'); if (sm) sm.classList.remove('open');
+      S.wins = 0; S.losses = 0;
+    })()`);
+    const gatePreRet = fix.w.eval('triggerDailyEvent(1)');
+    const gatePreSeen = fix.w.eval("S.story.seenEvents.indexOf('daily_15') >= 0 || S.story.seenEvents.indexOf('daily_6') >= 0");
+    ok('事件门禁：0 场比赛时粉丝签名 / 读者来信（needMatch）不触发', gatePreRet === false && !gatePreSeen, `${gatePreRet}/${gatePreSeen}`);
+    fix.w.eval('S.wins = 1;');
+    const gatePostRet = fix.w.eval('triggerDailyEvent(1)');
+    const gatePostSeen = fix.w.eval("S.story.seenEvents.indexOf('daily_15') >= 0 || S.story.seenEvents.indexOf('daily_6') >= 0");
+    ok('事件门禁：打过首场后粉丝签名 / 读者来信可正常触发', gatePostRet === true && gatePostSeen, `${gatePostRet}/${gatePostSeen}`);
+    fix.w.close();
   } finally {
     srv.close();
   }

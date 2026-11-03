@@ -67,9 +67,85 @@
     }
 
     var pendingFoe = null;
-    function openModeModal() {
-      pendingFoe = makeFoe();
+    /* 框架重构二期：比赛场景 VS 对手卡的预览对手（按天缓存）——比赛日首次需要时抽定，
+       当天报名直接复用同一人，保证对手卡展示的就是将要交手的对手（抽取规则/概率与 makeFoe 原路径一致，
+       仅把「抽定时刻」从点报名提前到比赛日当天首次呈现）；睡过比赛日或打完即按天失效。 */
+    var matchPreviewDay = 0, matchPreviewFoe = null;
+    function previewFoeForToday() {
+      if (!isMatchDay(S.day) || S.lastMatchDay === S.day) return null;
+      if (matchPreviewFoe && matchPreviewDay === S.day) {
+        if (S.scoutedForDay === S.day && !matchPreviewFoe.weakness) {
+          matchPreviewFoe.weakness = PUNCH_KEYS[Math.floor(Math.random() * PUNCH_KEYS.length)];
+        }
+        return matchPreviewFoe;
+      }
+      var f = makeFoe();
       if (S.scoutedForDay === S.day) { // 录像研究侦察到的弱点
+        f.weakness = PUNCH_KEYS[Math.floor(Math.random() * PUNCH_KEYS.length)];
+      }
+      matchPreviewDay = S.day; matchPreviewFoe = f;
+      return f;
+    }
+    /* ================= 新手期重构：练习赛（Day 1 教学战） =================
+       口径（NEWBIE_FLOW.md 有全文）：序章后由梢姐邀请、或据点金色按钮进入；对手是同期队友林小葵的陪练放水版
+       （属性约 7、熟练度 0，走既有战斗引擎与准备层）；胜负不计战绩/连胜、不动排名与对手 rating、不发奖金、
+       不触发首胜/首败等剧情、不点亮名鉴、无任何伤病（随机伤/击倒伤/KO 伤全免）、体力不清空、绷带不消耗、
+       不占用比赛日（lastMatchDay 不写）；唯一收益是出拳熟练度经验（与正式赛同公式）＋获胜心态 +5。
+       事件门禁口径：练习赛不写 wins/losses，故 storyGateOk 的「打过比赛」不被练习赛解锁——粉丝/名气类事件仍须正式首战后才触发。 */
+    var nextBattlePractice = false; // 下一场 startBattle/（模拟已禁用）是否为练习赛：startPractice 置位，startBattle 消费，openModeModal/btnCancelMode 清除防误标
+    function makePracticeFoe() {
+      ensureRoster();
+      var member = null;
+      S.roster.forEach(function (m) { if (m.key === 'opp_rookie') member = m; });
+      if (!member) member = S.roster.filter(function (m) { return m.rank > 0; })[0]; // 兜底：名册异常时取任意在榜成员的壳
+      var attrs = { power: 7, endurance: 8, will: 7, speed: 7, accuracy: 7, footwork: 7, defense: 6, technique: 6 }; // 陪练放水：全面低于新人初始 10，赢面大但不是木桩
+      var prof = {}; PUNCH_KEYS.forEach(function (k) { prof[k] = 0; });
+      return {
+        name: member.name, key: member.key,
+        img: 'assets/opponents/' + member.key + '.webp',
+        isRival: false, isTeammate: true,
+        rank: member.rank,
+        attrs: attrs, prof: prof,
+        hpMax: 100 + attrs.endurance * 14, hp: 100 + attrs.endurance * 14,
+        stam: 100, hits: 0, dmg: 0, used: {}, tactic: 'attack', speechBuff: false,
+        style: member.style, styleIntensity: 0.55,
+        practice: true
+      };
+    }
+    function openPracticeIntro() {
+      if (!practicePending()) return;
+      storyState();
+      $('storyTitle').textContent = '入行第一课 · 练习赛';
+      $('storySkip').style.display = 'none';
+      storySet(STORY_CHARS.senior.img, '藤原梢', '前辈 · 退役拳手',
+        '说明先放一边——拳击是打出来的，不是看会的。台上有个跟你同期进馆的丫头，林小葵。先跟她打一场练习赛：不计战绩、不动排名，输了也不留伤。把擂台的感觉找回来，比看十页说明都管用。');
+      storyBtns([
+        { label: '上台，跟她打一场', fn: function () { $('storyModal').classList.remove('open'); startPractice(); } },
+        { label: '先自己逛逛（据点里随时能打）', cls: 'secondary-btn', fn: function () { $('storyModal').classList.remove('open'); toast('练习赛在据点的金色按钮里，想打随时来'); showNextPendingModal(); } }
+      ]);
+      $('storyModal').classList.add('open');
+    }
+    function startPractice() {
+      if (!practicePending()) return;
+      pendingFoe = makePracticeFoe();
+      nextBattlePractice = true;
+      var a = pendingFoe.attrs;
+      var mt = $('modeTitle'); if (mt) mt.textContent = '练习赛 · 教学战';
+      var mn = $('modeNote'); if (mn) mn.innerHTML = '陪练对手：<b id="modeFoeInfo">—</b><br />练习赛<b>不计战绩、不动排名、不会受伤</b>，只有出拳熟练度经验照常涨。推荐<b>手动操作</b>，第一次亲手打一打。';
+      $('modeFoeInfo').textContent = pendingFoe.name + '（同期队友 · 陪练放水版｜力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique + '）';
+      var mfi = $('modeFoeImg'); if (mfi) { mfi.src = pendingFoe.img; mfi.alt = pendingFoe.name + ' 的立绘'; }
+      var mfl = $('modeFoeLine'); if (mfl) mfl.textContent = pendingFoe.name + '：「' + foeLine(pendingFoe.key, 'pre') + '」';
+      var simBtn = document.querySelector('#modeModal [data-mode="sim"]'); if (simBtn) simBtn.style.display = 'none'; // 练习赛是教学战，不给模拟跳过（正式赛打开模式弹窗时恢复）
+      $('modeModal').classList.add('open');
+      setScene('ring_wide');
+    }
+    function openModeModal() {
+      nextBattlePractice = false; // 正式报名路径永不带练习标记（防练习模式弹窗取消后误标）
+      var mt0 = $('modeTitle'); if (mt0) mt0.textContent = '选择战斗模式';
+      var mn0 = $('modeNote'); if (mn0) mn0.innerHTML = '本场对手：<b id="modeFoeInfo">—</b><br />重要比赛推荐<b>手动操作</b>，亲自上场把握胜负。';
+      var simBtn0 = document.querySelector('#modeModal [data-mode="sim"]'); if (simBtn0) simBtn0.style.display = '';
+      pendingFoe = previewFoeForToday() || makeFoe();
+      if (S.scoutedForDay === S.day && !pendingFoe.weakness) { // 录像研究侦察到的弱点（预览已定则不重掷，保证对手卡与实战一致）
         pendingFoe.weakness = PUNCH_KEYS[Math.floor(Math.random() * PUNCH_KEYS.length)];
       }
       var a = pendingFoe.attrs;
@@ -83,9 +159,40 @@
       setScene('ring_wide'); // A1/B1：赛前弹窗背景切擂台全景
     }
 
+    /* 框架重构一期：对手立绘去底版路径（assets/opponents_alpha/，由 scripts/make_alpha.py 生成；
+       名鉴/剧情/赛前弹窗仍用原图，只有战斗舞台与准备层用去底版贴擂台） */
+    function foeAlphaSrc(src) {
+      return src ? src.replace('assets/opponents/', 'assets/opponents_alpha/') : src;
+    }
+
+    /* 框架重构一期：开战准备态（选完模式先到准备层：双方对位卡＋规则一句话，点「开始战斗」才调 startBattle；
+       准备层不建战斗状态、不起计时器，冒烟/平衡脚本直调 startBattle 的路径不受影响） */
+    var readyMode = 'manual';
+    function openBattleReady(mode) {
+      readyMode = mode;
+      var foe = pendingFoe;
+      if (!foe) return;
+      var a = foe.attrs;
+      var fi = $('brFoeImg'); if (fi) { fi.src = foeAlphaSrc(foe.img) || ''; fi.alt = foe.name + ' 的立绘'; }
+      var mi = $('brMeImg'); if (mi && !mi.getAttribute('src')) mi.src = POSE_DIR + POSES.guard;
+      $('brFoeName').textContent = foe.name;
+      $('brFoeMeta').innerHTML = '国内排名第 ' + foe.rank + ' 名 · 风格：' + FOE_STYLES[foe.style].name + '<br>力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique +
+        (foe.isRival ? '<br>【宿敌战】赛后会有专属对白' : '') +
+        (foe.weakness ? '<br>弱点已侦察：' + PUNCHES[foe.weakness].name + '方向防守薄弱（伤害 +30%）' : '');
+      $('brMeMeta').innerHTML = '国内排名第 ' + S.rank + ' 名<br>力量 ' + effAttrs().power + ' · 速度 ' + effAttrs().speed + ' · 耐久 ' + effAttrs().endurance + ' · 技术 ' + effAttrs().technique;
+      if (foe.practice) $('brFoeMeta').innerHTML += '<br>【练习赛】不计战绩 · 不动排名 · 不会受伤，只有经验照常涨';
+      $('brFoeLine').textContent = foe.name + '：「' + foeLine(foe.key, 'pre') + '」';
+      $('brControls').textContent = mode === 'manual'
+        ? (isTouch ? '操作：左侧摇杆移动，右侧按钮出拳（前手/后手/上勾/击腹/摆拳），按住格挡，闪避取摇杆方向。' : '操作：A/D 移动、W/S 站位、J 前手、K 后手、U 上勾、B 击腹、空格格挡、Shift+方向闪避；开打后 H 键可再看键位。')
+        : '自动观看：战斗自动进行，你可以在下方切换战术倾向、用即时指令（组合拳/铁壁/搂抱）左右战局，也可调速。';
+      $('btnReadyKeys').style.display = mode === 'manual' ? '' : 'none';
+      $('battleReady').hidden = false;
+    }
+
     function startBattle(mode) {
       B = {
         mode: mode,
+        practice: nextBattlePractice, // 新手期重构：练习赛标记（结算走 settlePractice 轻量路径，见 settleNow 分流）
         me: myFighter(), foe: pendingFoe || makeFoe(),
         round: 1, timeLeft: ROUND_SECONDS, phase: 'fight', // fight | break | over
         breakLeft: 0, treated: false, spoke: false,
@@ -108,13 +215,14 @@
         man: { mX: 18, fX: 66, mY: 0, fY: 0, punchReady: {}, foePunchT: 1.4, foeMoveT: 0, foeDir: 0, dodgeUntil: 0, dodgeReadyAt: 0, lastDist: '', lastDodgeCat: 'back' }
       };
       pendingFoe = null;
+      nextBattlePractice = false; // 练习标记已被本场消费
       keysDown = {};
       touchBlock = false;
       $('meNameLabel').textContent = S.name + '（你 · 第 ' + S.rank + ' 名）';
-      // 绷带：本场生效，赛后伤病概率减半
-      B.bandage = !!S.buffs.bandage; S.buffs.bandage = false;
-      // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留
-      S.lastMatchDay = S.day;
+      // 绷带：本场生效，赛后伤病概率减半（练习赛不消耗绷带——它本来就不会产生伤病）
+      B.bandage = !B.practice && !!S.buffs.bandage; if (!B.practice) S.buffs.bandage = false;
+      // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留（练习赛不是正式比赛，不写 lastMatchDay）
+      if (!B.practice) S.lastMatchDay = S.day;
       // 心态对比赛的影响（框架）：紧张（20~39）前两回合全属性 −5%；疲劳（0~19）体力消耗 +10%
       B.mindTense = S.mind >= 20 && S.mind < 40;
       B.mindStamMul = S.mind < 20 ? 1.1 : 1;
@@ -124,12 +232,14 @@
       // A2 第二步：我方战斗内改用姿势帧（抱架图起手，动作中按事件切换姿势）；对手取角色池立绘
       preloadPoses();
       var fmi = $('figMeImg'); if (fmi) { fmi.src = POSE_DIR + POSES.guard; fmi.style.objectPosition = POSE_FOCUS.guard; }
-      var ffi = $('figFoeImg'); if (ffi) ffi.src = B.foe.img || '';
+      var ffi = $('figFoeImg'); if (ffi) ffi.src = foeAlphaSrc(B.foe.img) || ''; // 框架重构一期：舞台用去底立绘
       $('foeName').textContent = B.foe.name + '（第 ' + B.foe.rank + ' 名）';
       var fp = $('foePortrait'); if (fp) { fp.src = B.foe.img || ''; fp.alt = B.foe.name + ' 的立绘'; }
       var stb = $('foeStyleBadge');
       if (stb && B.foe.style) { var stDef = FOE_STYLES[B.foe.style]; stb.textContent = stDef.name; stb.className = 'style-badge ' + stDef.cls; stb.style.display = ''; }
       $('battleLog').innerHTML = '';
+      var brEl = $('battleReady'); if (brEl) brEl.hidden = true; // 框架重构一期：开战即收起准备层（直调 startBattle 时同样无副作用）
+      var ldEl = $('logDrawer'); if (ldEl) ldEl.classList.remove('open');
       $('breakPanel').classList.remove('open');
       $('downOverlay').classList.remove('go');
       $('figMe').classList.remove('broken-guard'); $('figFoe').classList.remove('broken-guard');
@@ -153,7 +263,7 @@
       var foeStyleTxt = B.foe.style ? FOE_STYLES[B.foe.style].name : '';
       if (mode === 'manual') {
         blog('比赛开始！第 1 回合。对手「' + B.foe.name + '」是' + foeStyleTxt + '（战术：' + TACTICS[B.foe.tactic].name + '）。', 'dim');
-        blog('连贯命中攒连击加伤害；闪避后 1 秒内出拳是反击；对手格挡时击腹可破防，破防接直拳。KO 看重创槽：有效命中积累（刺拳+' + PUNCH_KO.jab + '/直拳+' + PUNCH_KO.straight + '/上勾·摆拳+' + PUNCH_KO.upper + '/击腹+' + PUNCH_KO.body + '，格挡只积一半，每秒衰减' + KO_DECAY + '），满100直接KO；单次伤害≥当前HP 30%也直接KO；单次25%~30%击倒读秒，本回合3次击倒触发TKO判定（按顶部「TKO死战」设置：' + (S.deathFight ? '开，自动死战' : '关，直接判负') + '）。', 'dim');
+        blog('连贯命中攒连击加伤害；闪避后 1 秒内出拳是反击；对手格挡时击腹可破防，破防接直拳。KO 看重创槽：有效命中按「伤害占对手当前 HP 的比例」积累（打得越重、对方血越低，积得越多；上勾/摆拳权重最高，被格挡只积一半，每秒衰减' + KO_DECAY + '），满100直接KO；单次伤害≥当前HP 30%也直接KO；单次25%~30%击倒读秒，本回合3次击倒触发TKO判定（' + (S.deathFight ? '死战：自动死战到底' : '直接判负') + '）。', 'dim');
         blog(isTouch
           ? '手动操作：左手摇杆移动，右手大按钮出前手/后手拳，金边按钮可直接出摆拳/上勾/击腹；格挡按住生效（出现护盾弧），闪避/垫步点按触发。'
           : '手动操作：A/D 移动贴近对手，J/K 出拳，U 直接上勾、B 直接击腹，空格格挡，Shift+方向闪避。按 H 看键位。', 'dim');
@@ -388,7 +498,7 @@
       fig.classList.add('down');
       if (defIsMe) setMePose('hit', 0); // 击倒读秒期间定格受击姿势，配合 .down 旋转倒地
       $('downWho').textContent = (defIsMe ? '你被击倒了！' : '对手被击倒！') + '（本回合第 ' + downs + ' 次）';
-      $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——读秒后按「TKO死战」设置判定（' + (S.deathFight ? '开：自动死战' : '关：直接判负') + '）' : '读秒中…站起来就能继续，HP 回到至少 20%';
+      $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——TKO 判定（' + (S.deathFight ? '死战：继续打到底' : '直接判负') + '）' : '读秒中…站起来就能继续，HP 回到至少 20%';
       $('downCount').textContent = '3';
       $('downOverlay').classList.add('go');
       SFX.heavy(); shakeRing(true);
@@ -618,9 +728,9 @@
       if (!B.roundStats) B.roundStats = freshRoundStats();
       if (isMeAttacking) { B.roundStats.meHits += 1; B.roundStats.meDmg += dmg; if (comboNow > B.roundStats.meMaxCombo) B.roundStats.meMaxCombo = comboNow; if (key === 'body') B.meBodyHits = (B.meBodyHits || 0) + 1; }
       else { B.roundStats.foeHits += 1; B.roundStats.foeDmg += dmg; if (comboNow > B.roundStats.foeMaxCombo) B.roundStats.foeMaxCombo = comboNow; if (key === 'body') B.foeBodyHits = (B.foeBodyHits || 0) + 1; }
-      // KO 重创槽：有效命中积累，格挡命中只积一半，穿透格挡算全额
-      var koBase = PUNCH_KO[key] || 10;
-      var koAdd = (guarding && !pierce) ? Math.round(koBase / 2) : koBase;
+      // KO 重创槽：有效命中积累，格挡命中只积一半，穿透格挡算全额（积累量由 traumaGain 按曲线计算）
+      var koAdd = traumaGain(key, dmg, def, hpBefore, guarding && !pierce);
+      if (window.__hitLog) window.__hitLog.push([dmg, koAdd, key, (guarding && !pierce) ? 1 : 0]); // 测试埋点（trauma-ab 用，平时不存在该数组、零开销）
       var traumaAfter = 0;
       if (isMeAttacking) { B.foeTrauma = clamp((B.foeTrauma || 0) + koAdd, 0, 100); traumaAfter = B.foeTrauma; }
       else { B.meTrauma = clamp((B.meTrauma || 0) + koAdd, 0, 100); traumaAfter = B.meTrauma; }
@@ -642,7 +752,7 @@
       hitFx(figDef, heavy, crit);
       if (guarding && !pierce) SFX.block(); else if (heavy) SFX.heavy(); else SFX.light();
       figDef.classList.remove('hit'); void figDef.offsetWidth; figDef.classList.add('hit');
-      pop.textContent = (koTriggered ? 'KO! ' : '') + (counterBonus ? '反击! ' : '') + (brokeNow ? '破防! ' : '') + (crit ? '暴击! ' : '') + '-' + dmg + (comboNow >= 2 ? ' · ' + comboNow + '连击' : '') + ' · 重创+' + koAdd;
+      pop.textContent = (koTriggered ? 'KO! ' : '') + (counterBonus ? '反击! ' : '') + (brokeNow ? '破防! ' : '') + (crit ? '暴击! ' : '') + '-' + dmg + (comboNow >= 2 ? ' · ' + comboNow + '连击' : '') + ' · 重创+' + Math.round(koAdd);
       pop.className = 'dmg-pop' + (crit || counterBonus ? ' crit' : heavy ? ' heavy' : '');
       void pop.offsetWidth; pop.classList.add('show');
       // B2：连击计数演出——连击 ≥2 时在飘字上方挂「N 连击」小字，字号随连段放大，随飘字节奏弹出后自回收（只演出，不动判定）
@@ -665,7 +775,7 @@
         (pierce ? '（击腹穿透格挡 70%！' + (isMeAttacking ? '对手' : '你') + '破防 1.5 秒，格挡失效）' : guarding ? '（被格挡，大幅减伤，连击被打断）' : '') +
         (straightVsBroken ? '（破防中直拳 +20%！）' : '') + '。',
         isMeAttacking ? 'good' : 'bad');
-      if (koTriggered || traumaAfter >= 60) blog('重创值：' + (isMeAttacking ? '对手 ' + Math.round(traumaAfter) : '你 ' + Math.round(traumaAfter)) + ' / 100（+' + koAdd + (guarding && !pierce ? '，格挡只积一半' : '') + '）' + (koTriggered === 'trauma' ? '——重创槽满格，直接 KO！' : koTriggered === 'single' ? '——单次伤害达到当前 HP 的 30%，重击 KO！' : koTriggered === 'hp' ? '——HP 归零，KO！' : '，逼近 KO！'), koTriggered ? (isMeAttacking ? 'good' : 'bad') : 'dim');
+      if (koTriggered || traumaAfter >= 60) blog('重创值：' + (isMeAttacking ? '对手 ' + Math.round(traumaAfter) : '你 ' + Math.round(traumaAfter)) + ' / 100（+' + Math.round(koAdd) + (guarding && !pierce ? '，格挡只积一半' : '') + '）' + (koTriggered === 'trauma' ? '——重创槽满格，直接 KO！' : koTriggered === 'single' ? '——单次伤害达到当前 HP 的 30%，重击 KO！' : koTriggered === 'hp' ? '——HP 归零，KO！' : '，逼近 KO！'), koTriggered ? (isMeAttacking ? 'good' : 'bad') : 'dim');
       // 击倒判定：未触发 KO 时，单次 25%~30% 进读秒（≥30% 已在上方直接 KO）
       if (!koTriggered) startKnockdown(!isMeAttacking, dmg, hpBefore);
     }
@@ -854,8 +964,43 @@
       settleNow(win, how, isKO ? 2000 : 900);
     }
 
+    /* 新手期重构：练习赛专属轻量结算——只有出拳熟练度经验（同正式赛公式）与获胜心态 +5 入账；
+       不写 wins/losses/winStreak、不动排名与对手 rating、不发奖金/名声、不刷新影响力、不查阶段/成就、
+       不排首胜首败等剧情、不点亮名鉴、无伤病（随机伤 + 击倒/KO 附加伤全免）、体力不清空、不耗 AP。 */
+    function settlePractice(win, how, delay) {
+      var expGain = {};
+      PUNCH_KEYS.forEach(function (k) {
+        expGain[k] = (B.me.used[k] || 0) * 2;
+        if (expGain[k] > 0) addPunchExp(S, k, expGain[k]);
+      });
+      tutorialState().practiceDone = true;
+      if (win) changeMind(5);
+      var rows = '';
+      rows += '<tr><td>练习赛</td><td>不计入正式战绩（当前仍为 ' + S.wins + ' 胜 · ' + S.losses + ' 负），排名、影响力、奖金都不变</td></tr>';
+      rows += '<tr><td>伤病 / 体力</td><td>陪练点到为止：本场不产生任何伤病，体力也不清空，接着安排今天的日程就行</td></tr>';
+      PUNCH_KEYS.forEach(function (k) {
+        if (expGain[k] > 0) rows += '<tr><td>' + PUNCHES[k].name + '熟练度（出拳 ' + (B.me.used[k] || 0) + ' 次）</td><td>经验 +' + expGain[k] + '</td></tr>';
+      });
+      if (win) rows += '<tr><td>心态</td><td>+5（当前 ' + Math.round(S.mind) + ' · ' + mindTierName(S.mind) + '）——第一场赢了，哪怕只是练习赛</td></tr>';
+      rows += '<tr><td>下一步</td><td>每天 6 点行动点：训练变强、打工攒钱，第 7 天打第一场正式赛（据点顶部有首周目标）</td></tr>';
+      $('settleTable').innerHTML = rows;
+      $('settleTitle').textContent = '练习赛 · vs ' + B.foe.name;
+      var res = $('settleResult');
+      res.textContent = win ? '练习赛获胜' : '练习赛落败';
+      res.className = 'big-result ' + (win ? 'win' : 'lose');
+      $('settleDesc').textContent = how + '　——第一场打完了。擂台的感觉，找到了吗？';
+      var sfl = $('settleFoeLine'); if (sfl && B.foe) sfl.textContent = B.foe.name + '：「' + foeLine(B.foe.key, win ? 'lose' : 'win') + '」';
+      dailyLog('练习赛 vs ' + B.foe.name + '：' + how + '（教学战，不计战绩）。', win ? 'good' : 'dim');
+      setTimeout(function () {
+        $('settleModal').classList.add('open');
+        setScene('ring_corner');
+      }, delay || 900);
+      save();
+    }
+
     /* 结算（三种模式共用）：奖金、名声、熟练度经验、受伤、体力消耗 */
     function settleNow(win, how, delay) {
+      if (B.practice) { settlePractice(win, how, delay); return; } // 新手期重构：练习赛走轻量结算，其余一律不变
       var w = weekOf(S.day);
       var prizeFull = prizeForRank(w); // 基础奖金 × 排名加成 × 影响力加成（按赛前影响力档计算）
       var prize = win ? prizeFull : Math.floor(prizeFull / 2);
@@ -1067,7 +1212,7 @@
     }
     function cancelKeysModal() { // P1-2：取消键位弹窗——开战前回到模式选择；战中查看则恢复比赛
       $('keysModal').classList.remove('open');
-      if (keysCtx === 'pre') { $('modeModal').classList.add('open'); }
+      if (keysCtx === 'pre') { var brR = $('battleReady'); if (!brR || brR.hidden) $('modeModal').classList.add('open'); } // 框架重构一期：从准备层打开时取消只关弹窗、回准备层；准备层不在时才回模式选择
       else if (B) B.paused = false;
     }
 

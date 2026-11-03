@@ -138,7 +138,7 @@
         choices: [
           { text: '和她碰杯，什么也不说', fx: { aff: { manager: 8 }, mind: 10 }, result: '有些话，不说出来反而更清楚。' },
           { text: '「真纪姐，你今天有点不一样」', fx: { aff: { manager: 10 } }, result: '她耳根微红，举起杯子挡住脸：「……喝你的。」' } ] },
-      aff_rival_30: { char: 'rival', title: '沈墨凛 · 录像室门口', pages: [
+      aff_rival_30: { char: 'rival', title: '沈墨凛 · 录像室门口', needMatch: true, pages: [
         { w: 'narr', t: '深夜的录像室门口，你和沈墨凛撞了个正着。屏幕上暂停着的，正是你的比赛。' },
         { w: 'rival', t: '……研究对手，天经地义。你少自作多情。' } ],
         choices: [
@@ -202,7 +202,7 @@
         choices: [
           { text: '全程跟紧，看她怎么砍价', fx: { aff: { manager: 5 }, money: 80 }, result: '她三句话砍下一截，还顺手帮你把旧订单的差价要了回来。金钱 +¥80，这就是专业。' },
           { text: '自己也试戴一副新拳套过过瘾', fx: { money: -120, mind: 5 }, result: '没忍住买了条新款绷带。贵是贵了点，拆开包装的那一刻，心情很好。' } ] },
-      daily_6: { char: 'teammate', title: '日常 · 第一个签名', pages: [
+      daily_6: { char: 'teammate', title: '日常 · 第一个签名', needMatch: true, pages: [
         { w: 'narr', t: '和小葵逛街时，一个小学生模样的孩子追上来，举起一本作业本，眼睛亮得吓人。' },
         { w: 'teammate', t: '哇——！是粉丝！你被认出来了！快快快，签一个！这可是历史性的一刻！' } ],
         choices: [
@@ -256,7 +256,7 @@
         choices: [
           { text: '顺手帮她把那盒拿下来', fx: { aff: { rival: 5 } }, result: '她接过去，停顿了两秒：「……谢了。」然后走得飞快，像生怕你听见第二遍。' },
           { text: '默默绕去另一条通道', fx: { mind: 3, aff: { rival: 3 } }, result: '结账时你们又碰上了。她把一盒创可贴放进你的篮子：「上次你眉角蹭破了。别误会，顺手。」' } ] },
-      daily_15: { char: 'senior', title: '日常 · 读者的来信', pages: [
+      daily_15: { char: 'senior', title: '日常 · 读者的来信', needMatch: true, pages: [
         { w: 'narr', t: '拳馆前台多了一封信，没有署名，字迹歪歪扭扭：「我女儿看了你的比赛，回来把长发剪了，说要学拳击。」' },
         { w: 'senior', t: '收好。这种东西，比奖杯沉。以后打不动了，翻出来看看。' } ],
         choices: [

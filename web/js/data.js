@@ -137,31 +137,33 @@
       { id: 'dex10', need: 10, reward: 3000, title: '收藏家' }
     ];
 
+    /* 装备图（2026-11-03 二次元化）：全部改指装备设计池 assets/equipment_pool/ 的二次元图，
+       与设计款式图鉴同源；旧 assets/equipment/ 写实照片图已弃用（文件保留备查，勿再引用） */
     var GEAR_IMG_SRC = {
-      gloves1: 'assets/equipment/glove_beginner.webp',
-      gloves2: 'assets/equipment/glove_standard.webp',
-      gloves3: 'assets/equipment/glove_professional.webp',
-      gloves4: 'assets/equipment/glove_swift.webp',
-      gloves5: 'assets/equipment/glove_cannon.webp',
-      gloves6: 'assets/equipment/glove_shadowmoon.webp',
-      guard1: 'assets/equipment/mouthguard_basic.webp',
-      boots1: 'assets/equipment/boots_light.webp',
-      head1: 'assets/equipment/headgear_basic.webp',
-      head2: 'assets/equipment/headgear_pro.webp',
-      robe1: 'assets/equipment/robe_entrance.webp',
-      wrist1: 'assets/equipment/wrist_basic.webp',
-      wrist2: 'assets/equipment/wrist_pro.webp',
-      wrist3: 'assets/equipment/wrist_champion.webp',
-      head3: 'assets/equipment/headgear_champion.webp',
-      robe2: 'assets/equipment/robe_training.webp',
-      robe3: 'assets/equipment/robe_champion.webp',
-      boots2: 'assets/equipment/boots_speed.webp',
-      boots3: 'assets/equipment/boots_heavy.webp',
-      guard2: 'assets/equipment/mouthguard_custom.webp',
-      guard3: 'assets/equipment/mouthguard_pro.webp',
-      'pattern-guardian': 'assets/equipment/glove_guardian.webp',
-      'pattern-bull': 'assets/equipment/glove_bull.webp',
-      'pattern-classic': 'assets/equipment/glove_classic.webp'
+      gloves1: 'assets/equipment_pool/gloves/glove_compact_star_pink.webp',
+      gloves2: 'assets/equipment_pool/gloves/glove_classic2_heart_blue.webp',
+      gloves3: 'assets/equipment_pool/gloves/glove_classic2_petal_gold.webp',
+      gloves4: 'assets/equipment_pool/gloves/glove_compact_lightning_gold.webp',
+      gloves5: 'assets/equipment_pool/gloves/glove_boxy_star_red.webp',
+      gloves6: 'assets/equipment_pool/gloves/glove_classic2_lightning_purple.webp',
+      guard1: 'assets/equipment_pool/guard/mouthguard_002.webp',
+      boots1: 'assets/equipment_pool/boots/boots_bulk_001.webp',
+      head1: 'assets/equipment_pool/head/headgear_bulk_005.webp',
+      head2: 'assets/equipment_pool/head/headgear_bulk_013.webp',
+      robe1: 'assets/equipment_pool/robe/robe_001.webp',
+      wrist1: 'assets/equipment_pool/wrist/wrist_001.webp',
+      wrist2: 'assets/equipment_pool/wrist/wrist_008.webp',
+      wrist3: 'assets/equipment_pool/wrist/wrist_004.webp',
+      head3: 'assets/equipment_pool/head/headgear_pool_star_gold.webp',
+      robe2: 'assets/equipment_pool/robe/robe_010.webp',
+      robe3: 'assets/equipment_pool/robe/robe_008.webp',
+      boots2: 'assets/equipment_pool/boots/boots_pool_lightning_gold.webp',
+      boots3: 'assets/equipment_pool/boots/boots_bulk_009.webp',
+      guard2: 'assets/equipment_pool/guard/mouthguard_001.webp',
+      guard3: 'assets/equipment_pool/guard/mouthguard_010.webp',
+      'pattern-guardian': 'assets/equipment_pool/gloves/glove_pool_heart_gold.webp',
+      'pattern-bull': 'assets/equipment_pool/gloves/glove_compact_heart_red.webp',
+      'pattern-classic': 'assets/equipment_pool/gloves/glove_boxy_petal_white.webp'
     };
 
     /* 设计款式图鉴（展示型收集）：从装备设计池精选的款式画廊，按类别分组陈列。

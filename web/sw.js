@@ -5,7 +5,7 @@
 // - 只拦截同源 GET，其余请求（跨域字体等）一律放行、不缓存。
 // 更新机制：发布新版时把 SW_VERSION +1；新 SW 安装后 skipWaiting 立即接管，
 // activate 时删除所有旧版本缓存并 claim 已打开的页面。缓存名带版本号，天然隔离。
-const SW_VERSION = 'boxing-pwa-v6';
+const SW_VERSION = 'boxing-pwa-v16'; // 重创积累曲线修复：traumaGain 改为「净伤害占防守方当前 HP 比例 × 70 × 拳种权重」小数累积（旧拳种固定值与伤害脱钩、重创 KO 全挤 R1 两病消除，A/B 定型见 web/tests/TRAUMA_CURVE.md；用户硬数字未动）；商店商品卡改实底卡面＋图框加深（css/main.css）；含装备图二次元化、新手期重构与框架重构一至五期全部成果
 const CACHE_NAME = SW_VERSION;
 
 // 安装时预缓存核心文件（相对路径，itch 子目录 / 任意子路径托管都成立）

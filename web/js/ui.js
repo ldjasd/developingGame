@@ -66,6 +66,8 @@
       var mwn = $('matchWeekNote'); if (mwn) mwn.innerHTML = $('weekNote').innerHTML; // 比赛屏同步本周提示（与据点同一段文案）
       $('btnMatch').classList.toggle('match', match);
       $('btnMatch').disabled = !match;
+      var bpEl = $('btnPractice'); if (bpEl) bpEl.style.display = practicePending() ? '' : 'none'; // 新手期重构：练习赛未打且没打过正式赛时，据点出线金色练习赛按钮
+      renderHubGoal();
       $('btnTrain').disabled = S.ap < 2;
       $('btnOut').disabled = S.ap < 2;
       $('btnWork').disabled = S.ap < 3 || S.stamina < 15;
@@ -75,11 +77,36 @@
       renderPlan();
       renderShop();
       renderStatus();
+      renderMatchStage();
       save();
     }
     /* ================= 训练计划（2 AP，5 点自由组合，一次结算） ================= */
     var PLAN_POINTS = 5;
     var planSel = []; // 已选训练 id（可重复）
+    var TRAIN_ICONS = { spar: '拳', strength: '力', bag: '包', pads: '靶', upper: '勾', body: '腹', rope: '绳', run: '跑', speedball: '速', dodgeball: '闪', shadow: '影', video: '像', meditation: '冥' }; // 三期：训练卡图标徽字
+    var TRAIN_CATS = { spar: 'a', strength: 'a', bag: 'a', upper: 'a', pads: 'b', body: 'b', speedball: 'b', dodgeball: 'b', video: 'b', rope: 'c', run: 'c', shadow: 'c', meditation: 'c' }; // 三期：徽章配色（a 力系粉红 / b 技系蓝 / c 体能系紫；TRAININGS 无 cat 字段，按 id 映射）
+    function planGainsData() {
+      // 三期钉底坞用：与 planPreviewHTML 同一口径的克隆试算（只读，不改动真实存档）
+      var clone = {
+        attrs: Object.assign({}, S.attrs), punchExp: Object.assign({}, S.punchExp),
+        injury: S.injury, day: S.day, scoutedForDay: 0
+      };
+      planSel.forEach(function (id) { trainingById(id).apply(clone); });
+      var rawCost = planSel.reduce(function (sum, id) { return sum + trainingById(id).stam; }, 0);
+      var effCost = S.buffs.drink ? Math.round(rawCost * 0.7) : rawCost;
+      var attrRows = [], punchRows = [];
+      ATTRS.forEach(function (a) {
+        var d = clone.attrs[a.key] - S.attrs[a.key];
+        if (d) attrRows.push({ name: attrNameOf(a.key), d: d });
+      });
+      PUNCH_KEYS.forEach(function (k) {
+        var d = clone.punchExp[k] - S.punchExp[k];
+        if (d) punchRows.push({ name: PUNCHES[k].name, d: d });
+      });
+      var mindGain = planSel.reduce(function (sum, id) { return sum + (trainingById(id).mind || 0); }, 0);
+      var over = Math.max(0, Math.round(effCost - S.stamina));
+      return { attrRows: attrRows, punchRows: punchRows, mindGain: mindGain, scouted: !!clone.scoutedForDay, rawCost: rawCost, effCost: effCost, injEst: Math.floor(over / 10) * 5 };
+    }
     function planUsedPts() { return planSel.reduce(function (sum, id) { var t = trainingById(id); return sum + (t ? t.pts : 0); }, 0); }
     function closeSubLists(except) {
       ['trainList', 'outList', 'shopList', 'relaxList'].forEach(function (id) { if (id !== except) $(id).classList.remove('open'); });
@@ -116,30 +143,57 @@
       return html;
     }
     function renderPlan() {
+      // 框架重构三期：训练卡阵列（重/中/轻分组）＋已选 chips＋完整预览块在滚动区；
+      // 计量与确认结算移到钉底坞 #trainDock——点数语义固定「已选 X / 5」，杜绝「剩余点数」误读
       var used = planUsedPts(), left = PLAN_POINTS - used;
-      var html = '<div class="plan-head"><span>训练点数 <span class="pts num">' + left + ' / ' + PLAN_POINTS + '</span></span>' +
-        '<span>当前体力 <span class="num">' + Math.round(S.stamina) + '</span></span></div>';
-      html += TRAININGS.map(function (t) {
-        var dis = (left < t.pts) ? ' disabled' : '';
-        var tier = t.pts >= 3 ? '重' : t.pts === 2 ? '中' : '轻';
-        return '<button class="train-opt" data-train="' + t.id + '"' + dis + '>' +
-          '<span class="t">' + t.name + '</span><span class="cost">' + tier + ' · ' + t.pts + ' 点</span>' +
-          '<span class="d"> ' + t.desc + ' · 体力 −' + t.stam + '</span></button>';
-      }).join('');
+      var counts = {};
+      planSel.forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+      var html = '';
       if (planSel.length) {
-        var counts = {};
-        planSel.forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
-        html += '<div class="plan-sel">' + Object.keys(counts).map(function (id) {
+        html += '<div class="train-selrow"><div class="plan-sel">' + Object.keys(counts).map(function (id) {
           var t = trainingById(id);
           return '<button class="plan-chip" data-plan-remove="' + id + '">' + t.name + (counts[id] > 1 ? ' ×' + counts[id] : '') + ' ✕</button>';
-        }).join('') + '</div>';
+        }).join('') + '</div></div>';
       } else {
-        html += '<p class="shop-note">点上面的项目添加到计划（可重复选同一项），凑满或不满 5 点都可以开始。</p>';
+        html += '<p class="shop-note" style="color:rgba(242,237,253,.88);text-shadow:0 1px 6px rgba(0,0,0,.55)">还没选训练——点下面的训练卡加入计划，可重复选同一项。</p>';
       }
-      if (planSel.length) html += planPreviewHTML();
-      html += '<div class="plan-foot"><button class="primary-btn" id="btnPlanGo"' + (planSel.length ? '' : ' disabled') + '>开始训练（2 AP）</button>' +
-        '<button class="secondary-btn" id="btnPlanCancel">取消</button></div>';
+      [['重负荷', 3], ['中负荷', 2], ['轻负荷', 1]].forEach(function (grp) {
+        html += '<div class="train-group-h">' + grp[0] + '<span class="gh-cost">每个 ' + grp[1] + ' 点</span></div><div class="train-grid">' +
+          TRAININGS.filter(function (t) { return t.pts === grp[1]; }).map(function (t) {
+            var dis = (left < t.pts) ? ' disabled' : '';
+            var n = counts[t.id] || 0;
+            return '<button class="train-card' + (n ? ' sel' : '') + '" data-train="' + t.id + '"' + dis + '>' +
+              (n ? '<span class="tc-count">×' + n + '</span>' : '') +
+              '<span class="tc-top"><span class="tc-ic cat-' + (TRAIN_CATS[t.id] || 'a') + '">' + (TRAIN_ICONS[t.id] || '训') + '</span>' +
+              '<span class="tc-name">' + t.name + '</span><span class="tc-cost">' + t.pts + ' 点</span></span>' +
+              '<span class="tc-gain">' + t.desc + '</span>' +
+              '<span class="tc-stam">耗体力 −' + t.stam + '</span></button>';
+          }).join('') + '</div>';
+      });
+      if (planSel.length) html += '<div class="train-preview">' + planPreviewHTML() + '</div>';
       $('trainList').innerHTML = html;
+      // —— 钉底坞：5 点计量槽（点亮式）＋ 体力消耗预览 ＋ 收益合计 ＋ 确认按钮 ——
+      var pips = '';
+      for (var pi = 0; pi < PLAN_POINTS; pi++) pips += '<span class="plan-pip' + (pi < used ? ' on' : '') + '"></span>';
+      var stamHTML = '体力 ' + Math.round(S.stamina);
+      var gainsHTML = '';
+      if (planSel.length) {
+        var dg = planGainsData();
+        var after = Math.round(S.stamina) - dg.effCost;
+        stamHTML += ' −' + dg.effCost + ' → <b>' + Math.max(0, after) + '</b>' +
+          (after < 0 ? ' <span class="warn">（透支 ' + (-after) + '，伤病约 +' + dg.injEst + '）</span>' : '');
+        var parts = dg.attrRows.map(function (r) { return r.name + ' +' + r.d; });
+        dg.punchRows.forEach(function (r) { parts.push(r.name + '经验 +' + r.d); });
+        if (dg.mindGain) parts.push('心态 +' + dg.mindGain);
+        if (dg.scouted) parts.push('侦察下场对手弱点');
+        gainsHTML = '<div class="td-gains" title="' + parts.join(' · ') + '">预计收益：' + (parts.length ? parts.join(' · ') : '无直接加成') + '</div>';
+      }
+      $('trainDock').innerHTML =
+        '<div class="td-row td-meter-row"><span class="td-label">已选</span><span class="plan-pips">' + pips + '</span>' +
+        '<span class="td-pts">' + used + ' / ' + PLAN_POINTS + ' 点</span><span class="td-stam">' + stamHTML + '</span></div>' +
+        gainsHTML +
+        '<div class="td-row td-btns"><button class="secondary-btn" id="btnPlanCancel"' + (planSel.length ? '' : ' disabled') + '>清空计划</button>' +
+        '<button class="primary-btn" id="btnPlanGo"' + (planSel.length ? '' : ' disabled') + '>开始训练（2 AP）</button></div>';
       Array.prototype.forEach.call(document.querySelectorAll('[data-train]'), function (btn) {
         btn.addEventListener('click', function () {
           var t = trainingById(btn.getAttribute('data-train'));
@@ -156,7 +210,35 @@
         });
       });
       $('btnPlanGo').addEventListener('click', doPlanTrain);
-      $('btnPlanCancel').addEventListener('click', function () { planSel = []; renderPlan(); }); // 训练屏内取消 = 清空已选计划（列表常驻）
+      $('btnPlanCancel').addEventListener('click', function () { planSel = []; renderPlan(); }); // 三期：取消钮即清空计划（原语义不变，文案改「清空计划」说清动作）
+    }
+    /* 新手期重构：首周目标行（据点顶部金色一行）——① 练习赛 ② 训练 ×3 ③ Day 7 首场正式赛，全完成发 ¥300 启程奖金。
+       口径：练习赛一项在打过正式比赛时同样计完成（目标是引导不是合同）；第 1 周（Day ≤7）内未完成则过期作废、不补发。
+       奖励在 render 时检查发放（goalDone 落盘防重复）；老存档 tutorial 已毕业（goalDone=true），永不显示。 */
+    function renderHubGoal() {
+      var el = $('hubGoal'); if (!el) return;
+      var t = tutorialState();
+      if (t.goalDone || S.testMode || !S.story || !S.story.prologueDone) { el.hidden = true; return; }
+      if (S.day > 7) { t.goalDone = true; el.hidden = true; save(); return; } // 首周结束未完成：过期作废
+      var matches = (S.wins || 0) + (S.losses || 0);
+      var stepA = t.practiceDone || matches >= 1;
+      var stepB = Math.min(t.trainings || 0, 3);
+      var stepC = matches >= 1;
+      if (stepA && stepB >= 3 && stepC) {
+        t.goalDone = true;
+        S.money += 300;
+        dailyLog('首周目标全部完成！拳馆发了 ¥300 启程奖金——正好去商店挑件装备，或者留着傍身。', 'good');
+        toast('首周目标完成！启程奖金 ¥300 已到账');
+        el.hidden = true;
+        save();
+        return;
+      }
+      el.hidden = false;
+      el.innerHTML = '首周目标：' +
+        (stepA ? '✓ 练习赛' : '① 打一场练习赛') + ' · ' +
+        (stepB >= 3 ? '✓ 训练 ×3' : '② 训练 ' + stepB + '/3') + ' · ' +
+        (stepC ? '✓ 首场正式赛' : '③ Day 7 首场正式赛') +
+        '（全完成奖励 ¥300）';
     }
     function doPlanTrain() {
       if (!planSel.length || S.ap < 2) return;
@@ -165,7 +247,7 @@
       var cost = rawCost, drinkNote = '';
       if (S.buffs.drink) { cost = Math.round(rawCost * 0.7); S.buffs.drink = false; drinkNote = '能量饮料生效：体力消耗 −30%（' + rawCost + ' → ' + cost + '）。'; }
       lastAttrs = effAttrs();
-      var snapAttrs = Object.assign({}, S.attrs), snapExp = Object.assign({}, S.punchExp);
+      var snapAttrs = Object.assign({}, S.attrs), snapExp = Object.assign({}, S.punchExp), snapMind = S.mind;
       var names = planSel.map(function (id) { return trainingById(id).name; }).join('、');
       planSel.forEach(function (id) {
         var t = trainingById(id);
@@ -184,6 +266,7 @@
       // P2-15：低体力硬练的心态 −10 只在计划总耗体力 >2 时应用——纯冥想（耗体力 2）不扣
       if (stamBefore < 20 && rawCost > 2) { changeMind(-10); dailyLog('体力见底还硬练，心态 −10。下次先休息吧。', 'bad'); }
       S.ap -= 2;
+      var tutT = tutorialState(); if (!tutT.goalDone && S.day <= 7) tutT.trainings = (tutT.trainings || 0) + 1; // 新手期重构：首周目标「训练 ×3」计数（按结算次数）
       var newStam = stamBefore - cost, over = 0, injAdd = 0;
       if (newStam < 0) { over = -newStam; injAdd = Math.floor(over / 10) * 5; S.injury = Math.min(100, S.injury + injAdd); }
       S.stamina = Math.max(0, newStam);
@@ -192,11 +275,44 @@
       dailyLog('Day ' + S.day + ' · 训练计划完成：' + names + '（体力 −' + cost + '）', 'good');
       planSel = [];
       render();
-      showScene('daily'); // 界面架构批：训练结算后回据点（训练屏的列表常驻显示，不再靠 open 类开关）
+      // 框架重构三期：结算先在训练舞台内演出收益（结算层），玩家点「回据点」才走原收尾三步（见 finishTrainResult）
+      showTrainResult(snapAttrs, snapExp, snapMind, cost, over, injAdd, names);
+    }
+    /* 框架重构三期：训练结算演出层——立绘＋属性 +N 跳字 chips（增量取自结算前后快照差，含心态效率修正后的实际值）。
+       render() 不碰本层（默认 hidden、renderPlan 不操作它），层在玩家确认后才收起。 */
+    var trainResultPending = false;
+    function showTrainResult(snapAttrs, snapExp, snapMind, cost, over, injAdd, names) {
+      var chips = [];
+      ATTRS.forEach(function (a) {
+        var d = S.attrs[a.key] - snapAttrs[a.key];
+        if (d) chips.push({ html: attrNameOf(a.key) + ' <b>+' + d + '</b>', bad: false });
+      });
+      PUNCH_KEYS.forEach(function (k) {
+        var d = S.punchExp[k] - snapExp[k];
+        if (d) chips.push({ html: PUNCHES[k].name + '经验 <b>+' + d + '</b>', bad: false });
+      });
+      var md = Math.round(S.mind - snapMind);
+      if (md) chips.push({ html: '心态 <b>' + (md > 0 ? '+' : '') + md + '</b>', bad: md < 0 });
+      chips.push({ html: '体力 <b>−' + cost + '</b>', bad: true });
+      if (injAdd) chips.push({ html: '伤病 <b>+' + injAdd + '</b>', bad: true });
+      $('trainResultChips').innerHTML = chips.map(function (c, i) {
+        return '<span class="tr-chip' + (c.bad ? ' bad' : '') + '" style="animation-delay:' + (i * 60) + 'ms">' + c.html + '</span>';
+      }).join('');
+      $('trainResultSub').textContent = 'Day ' + S.day + ' · ' + names + ' 完成（2 AP 已结算）' +
+        (over > 0 ? '。体力透支了 ' + over + ' 点，下次先休息再练。' : '。回到据点继续安排今天。');
+      trainResultPending = true;
+      $('trainResult').hidden = false;
+    }
+    function finishTrainResult() {
+      if (!trainResultPending) return;
+      trainResultPending = false;
+      $('trainResult').hidden = true;
+      showScene('daily'); // 原收尾：训练结算后回据点
       toast('训练计划完成');
       // D2：训练后小概率触发日常小事件（拳馆日常/队友互动等，未触发过的才抽）
       triggerDailyEvent(0.25);
     }
+    $('btnTrainResultOk').addEventListener('click', finishTrainResult);
     /* ================= 行动确认框（确认后才结算，取消不消耗） ================= */
     var pendingConfirm = null;
     function fmtDelta(before, after, unit) { // 预览「当前 → 结算后」
@@ -225,6 +341,31 @@
       // 点击音由下方 C3 全局委托统一播放（确认键也在内），此处不再单独播放，避免双响
       var cfg = pendingConfirm;
       closeConfirm();
+      if (cfg && cfg.onOk) cfg.onOk();
+    });
+    /* 框架重构三期：商店舞台内购买确认——底部 sheet（行式清单＋商品图，不再是整页文字表格弹窗）。
+       仅商店三路购买（装备/消耗品/定制）走这里；cfg 形态与 askConfirm 一致，结算逻辑仍在各购买函数的 onOk 里。 */
+    var pendingShopConfirm = null;
+    function askShopConfirm(cfg) {
+      pendingShopConfirm = cfg;
+      var head = $('shopSheetHead');
+      if (cfg.img) { head.innerHTML = cfg.img; head.style.display = ''; } else head.style.display = 'none';
+      $('shopSheetTitle').textContent = cfg.title;
+      $('shopSheetLines').innerHTML = cfg.lines.map(function (row) {
+        return '<div class="ss-row"><span>' + row[0] + '</span><span>' + row[1] + '</span></div>';
+      }).join('');
+      if (cfg.note) { $('shopSheetNote').textContent = cfg.note; $('shopSheetNote').style.display = ''; }
+      else $('shopSheetNote').style.display = 'none';
+      $('btnShopCfOk').textContent = cfg.okText || '确认';
+      $('btnShopCfOk').disabled = !!cfg.okDisabled;
+      $('shopSheet').hidden = false;
+    }
+    function closeShopConfirm() { pendingShopConfirm = null; $('shopSheet').hidden = true; }
+    $('btnShopCfCancel').addEventListener('click', closeShopConfirm);
+    $('shopSheet').addEventListener('click', function (e) { if (e.target === this) closeShopConfirm(); });
+    $('btnShopCfOk').addEventListener('click', function () {
+      var cfg = pendingShopConfirm;
+      closeShopConfirm();
       if (cfg && cfg.onOk) cfg.onOk();
     });
     /* C3：主要按钮统一点击音（事件委托：任意未禁用的 <button> 点击都轻响一声；
@@ -364,8 +505,9 @@
       var c = computeGlove(customSel);
       if (S.money < c.price) { toast('钱不够定制（需要 ¥' + c.price + '）'); return; }
       var sel = { pattern: customSel.pattern, outer: customSel.outer, lining: customSel.lining, oz: customSel.oz, fix: customSel.fix };
-      askConfirm({
+      askShopConfirm({ // 三期：定制确认改走舞台内 sheet（图为当前选型的合成图）
         title: '定制拳套 · ' + c.shortName + '拳套',
+        img: gearImgHTML({ custom: sel }, 'lg'),
         lines: [
           ['版型 / 外皮', GLOVE_PATTERNS[sel.pattern].name + ' / ' + GLOVE_OUTERS[sel.outer].name],
           ['内衬 / 盎司 / 固定', GLOVE_LININGS[sel.lining].name + ' / ' + sel.oz + 'oz / ' + GLOVE_FIX[sel.fix].name],
@@ -393,23 +535,46 @@
         }
       });
     }
+    function gearCmpHTML(g) {
+      // 框架重构三期：商品卡上直读的属性对比——与当前同部位已装备比（含强化的有效加成为准，新旧差 ▲▼ 箭头）
+      var cur = S.gear[g.slot] ? gearById(S.gear[g.slot]) : null;
+      if (!cur) return '<span class="sc-cmp"><span class="sc-cmp-line same">该部位还没有装备</span></span>';
+      if (cur.id === g.id) return '';
+      var nb = effBonusOf(g), ob = effBonusOf(cur), rows = [];
+      ATTRS.forEach(function (a) {
+        var d = (nb[a.key] || 0) - (ob[a.key] || 0);
+        if (d) rows.push('<span class="sc-cmp-line ' + (d > 0 ? 'up' : 'down') + '">' + a.name + ' ' + (ob[a.key] || 0) + ' → ' + (nb[a.key] || 0) + '（' + (d > 0 ? '▲+' + d : '▼' + d) + '）</span>');
+      });
+      var ndr = effDrOf(g), odr = effDrOf(cur), dd = ndr - odr;
+      if (Math.abs(dd) > 0.001) rows.push('<span class="sc-cmp-line ' + (dd > 0 ? 'up' : 'down') + '">减伤 ' + Math.round(odr * 100) + '% → ' + Math.round(ndr * 100) + '%（' + (dd > 0 ? '▲+' : '▼') + Math.round(Math.abs(dd) * 100) + '%）</span>');
+      if (!rows.length) rows.push('<span class="sc-cmp-line same">效果相同</span>');
+      return '<span class="sc-cmp"><span class="sc-cmp-cur">现装备：' + gearDispName(cur) + '</span>' + rows.join('') + '</span>';
+    }
     function renderShop() {
-      var html = '<p class="shop-note">体育用品店 · 购买后自动存入背包，装备自动换上（同部位只生效一件，可在状态页背包里切换）。每次购买心态 +10。页面底部可以<b>定制拳套</b>。</p>';
+      // 框架重构三期：商品卡货架（装备区/消耗品区分区＋定制工坊）＋钉底 dock（图鉴/离开）；
+      // 卡内 id/数据属性与购买入口不变，结算仍走 buyGear/buyConsumable/confirmCustomBuy
+      var html = '<div class="shop-sec-h">装备货架<span>点卡片选购 · 卡上的绿/红字是与现装备的差</span></div><div class="shop-grid">';
       html += SHOP_GEAR.map(function (g) {
         var ownedIt = S.owned.indexOf(g.id) >= 0, equipped = S.gear[g.slot] === g.id;
-        var label = equipped ? '已装备' : ownedIt ? '已拥有' : '¥' + g.price;
+        var badge = equipped ? '<span class="sc-badge on">已装备</span>' : ownedIt ? '<span class="sc-badge">已拥有</span>' : '';
         var dis = (equipped || ownedIt || S.money < g.price) ? ' disabled' : '';
-        return '<button class="train-opt has-img" data-buy-gear="' + g.id + '"' + dis + '>' + gearImgHTML(g) +
-          '<span class="opt-txt"><span class="t">' + gearDispName(g) + '</span>' +
-          '<span class="d"> ' + SLOT_NAMES[g.slot] + ' · ' + gearEffDesc(g) + '</span></span><span class="cost">' + label + '</span></button>';
-      }).join('');
+        return '<button class="shop-card" data-buy-gear="' + g.id + '"' + dis + '>' + badge +
+          '<span class="sc-imgwrap">' + gearImgHTML(g) + '</span>' +
+          '<span class="sc-name">' + gearDispName(g) + '</span>' +
+          '<span class="sc-meta"><span class="sc-slot">' + SLOT_NAMES[g.slot] + '</span><span class="sc-desc">' + gearEffDesc(g) + '</span></span>' +
+          gearCmpHTML(g) +
+          '<span class="sc-foot"><span class="sc-own"></span><span class="sc-price' + (equipped || ownedIt ? ' owned' : '') + '">' + (equipped ? '已装备' : ownedIt ? '已拥有' : '¥' + g.price) + '</span></span></button>';
+      }).join('') + '</div>';
+      html += '<div class="shop-sec-h">消耗品<span>买入背包 · 在状态页背包里使用</span></div><div class="shop-grid">';
       html += CONSUMABLES.map(function (c) {
         var dis = S.money < c.price ? ' disabled' : '';
-        return '<button class="train-opt" data-buy-item="' + c.id + '"' + dis + '>' +
-          '<span class="t">' + c.name + '</span><span class="cost">¥' + c.price + '</span>' +
-          '<span class="d"> 消耗品 · ' + c.desc + '（拥有 ' + (S.bag[c.id] || 0) + '）</span></button>';
-      }).join('');
-      html += '<div class="custom-box"><p class="shop-note" style="margin:0 0 8px"><b>定制拳套工坊</b> · 双层结构：版型定骨架，外皮＋内衬定手感，再用盎司与固定方式微调。改选实时预览，确认购买才扣钱。</p>';
+        return '<button class="shop-card item" data-buy-item="' + c.id + '"' + dis + '>' +
+          '<span class="sc-name">' + c.name + '</span>' +
+          '<span class="sc-desc">' + c.desc + '</span>' +
+          '<span class="sc-foot"><span class="sc-own">拥有 ' + (S.bag[c.id] || 0) + ' 个</span><span class="sc-price">¥' + c.price + '</span></span></button>';
+      }).join('') + '</div>';
+      html += '<div class="shop-sec-h">定制拳套工坊<span>改选实时预览 · 确认购买才扣钱</span></div>';
+      html += '<div class="custom-box"><p class="shop-note" style="margin:0 0 8px">双层结构：版型定骨架，外皮＋内衬定手感，再用盎司与固定方式微调。</p>';
       html += '<label class="cs-lab">版型（第一层 · 骨架）<select id="csPattern">' + optTags(GLOVE_PATTERNS, customSel.pattern, function (o) { return o.name + ' · 基础 ¥' + o.base + ' · ' + o.note; }) + '</select></label>';
       html += '<label class="cs-lab">外皮（第二层）<select id="csOuter">' + optTags(GLOVE_OUTERS, customSel.outer, function (o) { return o.name + ' · ¥' + o.price + ' · ' + o.note; }) + '</select></label>';
       html += '<label class="cs-lab">内衬（第二层）<select id="csLining">' + optTags(GLOVE_LININGS, customSel.lining, function (o) { return o.name + ' · ¥' + o.price + ' · ' + o.note; }) + '</select></label>';
@@ -417,8 +582,8 @@
       html += '<label class="cs-lab">固定方式<select id="csFix">' + optTags(GLOVE_FIX, customSel.fix, function (o) { return o.name + ' · ¥' + o.price + ' · ' + o.note; }) + '</select></label>';
       html += '<div class="custom-preview" id="customPreview"></div>';
       html += '<div class="plan-foot"><button class="primary-btn" id="btnCustomBuy">定制这副拳套</button></div></div>';
-      html += '<div class="plan-foot"><button class="secondary-btn" id="btnShopDex">款式图鉴（设计池精选 ' + (typeof DEX_GALLERY !== 'undefined' ? DEX_GALLERY.length : 0) + ' 款）</button><button class="secondary-btn" id="btnShopBack">离开商店</button></div>';
       $('shopList').innerHTML = html;
+      $('shopDock').innerHTML = '<div class="sd-row"><button class="secondary-btn" id="btnShopDex">款式图鉴（设计池精选 ' + (typeof DEX_GALLERY !== 'undefined' ? DEX_GALLERY.length : 0) + ' 款）</button><button class="primary-btn" id="btnShopBack">离开商店</button></div>'; // 三期：图鉴/离开改为钉底 dock，逛店时常驻可达
       Array.prototype.forEach.call(document.querySelectorAll('[data-buy-gear]'), function (btn) {
         btn.addEventListener('click', function () { buyGear(btn.getAttribute('data-buy-gear')); });
       });
@@ -446,8 +611,9 @@
       if (!g || S.money < g.price || S.owned.indexOf(id) >= 0) return;
       // P1-4：商店直接购买也要确认框（与其他购买一致，防手机误触）：商品名/价格/结算后金钱/是否自动换装
       var old = S.gear[g.slot] ? gearById(S.gear[g.slot]) : null;
-      askConfirm({
+      askShopConfirm({ // 三期：购买确认改走舞台内 sheet（图文小确认）
         title: '购买装备 · ' + g.name,
+        img: gearImgHTML(g, 'lg'),
         lines: [
           ['商品', g.name + '（' + SLOT_NAMES[g.slot] + '）'],
           ['效果', gearEffDesc(g)],
@@ -478,7 +644,7 @@
     function buyConsumable(id) {
       var c = consumableById(id);
       if (!c || S.money < c.price) return;
-      askConfirm({
+      askShopConfirm({ // 三期：购买确认改走舞台内 sheet
         title: '购买消耗品 · ' + c.name,
         lines: [
           ['商品', c.name + '（消耗品）'],
@@ -517,10 +683,23 @@
 
     /* ================= 状态界面 / 背包 ================= */
     var bagTab = 'gear';
+    /* 框架重构四期：状态页四页签（属性 / 装备·背包 / 生涯 / 关系）——一屏一个页签，
+       内容仍由 renderStatus() 既有函数填充，此处只管页签切换（与画廊 data-galtab 同口径）。 */
+    var statusTab = 'attrs';
+    function setStatusTab(tab) {
+      statusTab = tab;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-statab]'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-statab') === tab);
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-stapanel]'), function (p) {
+        p.style.display = p.getAttribute('data-stapanel') === tab ? '' : 'none';
+      });
+    }
     function openStatus() {
       if (B) { toast('比赛中无法查看状态'); return; }
       showScene('status'); // 界面架构批：走统一场景管理器（背景 street 由 SCENE_BG 映射）
       renderStatus();
+      maybeTip('status'); // 新手期重构：首次打开状态页的一句话提示
     }
     function closeStatus() {
       showScene('daily');
@@ -542,6 +721,13 @@
       });
       return list;
     }
+    /* 框架重构四期：画廊灯箱统一入口（立绘 / 对手名鉴 / 设计款式三墙共用舞台内灯箱 #imgModal） */
+    function openImgZoom(src, cap) {
+      if (!src) return;
+      $('imgModalImg').src = src;
+      $('imgModalCap').textContent = cap || '';
+      $('imgModal').classList.add('open');
+    }
     function renderGalleryPortraits() {
       var el = $('galPortraits'); if (!el) return;
       el.innerHTML = portraitGalleryList().map(function (e) {
@@ -549,11 +735,50 @@
       }).join('');
       Array.prototype.forEach.call(el.querySelectorAll('[data-gal-img]'), function (f) {
         f.addEventListener('click', function () {
-          $('imgModalImg').src = f.getAttribute('data-gal-img');
-          $('imgModalCap').textContent = f.getAttribute('data-gal-cap');
-          $('imgModal').classList.add('open');
+          openImgZoom(f.getAttribute('data-gal-img'), f.getAttribute('data-gal-cap'));
         });
       });
+    }
+    /* 框架重构四期：画廊收集进度环（总收集＝图鉴登记＋名鉴交手＋成就解锁；立绘/回忆为分项展示） */
+    function renderGalleryProgress() {
+      var el = $('galProgress'); if (!el) return;
+      var pTotal = portraitGalleryList().length, pGot = pTotal; // 立绘全量陈列
+      var dGot = (typeof dexCount === 'function') ? dexCount() : 0, dTotal = (typeof SHOP_GEAR !== 'undefined') ? SHOP_GEAR.length : 0;
+      var fGot = 0, fTotal = 52;
+      if (typeof ensureRoster === 'function' && Array.isArray(S.roster)) {
+        ensureRoster();
+        var faced = Array.isArray(S.facedFoes) ? S.facedFoes : [];
+        fGot = S.roster.filter(function (m) { return faced.indexOf(m.key) >= 0; }).length;
+      }
+      var aGot = 0, aTotal = (typeof ACHIEVEMENTS !== 'undefined') ? ACHIEVEMENTS.length : 0;
+      if (aTotal) {
+        if (typeof ensureAchievements === 'function') ensureAchievements();
+        aGot = ACHIEVEMENTS.filter(function (a) { return !!(S.achievements && S.achievements[a.id]); }).length;
+      }
+      var mGot = 0, mTotal = (typeof STORY_EVENTS !== 'undefined') ? Object.keys(STORY_EVENTS).length : 0;
+      if (mTotal && typeof storyState === 'function') {
+        storyState();
+        mGot = (S.story.seenEvents || []).filter(function (id) { return !!STORY_EVENTS[id]; }).length;
+      }
+      var sumGot = dGot + fGot + aGot, sumTotal = dTotal + 50 + aTotal;
+      var pct = sumTotal ? Math.round(sumGot / sumTotal * 100) : 0;
+      var CIRC = 163.4;
+      function row(name, got, total, unit) {
+        var w = total ? clamp(got / total * 100, 0, 100) : 0;
+        return '<div class="gp-row"><span class="gp-n">' + name + '</span><span class="progbar"><i style="width:' + w + '%"></i></span><b>' + got + ' / ' + total + (unit || '') + '</b></div>';
+      }
+      el.innerHTML =
+        '<div class="gp-ringwrap"><svg viewBox="0 0 64 64" aria-hidden="true">' +
+        '<circle class="gp-bg" cx="32" cy="32" r="26"></circle>' +
+        '<circle class="gp-fg" cx="32" cy="32" r="26" stroke-dasharray="' + CIRC + '" stroke-dashoffset="' + (CIRC * (1 - pct / 100)).toFixed(1) + '"></circle></svg>' +
+        '<span class="gp-pct">' + pct + '<small>%</small></span><span class="gp-cap">总收集</span></div>' +
+        '<div class="gp-rows">' +
+        row('立绘', pGot, pTotal, '') +
+        row('装备图鉴', dGot, dTotal, '') +
+        row('对手名鉴', fGot, fTotal, '') +
+        row('成就', aGot, aTotal, '') +
+        row('回忆', mGot, mTotal, ' 段') +
+        '</div>';
     }
     function openGallery(tab) {
       if (typeof B !== 'undefined' && B) { toast('比赛中无法打开画廊'); return; }
@@ -663,6 +888,13 @@
       }).join('');
       html += '</div>';
       el.innerHTML = html;
+      // 框架重构四期：名鉴格点开走舞台内灯箱看大图（与立绘墙同口径）
+      Array.prototype.forEach.call(el.querySelectorAll('.foe-dex-item'), function (item) {
+        item.addEventListener('click', function () {
+          var img = item.querySelector('img'), nm = item.querySelector('.fd-name');
+          if (img) openImgZoom(img.getAttribute('src'), nm ? nm.textContent : '');
+        });
+      });
     }
     /* ================= D4：状态页「回忆」（已触发剧情列表 → 只读回放） ================= */
     function renderMemories() {
@@ -674,11 +906,11 @@
         el.innerHTML = '<p class="shop-note">还没有触发过剧情事件。推进生涯、赢下比赛、提升好感，故事会自己找上门——看过的都会收进这里。</p>';
         return;
       }
-      el.innerHTML = ids.map(function (id) {
+      el.innerHTML = '<div class="mem-scroll">' + ids.map(function (id) {
         var d = STORY_EVENTS[id];
         var c = STORY_CHARS[d.char];
-        return '<div class="dex-item"><div style="flex:1;min-width:0"><span class="bi-t">' + (d.title || id) + '</span><div class="bi-d">' + (c ? c.name + ' · ' + c.role + '　·　' : '') + '共 ' + d.pages.length + ' 页对白</div></div><button data-replay="' + id + '">重看</button></div>';
-      }).join('');
+        return '<div class="dex-item mem-item"><div style="flex:1;min-width:0"><span class="bi-t">' + (d.title || id) + '</span><div class="bi-d">' + (c ? c.name + ' · ' + c.role + '　·　' : '') + '共 ' + d.pages.length + ' 页对白</div></div><button data-replay="' + id + '">重看</button></div>';
+      }).join('') + '</div>';
       Array.prototype.forEach.call(el.querySelectorAll('[data-replay]'), function (btn) {
         btn.addEventListener('click', function () { openStoryReplay(btn.getAttribute('data-replay')); });
       });
@@ -774,6 +1006,64 @@
       });
       el.innerHTML = rows.join('');
     }
+    /* 框架重构二期：比赛场景 VS 对手卡（舞台主视觉）——比赛日呈现当天已抽定的对手（与报名同一人，见 battle.js previewFoeForToday），
+       非比赛日呈现倒计时与侦察预告；侦察入口并入对手卡：跳训练屏并预选「录像研究」。只读呈现＋既有训练流程跳转，不改任何数值。 */
+    var matchVsSig = '';
+    function gotoScout() {
+      if (planSel.indexOf('video') < 0 && planUsedPts() + 1 <= PLAN_POINTS) planSel.push('video');
+      gotoScene('train');
+      toast('已为你预选「录像研究」——凑好计划点「开始训练」即可（比赛前一天研究才能侦察弱点）');
+    }
+    function renderMatchStage() {
+      var el = $('matchVs'); if (!el) return;
+      var matchOpen = isMatchDay(S.day) && S.lastMatchDay !== S.day;
+      var foe = matchOpen && typeof previewFoeForToday === 'function' ? previewFoeForToday() : null;
+      var daysLeft = (7 - (S.day % 7)) % 7; if (!matchOpen && daysLeft === 0) daysLeft = 7;
+      var sig = S.day + '|' + S.lastMatchDay + '|' + S.scoutedForDay + '|' + (foe ? foe.key + ':' + (foe.weakness || '') : '') + '|' + S.rank + '|' + S.wins + '-' + S.losses;
+      if (sig === matchVsSig) return;
+      matchVsSig = sig;
+      var ea = effAttrs();
+      var meSide = '<div class="mv-side me">' +
+        '<img src="assets/pose/guard.webp" alt="" />' +
+        '<div class="mv-name">' + S.name + '（你）</div>' +
+        '<div class="mv-meta">国内排名第 ' + S.rank + ' 名 · ' + S.wins + ' 胜 · ' + S.losses + ' 负<br>力量 ' + ea.power + ' · 速度 ' + ea.speed + '<br>耐久 ' + ea.endurance + ' · 技术 ' + ea.technique + '</div></div>';
+      var html;
+      if (foe) {
+        var a = foe.attrs;
+        if (!foe._line) foe._line = foeLine(foe.key, 'pre');
+        var weak = foe.weakness
+          ? '<span class="mv-weak on">弱点情报：' + PUNCHES[foe.weakness].name + '方向防守薄弱——用' + PUNCHES[foe.weakness].name + '打她伤害 +30%</span>'
+          : '<span class="mv-weak">弱点未侦察（比赛前一天做「录像研究」可查）</span>';
+        html = meSide +
+          '<div class="mv-mid"><div class="mv-vs">VS</div><div class="mv-day">今日比赛</div></div>' +
+          '<div class="mv-side foe">' +
+          '<img src="' + foeAlphaSrc(foe.img) + '" alt="" />' +
+          '<div class="mv-name">' + foe.name + (foe.isRival ? ' <span class="mv-rival">宿敌</span>' : '') + '</div>' +
+          '<div class="mv-meta">国内排名第 ' + foe.rank + ' 名<br>风格：' + FOE_STYLES[foe.style].name + '<br>力量 ' + a.power + ' · 速度 ' + a.speed + '<br>耐久 ' + a.endurance + ' · 技术 ' + a.technique + '</div>' +
+          '<p class="mv-line">「' + foe._line + '」</p>' +
+          '<div class="mv-intel">' + weak +
+          (foe.weakness
+            ? '<button class="mv-scout done" type="button" disabled>录像研究 · 弱点已侦察 ✓</button>'
+            : '<button class="mv-scout" id="btnMatchScout" type="button">录像研究 · 为下一场侦察</button>') +
+          '</div></div>';
+      } else {
+        var fought = isMatchDay(S.day) && S.lastMatchDay === S.day;
+        html = meSide +
+          '<div class="mv-mid"><div class="mv-vs">VS</div><div class="mv-day">' + (fought ? '今日已赛' : '下一场 · ' + daysLeft + ' 天后') + '</div></div>' +
+          '<div class="mv-side foe tbd">' +
+          '<div class="mv-tbd">?</div>' +
+          '<div class="mv-name">对手待揭晓</div>' +
+          '<div class="mv-meta">' + (fought ? '本周比赛已经打完，下个比赛日再来。' : '比赛日当天揭晓——排名与你相近（±5 名）的选手。') + '</div>' +
+          '<div class="mv-intel">' +
+          (daysLeft === 1
+            ? '<span class="mv-weak on">明天就是比赛日：今晚做「录像研究」，明天对手的弱点尽在掌握</span><button class="mv-scout" id="btnMatchScout" type="button">录像研究 · 现在去侦察</button>'
+            : '<span class="mv-weak">侦察预告：比赛前一天做「录像研究」可查对手弱点</span><button class="mv-scout" id="btnMatchScout" type="button">录像研究 · 提前备课</button>') +
+          '</div></div>';
+      }
+      el.innerHTML = html;
+      var sb = $('btnMatchScout');
+      if (sb) sb.addEventListener('click', gotoScout);
+    }
     function renderStatus() {
       renderAppearance();
       $('stName').textContent = S.name;
@@ -822,6 +1112,7 @@
       Array.prototype.forEach.call(document.querySelectorAll('[data-gearslot]'), function (btn) {
         btn.addEventListener('click', function () {
           bagTab = 'gear'; syncBagTabs();
+          setStatusTab('gear'); // 框架重构四期：背包在「装备·背包」页签内，先切页签再定位
           $('bagGear').scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
       });
@@ -867,6 +1158,7 @@
         var has = (S.dexAch || []).indexOf(a.id) >= 0;
         return '<p class="shop-note" style="margin:4px 0">' + (has ? '✓ 已达成' : '未达成') + '：集齐 ' + a.need + ' 款 → ¥' + a.reward + (a.title ? '＋称号「' + a.title + '」' : '') + '</p>';
       }).join('');
+      dexHtml += '<div class="dex-wall">';
       dexHtml += collectedDex.map(function (e, i) {
         var g = e.g;
         return '<div class="dex-item">' + gearImgHTML(g) + '<div style="flex:1;min-width:0"><span class="bi-t">' + g.name + '</span><div class="bi-d">' + g.desc + (g.price ? ' · 定制价参考 ¥' + g.price : '') + '</div></div><span class="dex-state">No.' + (i + 1) + ' · 已获得</span></div>';
@@ -874,15 +1166,26 @@
       dexHtml += shopGloves.filter(function (g) { return (S.dexSigs || []).indexOf('shop:' + g.id) < 0; }).map(function (g) {
         return '<div class="dex-item locked">' + gearImgHTML(g) + '<div style="flex:1;min-width:0"><span class="bi-t">' + g.name + '</span><div class="bi-d">' + g.desc + ' · ¥' + g.price + '（商店购买后登记）</div></div><span class="dex-state">未获得</span></div>';
       }).join('');
+      dexHtml += '</div>';
       dexHtml += '<p class="shop-note" style="margin:6px 0 0">定制 / 打造出的新组合也会在获得时登记进来（同组合重复获得不重复计数）；已登记的款式拆解后记录保留。</p>';
       $('stDex').innerHTML = dexHtml;
       var galDesignEl = $('galDesign'); // 界面架构批：设计款式图鉴渲染到画廊「设计款式」页签（与装备图鉴分开两个页签）
-      if (galDesignEl) galDesignEl.innerHTML = dexGalleryHTML();
+      if (galDesignEl) {
+        galDesignEl.innerHTML = dexGalleryHTML();
+        // 框架重构四期：设计款式墙点开走舞台内灯箱看大图
+        Array.prototype.forEach.call(galDesignEl.querySelectorAll('.dex-gal-item'), function (item) {
+          item.addEventListener('click', function () {
+            var img = item.querySelector('img'), cap = item.querySelector('figcaption');
+            if (img) openImgZoom(img.getAttribute('src'), cap ? cap.textContent : '');
+          });
+        });
+      }
       renderStageCard();
       renderAchievements(); // Phase 9：成就区
       renderSponsorCard();
       renderBag();
       renderCraft();
+      renderGalleryProgress(); // 框架重构四期：画廊收集进度环（数据同源，渲染跟随 renderStatus）
     }
     function syncBagTabs() {
       Array.prototype.forEach.call(document.querySelectorAll('[data-bagtab]'), function (b) {
