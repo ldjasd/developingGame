@@ -55,60 +55,66 @@
         apply: function (s) { s.attrs.will += 1; return '闭眼冥想调整呼吸，意志 +1，心态 +10。'; } }
     ];
 
-    /* 装备（体育用品店）：slot 部位限装备一件，bonus 为属性加成（护齿为减伤，bonus 为空） */
+    /* 装备（体育用品店）：slot 部位限装备一件。
+       修复批次 D（GAME_AUDIT2 M3）：加成由固定数值改百分比/机制型——pct = 属性「生效值」百分比
+       （实战生效值 = 本体属性 ×(1+pct 合计/100)，随本体成长同阶缩放，保质期覆盖全生涯）；
+       dr = 减伤%（护齿/护头）；mech = 机制效果（trauma 我方所受重创积累倍率 / stam 我方出拳
+       体力消耗倍率 / cd 我方指令冷却倍率，均 <1 为正面）。旧固定数值口径已废弃，老存档的
+       定制拳套在读档时按 ×4 换算为 pct（见 game.js legacyPctOf），价值不缩水。 */
     var SLOT_NAMES = { gloves: '拳套', guard: '护齿', boots: '战靴', head: '护头', robe: '战袍', wrist: '护腕' };
     var SHOP_GEAR = [
-      { id: 'gloves1', slot: 'gloves', name: '新手拳套', price: 500,  desc: '力量 +1', bonus: { power: 1 } },
-      { id: 'gloves2', slot: 'gloves', name: '标准拳套', price: 1500, desc: '力量 +2 · 精准度 +1', bonus: { power: 2, accuracy: 1 } },
-      { id: 'gloves3', slot: 'gloves', name: '专业拳套', price: 4000, desc: '力量 +3 · 精准度 +1 · 出拳速度 +1', bonus: { power: 3, accuracy: 1, speed: 1 } },
-      { id: 'guard1',  slot: 'guard',  name: '基础护齿', price: 800,  desc: '比赛中受到的伤害 −5%', bonus: {}, dr: 5 },
-      { id: 'boots1',  slot: 'boots',  name: '轻便战靴', price: 1200, desc: '步伐速度 +1', bonus: { footwork: 1 } },
-      { id: 'gloves4', slot: 'gloves', name: '疾风拳套', price: 1800, desc: '出拳速度 +3 · 力量 +1（速度型）', bonus: { speed: 3, power: 1 } },
-      { id: 'gloves6', slot: 'gloves', name: '影月拳套', price: 2600, desc: '精准度 +2 · 技术 +1（技巧型）', bonus: { accuracy: 2, technique: 1 } },
-      { id: 'gloves5', slot: 'gloves', name: '重炮拳套', price: 3200, desc: '力量 +4 · 出拳速度 −1（重炮型）', bonus: { power: 4, speed: -1 } },
-      { id: 'head1',   slot: 'head',   name: '基础护头', price: 900,  desc: '防守技术 +1', bonus: { defense: 1 } },
-      { id: 'head2',   slot: 'head',   name: '职业护头', price: 2200, desc: '防守技术 +2 · 意志 +1', bonus: { defense: 2, will: 1 } },
-      { id: 'robe1',   slot: 'robe',   name: '登场战袍', price: 1500, desc: '意志 +2 · 登场气势拉满', bonus: { will: 2 } },
+      { id: 'gloves1', slot: 'gloves', name: '新手拳套', price: 500,  desc: '力量生效 +8%', pct: { power: 8 } },
+      { id: 'gloves2', slot: 'gloves', name: '标准拳套', price: 1500, desc: '力量生效 +11% · 精准度生效 +5%', pct: { power: 11, accuracy: 5 } },
+      { id: 'gloves3', slot: 'gloves', name: '专业拳套', price: 4000, desc: '力量生效 +13% · 精准度生效 +5% · 出拳速度生效 +5%', pct: { power: 13, accuracy: 5, speed: 5 } },
+      { id: 'guard1',  slot: 'guard',  name: '基础护齿', price: 800,  desc: '比赛中受到的伤害 −5% · 所受重创积累 −8%', pct: {}, dr: 5, mech: { trauma: 0.92 } },
+      { id: 'boots1',  slot: 'boots',  name: '轻便战靴', price: 1200, desc: '步伐速度生效 +6% · 出拳体力消耗 −5%', pct: { footwork: 6 }, mech: { stam: 0.95 } },
+      { id: 'gloves4', slot: 'gloves', name: '疾风拳套', price: 1800, desc: '出拳速度生效 +13% · 力量生效 +5%（速度型）', pct: { speed: 13, power: 5 } },
+      { id: 'gloves6', slot: 'gloves', name: '影月拳套', price: 2600, desc: '精准度生效 +10% · 技术生效 +6%（技巧型）', pct: { accuracy: 10, technique: 6 } },
+      { id: 'gloves5', slot: 'gloves', name: '重炮拳套', price: 3200, desc: '力量生效 +17% · 出拳速度生效 −5%（重炮型）', pct: { power: 17, speed: -5 } },
+      { id: 'head1',   slot: 'head',   name: '基础护头', price: 900,  desc: '防守技术生效 +6% · 所受重创积累 −5%', pct: { defense: 6 }, mech: { trauma: 0.95 } },
+      { id: 'head2',   slot: 'head',   name: '职业护头', price: 2200, desc: '防守技术生效 +10% · 意志生效 +5%', pct: { defense: 10, will: 5 } },
+      { id: 'robe1',   slot: 'robe',   name: '登场战袍', price: 1500, desc: '意志生效 +11% · 登场气势拉满', pct: { will: 11 } },
       /* Phase 5 深化：非拳套装备扩充（dr = 减伤%，与护齿/护头叠加；全部可强化 +0~+10） */
-      { id: 'wrist1',  slot: 'wrist',  name: '基础护腕', price: 400,  desc: '精准度 +1', bonus: { accuracy: 1 } },
-      { id: 'wrist2',  slot: 'wrist',  name: '专业护腕', price: 1200, desc: '精准度 +1 · 出拳速度 +1', bonus: { accuracy: 1, speed: 1 } },
-      { id: 'wrist3',  slot: 'wrist',  name: '冠军护腕', price: 3000, desc: '精准度 +2 · 出拳速度 +1 · 防守技术 +1', bonus: { accuracy: 2, speed: 1, defense: 1 } },
-      { id: 'head3',   slot: 'head',   name: '冠军护头', price: 3500, desc: '减伤 +15% · 耐久 +1', bonus: { endurance: 1 }, dr: 15 },
-      { id: 'robe2',   slot: 'robe',   name: '轻盈训练服', price: 800,  desc: '步伐速度 +1', bonus: { footwork: 1 } },
-      { id: 'robe3',   slot: 'robe',   name: '冠军战袍', price: 4000, desc: '力量 +1 · 耐久 +1', bonus: { power: 1, endurance: 1 } },
-      { id: 'boots2',  slot: 'boots',  name: '速度战靴', price: 1500, desc: '步伐速度 +2', bonus: { footwork: 2 } },
-      { id: 'boots3',  slot: 'boots',  name: '重型战靴', price: 2800, desc: '步伐速度 +1 · 耐久 +1 · 力量 +1', bonus: { footwork: 1, endurance: 1, power: 1 } },
-      { id: 'guard2',  slot: 'guard',  name: '定制护齿', price: 1000, desc: '比赛中受到的伤害 −8%', bonus: {}, dr: 8 },
-      { id: 'guard3',  slot: 'guard',  name: '专业护齿', price: 2500, desc: '比赛中受到的伤害 −12% · 意志 +1', bonus: { will: 1 }, dr: 12 }
+      { id: 'wrist1',  slot: 'wrist',  name: '基础护腕', price: 400,  desc: '精准度生效 +5% · 指令冷却 −5%', pct: { accuracy: 5 }, mech: { cd: 0.95 } },
+      { id: 'wrist2',  slot: 'wrist',  name: '专业护腕', price: 1200, desc: '精准度生效 +5% · 出拳速度生效 +5% · 指令冷却 −8%', pct: { accuracy: 5, speed: 5 }, mech: { cd: 0.92 } },
+      { id: 'wrist3',  slot: 'wrist',  name: '冠军护腕', price: 3000, desc: '精准度生效 +9% · 出拳速度生效 +5% · 防守技术生效 +5% · 指令冷却 −15%', pct: { accuracy: 9, speed: 5, defense: 5 }, mech: { cd: 0.85 } },
+      { id: 'head3',   slot: 'head',   name: '冠军护头', price: 3500, desc: '减伤 +15% · 耐久生效 +6% · 所受重创积累 −10%', pct: { endurance: 6 }, dr: 15, mech: { trauma: 0.90 } },
+      { id: 'robe2',   slot: 'robe',   name: '轻盈训练服', price: 800,  desc: '步伐速度生效 +6%', pct: { footwork: 6 } },
+      { id: 'robe3',   slot: 'robe',   name: '冠军战袍', price: 4000, desc: '力量生效 +6% · 耐久生效 +6%', pct: { power: 6, endurance: 6 } },
+      { id: 'boots2',  slot: 'boots',  name: '速度战靴', price: 1500, desc: '步伐速度生效 +11% · 出拳体力消耗 −8%', pct: { footwork: 11 }, mech: { stam: 0.92 } },
+      { id: 'boots3',  slot: 'boots',  name: '重型战靴', price: 2800, desc: '步伐速度生效 +6% · 耐久生效 +5% · 力量生效 +5% · 出拳体力消耗 −4%', pct: { footwork: 6, endurance: 5, power: 5 }, mech: { stam: 0.96 } },
+      { id: 'guard2',  slot: 'guard',  name: '定制护齿', price: 1000, desc: '比赛中受到的伤害 −8% · 所受重创积累 −14%', pct: {}, dr: 8, mech: { trauma: 0.86 } },
+      { id: 'guard3',  slot: 'guard',  name: '专业护齿', price: 2500, desc: '比赛中受到的伤害 −12% · 意志生效 +5% · 所受重创积累 −20%', pct: { will: 5 }, dr: 12, mech: { trauma: 0.80 } }
     ];
 
     /* ================= Phase 5：装备深层 —— 定制 / 拆解 / 打造 / 图鉴成就 ================= */
+    /* 修复批次 D：定制部件同步改百分比（pct，口径同 SHOP_GEAR；旧 bonus 固定值 ×约 4.5 换算，取舍方向不变） */
     var GLOVE_PATTERNS = {
-      guardian: { name: '守护系', base: 1700, bonus: { defense: 2, power: -1 }, note: '保护 +2 · 伤害 −1 · 价高' },
-      bull:     { name: '斗牛系', base: 1100, bonus: { power: 2, defense: -1 }, note: '伤害 +2 · 手部保护 −1（伤手风险）· 中价' },
-      classic:  { name: '经典系', base: 700,  bonus: { power: 1, defense: 1 },  note: '攻守均衡 · 便宜' }
+      guardian: { name: '守护系', base: 1700, pct: { defense: 9, power: -5 }, note: '防守生效 +9% · 力量生效 −5% · 价高' },
+      bull:     { name: '斗牛系', base: 1100, pct: { power: 9, defense: -5 }, note: '力量生效 +9% · 防守生效 −5%（伤手风险）· 中价' },
+      classic:  { name: '经典系', base: 700,  pct: { power: 5, defense: 5 },  note: '攻守均衡 · 便宜' }
     };
     var GLOVE_OUTERS = {
-      calf:      { name: '小牛皮', price: 600, bonus: { technique: 1 }, note: '均衡手感 · 技术 +1' },
-      kangaroo:  { name: '袋鼠皮', price: 900, bonus: { speed: 1 },     note: '轻韧 · 出拳速度 +1' },
-      goat:      { name: '山羊皮', price: 700, bonus: { accuracy: 1 },  note: '贴合 · 精准度 +1' },
-      synthetic: { name: '人造革', price: 200, bonus: {},                note: '便宜耐用 · 无额外加成' }
+      calf:      { name: '小牛皮', price: 600, pct: { technique: 5 }, note: '均衡手感 · 技术生效 +5%' },
+      kangaroo:  { name: '袋鼠皮', price: 900, pct: { speed: 5 },     note: '轻韧 · 出拳速度生效 +5%' },
+      goat:      { name: '山羊皮', price: 700, pct: { accuracy: 5 },  note: '贴合 · 精准度生效 +5%' },
+      synthetic: { name: '人造革', price: 200, pct: {},                note: '便宜耐用 · 无额外加成' }
     };
     var GLOVE_LININGS = {
-      horsehair: { name: '马毛', price: 700, bonus: { power: 1, defense: -1 }, note: '伤害 +1 · 保护 −1（伤手）' },
-      latex:     { name: '乳胶', price: 300, bonus: { endurance: 1 },           note: '缓冲均衡 · 耐久 +1' },
-      gel:       { name: '凝胶', price: 600, bonus: { defense: 1 },             note: '保护 +1' }
+      horsehair: { name: '马毛', price: 700, pct: { power: 5, defense: -5 }, note: '力量生效 +5% · 防守生效 −5%（伤手）' },
+      latex:     { name: '乳胶', price: 300, pct: { endurance: 5 },           note: '缓冲均衡 · 耐久生效 +5%' },
+      gel:       { name: '凝胶', price: 600, pct: { defense: 5 },             note: '防守生效 +5%' }
     };
     var GLOVE_OZ = {
-      8:  { adj: -100, bonus: { power: 2, speed: 2, defense: -2 },  note: '轻量：伤害与速度高、保护低' },
-      10: { adj: 0,    bonus: { power: 1, speed: 1, defense: -1 },  note: '偏轻：小幅偏向进攻' },
-      12: { adj: 100,  bonus: {},                                   note: '标准：无额外修正' },
-      14: { adj: 200,  bonus: { power: -1, speed: -1, defense: 1 }, note: '偏重：小幅偏向保护' },
-      16: { adj: 300,  bonus: { power: -2, speed: -2, defense: 2 }, note: '厚重：保护高、伤害与速度低' }
+      8:  { adj: -100, pct: { power: 9, speed: 9, defense: -9 },  note: '轻量：伤害与速度高、保护低' },
+      10: { adj: 0,    pct: { power: 5, speed: 5, defense: -5 },  note: '偏轻：小幅偏向进攻' },
+      12: { adj: 100,  pct: {},                                   note: '标准：无额外修正' },
+      14: { adj: 200,  pct: { power: -5, speed: -5, defense: 5 }, note: '偏重：小幅偏向保护' },
+      16: { adj: 300,  pct: { power: -9, speed: -9, defense: 9 }, note: '厚重：保护高、伤害与速度低' }
     };
     var GLOVE_FIX = {
-      lace:   { name: '系带',   price: 300, bonus: { accuracy: 1 }, note: '贴合手腕 · 精准度 +1' },
-      velcro: { name: '魔术贴', price: 0,   bonus: {},              note: '便宜方便 · 无额外加成' }
+      lace:   { name: '系带',   price: 300, pct: { accuracy: 5 }, note: '贴合手腕 · 精准度生效 +5%' },
+      velcro: { name: '魔术贴', price: 0,   pct: {},              note: '便宜方便 · 无额外加成' }
     };
     var MATERIALS = [
       { id: 'synthetic', name: '人造革', kind: '皮料' },
@@ -284,19 +290,23 @@
     ];
 
     /* Phase 3：分阶段目标（6 个生涯阶段，依次解锁，完成发奖金，⑤⑥另发称号）
-       第二轮回炉：原粉丝数条件改为影响力档位（阶段2→Lv2、阶段4→Lv3、阶段5→Lv4、阶段6→Lv5） */
+       第二轮回炉：原粉丝数条件改为影响力档位（阶段2→Lv2、阶段4→Lv3、阶段5→Lv4、阶段6→Lv5）
+       修复批次 C（GAME_AUDIT2 M6/F3a）：阶段 2~5 的排名条件改「排名 OR 胜场/击败特定对手」双通道
+       （胜场阈值与影响力档位的胜场路对齐：Lv3=10 胜、Lv4=25 胜；阶段 5 的第二通道＝正式赛击败
+       伊芙琳 S.beatChamp），中等胜率玩家不再被单一排名线卡死；阶段 5 改名「国内之巅」——
+       本作当前版本的生涯终点是国内第 1，世界线只是伏笔/远期目标，文案不再说成已可玩（F3a）。 */
     var STAGES = [
       { id: 1, name: '初出茅庐', reward: 500, title: null, goalText: '赢得 1 场比赛',
         check: function (s) { return s.wins >= 1; } },
-      { id: 2, name: '崭露头角', reward: 1000, title: null, goalText: '排名进前 40 且影响力 Lv2',
-        check: function (s) { return s.rank <= 40 && (s.influence || 1) >= 2; } },
-      { id: 3, name: '国内新星', reward: 2000, title: null, goalText: '排名进前 25 且取得 3 连胜',
-        check: function (s) { return s.rank <= 25 && (s.winStreak || 0) >= 3; } },
-      { id: 4, name: '国内顶尖', reward: 5000, title: null, goalText: '排名进前 10 且影响力 Lv3',
-        check: function (s) { return s.rank <= 10 && (s.influence || 1) >= 3; } },
-      { id: 5, name: '冲击世界', reward: 10000, title: '国内冠军', goalText: '排名第 1 且影响力 Lv4',
-        check: function (s) { return s.rank <= 1 && (s.influence || 1) >= 4; } },
-      { id: 6, name: '传奇之路', reward: 20000, title: '传奇', goalText: '影响力 Lv5（传奇）且成为第 1 名后再赢 3 场',
+      { id: 2, name: '崭露头角', reward: 1000, title: null, goalText: '排名进前 40（或赢下 5 场）且影响力 Lv2',
+        check: function (s) { return (s.rank <= 40 || s.wins >= 5) && (s.influence || 1) >= 2; } },
+      { id: 3, name: '国内新星', reward: 2000, title: null, goalText: '排名进前 25（或赢下 12 场）且取得 3 连胜',
+        check: function (s) { return (s.rank <= 25 || s.wins >= 12) && (s.winStreak || 0) >= 3; } },
+      { id: 4, name: '国内顶尖', reward: 5000, title: null, goalText: '排名进前 10（或赢下 25 场）且影响力 Lv3',
+        check: function (s) { return (s.rank <= 10 || s.wins >= 25) && (s.influence || 1) >= 3; } },
+      { id: 5, name: '国内之巅', reward: 10000, title: '国内冠军', goalText: '登上国内第 1 名（或在正式赛击败伊芙琳）且影响力 Lv4',
+        check: function (s) { return (s.rank <= 1 || !!s.beatChamp) && (s.influence || 1) >= 4; } },
+      { id: 6, name: '传奇之路', reward: 20000, title: '传奇', goalText: '影响力 Lv5（传奇）且成为第 1 名后再赢 3 场（卫冕）',
         check: function (s) { return (s.influence || 1) >= 5 && winsAfterChamp(s) >= 3; } }
     ];
 
@@ -390,9 +400,9 @@
        无专属台词的对手走 FOE_LINES_GENERIC 兜底，任何一场比赛都不会留白。
        取词统一走 foeLine(key, kind)，kind ∈ 'pre' | 'win' | 'lose'（win/lose 均为对手视角）。 */
     var FOE_LINES = {
-      opp_world_champion: { // 伊芙琳（第 1 名 · 世界冠军）：王者的从容
-        pre: ['冠军的擂台，不是谁想站就能站稳的。让我看看你走到这里的本事。', '很多人挑战过我，你不是第一个，也不会是最后一个——但愿你能让我认真起来。'],
-        win: '这就是世界顶点的风景。想再看，先爬到够得着我的地方来。',
+      opp_world_champion: { // 伊芙琳（国内第 1 名 · 曾征战世界擂台后归国守擂）：王者的从容（批次 C 文案对齐 F3a：她是「打过世界擂台的国内第一」，不是现役世界冠军坐在国内榜首）
+        pre: ['国内第一的位子，我可没打算让。让我看看你走到这里的本事。', '很多人挑战过我，你不是第一个，也不会是最后一个——但愿你能让我认真起来。'],
+        win: '这就是国内顶点的风景。想再看，先爬到够得着我的地方来。',
         lose: '……输了？呵，很好。这个擂台，终于又有点意思了。'
       },
       opp_crimson: { // 薇拉（第 2 名 · 力量天才）：狂气嗜战
@@ -560,6 +570,11 @@
         check: function (s) { return (s.winStreak || 0) >= 3; } },
       { id: 'streak_5', cat: 'battle', name: '无人能挡', desc: '取得 5 连胜',
         check: function (s) { return (s.winStreak || 0) >= 5; } },
+      /* 修复批次 C（M7 中期锚点）：streak_10 / spar_first 补在战斗类——连胜长线与约战系统各给一个中期目标 */
+      { id: 'streak_10', cat: 'battle', name: '十全十美', desc: '取得 10 连胜',
+        check: function (s) { return (s.winStreak || 0) >= 10; } },
+      { id: 'spar_first', cat: 'battle', name: '擂台之约', desc: '完成第 1 场约战（不计排名的指名挑战）',
+        check: function (s) { return (s.sparFights || 0) >= 1; } },
       /* ---- 生涯 ---- */
       { id: 'rank_25', cat: 'career', name: '跻身前列', desc: '国内排名进入前 25',
         check: function (s) { return (s.rank || 50) <= 25; } },
@@ -575,6 +590,9 @@
         check: function (s) { return (s.stage || 1) >= 4 || (s.completedStages || []).indexOf(4) >= 0; } },
       { id: 'stage_6', cat: 'career', name: '传奇之路', desc: '到达生涯阶段 6「传奇之路」',
         check: function (s) { return (s.stage || 1) >= 6 || (s.completedStages || []).indexOf(6) >= 0; } },
+      /* 修复批次 C（M7 中期锚点）：弑王者——与阶段 5 的「击败伊芙琳」通道共用 S.beatChamp（批次 C 起记录，老档无此字段时按未达成计，无法追溯） */
+      { id: 'champ_slayer', cat: 'career', name: '弑王者', desc: '在正式比赛中击败国内第 1 名伊芙琳',
+        check: function (s) { return !!s.beatChamp; } },
       /* ---- 装备 / 经营 ---- */
       { id: 'first_craft', cat: 'gear', name: '亲手打造', desc: '在工坊打造第 1 件装备',
         check: function (s) { return (s.customGear || []).some(function (g) { return g && g.source === 'craft'; }); } },
@@ -586,11 +604,19 @@
         check: function (s) { return (s.dexSigs || []).length >= 10; } },
       { id: 'sponsor_any', cat: 'gear', name: '商业首秀', desc: '签约任意一家赞助商',
         check: function (s) { return !!s.sponsor; } },
+      /* 修复批次 C（M7 中期锚点）：经营类补两件——首次定制（与「亲手打造」分开计）与持金破万 */
+      { id: 'custom_first', cat: 'gear', name: '量身定制', desc: '在用品店定制第 1 副拳套',
+        check: function (s) { return (s.customGear || []).some(function (g) { return g && g.source === 'custom'; }); } },
+      { id: 'money_10k', cat: 'gear', name: '小有积蓄', desc: '持有金钱达到 ¥10,000',
+        check: function (s) { return (s.money || 0) >= 10000; } },
       /* ---- 情感 / 剧情 ---- */
       { id: 'prologue_done', cat: 'story', name: '命运的测力机', desc: '完成序章',
         check: function (s) { return !!(s.story && s.story.prologueDone); } },
       { id: 'affinity_60', cat: 'story', name: '亲近信赖', desc: '任意角色好感达到 60',
         check: function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 60; }); } },
       { id: 'affinity_90', cat: 'story', name: '心意相通', desc: '任意角色好感达到 90',
-        check: function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 90; }); } }
+        check: function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 90; }); } },
+      /* 修复批次 C（M7 中期锚点）：宿敌约战累计——约战是宿敌好感的保底接触通道，给它一个中期计数目标 */
+      { id: 'spar_rival_3', cat: 'story', name: '宿敌之约', desc: '与沈墨凛约战累计 3 次',
+        check: function (s) { return (s.sparRival || 0) >= 3; } }
     ];

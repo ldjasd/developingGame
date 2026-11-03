@@ -8,6 +8,7 @@
       if (!S.story || typeof S.story !== 'object') S.story = { prologueDone: true, seenEvents: [], affinity: { senior: 0, manager: 0, rival: 0, teammate: 0 } };
       if (!Array.isArray(S.story.seenEvents)) S.story.seenEvents = [];
       if (!S.story.affinity || typeof S.story.affinity !== 'object') S.story.affinity = { senior: 0, manager: 0, rival: 0, teammate: 0 };
+      if (!S.story.dailyCd || typeof S.story.dailyCd !== 'object' || Array.isArray(S.story.dailyCd)) S.story.dailyCd = {}; // 修复批次 C：可重复日常的上次触发日（老档缺失时补 {}，无冷却记录＝可立即进重复池）
       return S.story;
     }
     var storyQueue = [];
@@ -27,14 +28,39 @@
       storyQueue.push(id);
     }
     function queueStoryRepeat(id) { if (STORY_EVENTS[id] && storyQueue.indexOf(id) < 0) storyQueue.push(id); }
-    /* ---------- D2：日常事件触发（训练后 / 散心共用：概率命中后从未触发的日常事件里随机抽一段排队弹出） ---------- */
+    /* ---------- D2：日常事件触发（训练后 / 散心共用：概率命中后抽一段排队弹出） ----------
+       修复批次 C（M6）：旧池「每段只触发一次」在第 4~5 周见底（审查实测第 6 周起训练只剩纯数值）。
+       改两段式：① 未触发过的日常优先（新内容先行，含新增的 daily_r1~r4 首触发）；
+       ② 全部见过后，从 DAILY_REPEATABLE 里挑冷却已满（DAILY_REPEAT_CD 天）的段落重播，
+       重播走 DAILY_ALTS 微变版本。一次性剧情/日常（不在 DAILY_REPEATABLE 内）永远不重播。 */
+    var DAILY_REPEAT_CD = 10;
     function triggerDailyEvent(chance) {
       storyState();
       if (Math.random() >= chance) return false;
-      var pool = DAILY_EVENT_IDS.filter(function (id) { return S.story.seenEvents.indexOf(id) < 0 && storyGateOk(id); });
+      var seen = S.story.seenEvents;
+      var pool = DAILY_EVENT_IDS.filter(function (id) { return seen.indexOf(id) < 0 && storyGateOk(id); });
+      if (!pool.length) {
+        var cd = S.story.dailyCd || {};
+        pool = DAILY_EVENT_IDS.filter(function (id) {
+          return DAILY_REPEATABLE.indexOf(id) >= 0 && seen.indexOf(id) >= 0 && storyGateOk(id) &&
+            (typeof cd[id] !== 'number' || S.day - cd[id] >= DAILY_REPEAT_CD);
+        });
+      }
       if (!pool.length) return false;
-      queueStory(pool[Math.floor(Math.random() * pool.length)]);
+      var pick = pool[Math.floor(Math.random() * pool.length)];
+      if (storyQueue.indexOf(pick) < 0) storyQueue.push(pick);
       return showStoryEventIfPending();
+    }
+    /* 修复批次 C（M6）：剧情节点双通道——ev_top25 / ev_top10 原本只在「名次跨线那一场」排队，
+       中等胜率玩家名次爬得慢就永远摸不到。加胜场平行通道（阈值与影响力档位的胜场路对齐：
+       前 25 节点＝10 胜、前 10 节点＝25 胜），任一满足即补排队；已触发过的不会重复
+       （queueStory 自带 seen/队列去重）。调用点：比赛结算、睡觉进新日、读档进游戏——
+       老档被卡住的节点在下一次进游戏时即被补上（与 m2 的据点兜底 flush 同点位）。 */
+    function checkStoryMilestones() {
+      storyState();
+      var seen = S.story.seenEvents;
+      if (seen.indexOf('ev_top25') < 0 && (S.rank <= 25 || (S.wins || 0) >= 10)) queueStory('ev_top25');
+      if (seen.indexOf('ev_top10') < 0 && (S.rank <= 10 || (S.wins || 0) >= 25)) queueStory('ev_top10');
     }
     function addAffinity(who, delta) {
       storyState();
@@ -79,8 +105,16 @@
     function openStoryEvent(id) {
       var def = STORY_EVENTS[id]; if (!def) return;
       storyState();
-      if (!def.repeat && S.story.seenEvents.indexOf(id) < 0) S.story.seenEvents.push(id);
-      curStory = { id: id, def: def, page: 0 };
+      var wasSeen = S.story.seenEvents.indexOf(id) >= 0;
+      if (!def.repeat && !wasSeen) S.story.seenEvents.push(id);
+      /* 修复批次 C（M6）：日常事件记触发日（可重复池的冷却依据）；已触发过的可重复日常
+         改用 DAILY_ALTS 微变版本呈现（台词/数值小改），正文只在首触发出现。 */
+      if (id.indexOf('daily_') === 0) S.story.dailyCd[id] = S.day;
+      var effDef = def;
+      if (wasSeen && typeof DAILY_ALTS !== 'undefined' && DAILY_ALTS[id]) {
+        effDef = Object.assign({}, def, DAILY_ALTS[id]);
+      }
+      curStory = { id: id, def: effDef, page: 0 };
       $('storyTitle').textContent = def.title || '剧情';
       $('storySkip').style.display = 'none';
       renderStoryPage();
@@ -185,11 +219,11 @@
         var c = STORY_CHARS[w], v = S.story.affinity[w] || 0;
         var filled = Math.round(v / 20), hearts = '';
         for (var i = 0; i < 5; i++) hearts += '<span class="' + (i < filled ? '' : 'off') + '">♥</span>';
-        return '<div class="rel-row"><img class="rel-img" src="' + c.img + '" alt="' + c.name + '" />' +
+        return '<div class="rel-row"><img class="rel-img" data-src="' + c.img + '" alt="' + c.name + '" />' +
           '<div style="flex:1;min-width:0"><span class="rel-name">' + c.name + '</span> <span class="rel-role">' + c.role + '</span>' +
           '<div class="rel-hearts">' + hearts + '<span style="color:var(--ink-2);font-size:12.5px;letter-spacing:0"> ' + v + ' · ' + affTierName(v) + '</span></div>' +
           '<p class="rel-desc">' + c.desc + '</p></div></div>';
-      }).join('') + '<p class="rel-desc" style="margin-top:8px">好感来自剧情选项、与沈墨凛的比赛、散心时的偶遇；达到 30 / 60 / 90 各解锁一段专属剧情。不理会这条线，不影响任何主线进度。</p>';
+      }).join('') + '<p class="rel-desc" style="margin-top:8px">好感来自剧情选项、与沈墨凛的比赛与约战（比赛屏可发起，2 AP）、散心时的偶遇；达到 30 / 60 / 90 各解锁一段专属剧情。不理会这条线，不影响任何主线进度。</p>';
     }
     /* ---------- 序章（仅新存档；4 步：测力机 → 梢姐搭话 → 拳馆试训 → 开启生涯） ---------- */
     var proState = null;

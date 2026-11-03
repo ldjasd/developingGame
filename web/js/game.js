@@ -11,20 +11,33 @@
       Object.keys(bonus || {}).forEach(function (k) { if (bonus[k]) parts.push(attrNameOf(k) + ' ' + (bonus[k] > 0 ? '+' : '') + bonus[k]); });
       return parts.length ? parts.join(' · ') : '无属性加成';
     }
+    /* 修复批次 D：百分比口径的描述与老存档换算。pctDesc 输出「力量生效 +8%」式文案；
+       legacyPctOf 把批次 D 之前定制拳套的固定 bonus 按 ×4 换算成 pct（旧 +1≈+4%、+2≈+8%，
+       以中盘属性 25 为标定点与旧值等价），保证老档装备价值不缩水。 */
+    function pctDesc(pct) {
+      var parts = [];
+      Object.keys(pct || {}).forEach(function (k) { if (pct[k]) parts.push(attrNameOf(k) + '生效 ' + (pct[k] > 0 ? '+' : '−') + Math.abs(pct[k]) + '%'); });
+      return parts.length ? parts.join(' · ') : '无属性加成';
+    }
+    function legacyPctOf(bonus) {
+      var p = {};
+      Object.keys(bonus || {}).forEach(function (k) { if (bonus[k]) p[k] = bonus[k] * 4; });
+      return p;
+    }
     function gloveSig(sel) { return sel.pattern + '|' + sel.outer + '|' + sel.lining + '|' + sel.oz + '|' + sel.fix; }
     function computeGlove(sel) {
       var p = GLOVE_PATTERNS[sel.pattern], o = GLOVE_OUTERS[sel.outer], l = GLOVE_LININGS[sel.lining];
       var oz = GLOVE_OZ[sel.oz] || GLOVE_OZ[12], fx = GLOVE_FIX[sel.fix] || GLOVE_FIX.velcro;
-      var bonus = {};
-      [p.bonus, o.bonus, l.bonus, oz.bonus, fx.bonus].forEach(function (b) {
-        Object.keys(b).forEach(function (k) { bonus[k] = (bonus[k] || 0) + b[k]; });
+      var pct = {};
+      [p.pct, o.pct, l.pct, oz.pct, fx.pct].forEach(function (b) {
+        Object.keys(b).forEach(function (k) { pct[k] = (pct[k] || 0) + b[k]; });
       });
-      Object.keys(bonus).forEach(function (k) { if (!bonus[k]) delete bonus[k]; });
+      Object.keys(pct).forEach(function (k) { if (!pct[k]) delete pct[k]; });
       var price = clamp(p.base + o.price + l.price + oz.adj + fx.price, 800, 6000);
       var shortName = p.name.replace('系', '') + o.name + sel.oz + 'oz';
       return {
-        price: price, bonus: bonus, shortName: shortName,
-        desc: p.name + ' · ' + o.name + '外皮 · ' + l.name + '内衬 · ' + sel.oz + 'oz · ' + fx.name + ' — ' + bonusDesc(bonus),
+        price: price, pct: pct, shortName: shortName,
+        desc: p.name + ' · ' + o.name + '外皮 · ' + l.name + '内衬 · ' + sel.oz + 'oz · ' + fx.name + ' — ' + pctDesc(pct),
         breakdown: '版型 ¥' + p.base + ' + 外皮 ¥' + o.price + ' + 内衬 ¥' + l.price + ' + 盎司 ' + (oz.adj >= 0 ? '+' : '−') + '¥' + Math.abs(oz.adj) + ' + 固定 ¥' + fx.price,
         notes: [p.note, o.note, l.note, oz.note, fx.note].join('；')
       };
@@ -36,7 +49,7 @@
         id: (source === 'craft' ? 'craft' : 'custom') + '-' + S.customSeq,
         slot: 'gloves',
         name: (source === 'craft' ? '打造·' : '定制·') + c.shortName + '拳套',
-        price: c.price, desc: c.desc, bonus: c.bonus,
+        price: c.price, desc: c.desc, pct: c.pct,
         custom: { pattern: sel.pattern, outer: sel.outer, lining: sel.lining, oz: sel.oz, fix: sel.fix },
         source: source, sig: 'combo:' + gloveSig(sel)
       };
@@ -112,7 +125,7 @@
       if (!g) return '';
       var key = imgKeyFor(g);
       var src = GEAR_IMG_SRC[key] || '';
-      return '<img class="gear-img ' + (cls || '') + '" data-gear-img="' + key + '" src="' + src + '" alt="' + g.name + ' 单品图" loading="lazy" />';
+      return '<img class="gear-img ' + (cls || '') + '" data-gear-img="' + key + '" data-src="' + src + '" alt="' + g.name + ' 单品图" loading="lazy" />'; // 批次 E：data-src 懒加载，进对应视图才下载（activateLazyImgs 兑现）
     }
     function materialsHTML() {
       return '<div class="mat-grid">' + MATERIALS.map(function (m) {
@@ -328,9 +341,12 @@
         materials: { synthetic: 0, calf: 0, goat: 0, kangaroo: 0, latex: 0, gel: 0, horsehair: 0 },
         customGear: [], customSeq: 0, dexSigs: [], dexAch: [],
         bag: { drink: 0, bandage: 0, meal: 0 },
-        buffs: { drink: false, bandage: false, meal: false },
+        buffs: { drink: false, bandage: false, meal: false, camp: 0, promo: false }, // camp/promo＝修复批次 D 服务充能（特训营剩余次数 / 宣传造势待生效）
+        physioW: 0, physioN: 0, campW: 0, promoW: 0, // 修复批次 D：服务周限次记账（W=上次使用周数）
+        sinkStats: { physio: { n: 0, spent: 0 }, camp: { n: 0, spent: 0 }, promo: { n: 0, spent: 0 } }, // 修复批次 D：消费口累计（验收/生涯模拟口径）
         appearance: { hair: 'ponytail', face: 'default', body: 'standard', outfit: 'default', lastDim: 'hair' },
-        story: { prologueDone: false, seenEvents: [], affinity: { senior: 0, manager: 0, rival: 0, teammate: 0 } },
+        story: { prologueDone: false, seenEvents: [], affinity: { senior: 0, manager: 0, rival: 0, teammate: 0 }, dailyCd: {} }, // dailyCd＝修复批次 C 可重复日常冷却记录（老档由 storyState 兜底补）
+        sparFights: 0, sparRival: 0, sparWeek: 0, sparCount: 0, sparByKey: {}, beatChamp: false, // 修复批次 C：约战计数与「正式赛击败伊芙琳」落盘（老档靠 load 默认合并兜底）
         tutorial: { practiceDone: false, tips: [], goalDone: false, trainings: 0 }, // 新手期重构：练习赛/情境提示/首周目标（老存档读档时一律毕业，见 load 兼容段）
         attrs: { power: 10, endurance: 10, will: 10, speed: 10, accuracy: 10, footwork: 10, defense: 10, technique: 10 },
         punchExp: { jab: 0, straight: 0, hook: 0, upper: 0, body: 0 },
@@ -407,7 +423,9 @@
     function renderAppearance() {
       var img = $('portraitImg'); if (!img) return;
       S.appearance = normalizeAppearance(S.appearance);
-      img.src = portraitSrc();
+      // 批次 E：立绘改懒加载——只写 data-src，状态屏可见时才兑现（启动渲染不再白拉 302KB 立绘）
+      img.setAttribute('data-src', portraitSrc());
+      if (currentSceneView === 'status') { img.src = portraitSrc(); img.removeAttribute('data-src'); }
       var sc = APPEARANCE.body[S.appearance.body].scale;
       img.style.transform = (sc === 1) ? '' : ('scaleY(' + sc + ')');
       img.style.transformOrigin = 'top center';
@@ -437,15 +455,25 @@
       if (after !== before) toast('心情变为：' + after + '！');
     }
     /* ================= Phase 5 深化：装备强化 +0~+10（全装备通用） =================
-       每级：该装备每项数值属性 +1，减伤类 +1%；费用 ¥200×(等级+1) + 对应材料 ×(等级+1)，成功率 100%。
-       材料种类：拳套/护头/战袍/战靴用皮料，护齿/护腕用内衬（取该装备拆解产出的对应材料）。 */
+       修复批次 D（GAME_AUDIT2 M3）口径：每级使该装备每项正向 pct +1 个百分点（负向保持不变，
+       保留装备取舍，沿 P2-6）、减伤 +1%，机制倍率按 MECH_DEFS 小幅变强；成功率 100%。
+       费用：¥300×(当前等级+1)；材料走 ENH_MAT_CURVE 逐级 [1,1,1,1,2,2,2,2,3,3]、+10 合计 18 个，
+       从该装备拆解对应的「皮料＋内衬」两类合计扣除——旧口径单类 (等级+1) 合计 55 个在游戏自身
+       材料池里（单类期望总量仅约 8~16）根本凑不齐，双类合计后各装备材料池期望约 18~28，可达。 */
     var ENH_MAX = 10;
+    var ENH_MAT_CURVE = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3]; // 下标 = 当前等级，值为升下一级所需材料数；合计 18
     function enhOf(id) { var v = (S.enh && S.enh[id]) || 0; return (typeof v === 'number' && v > 0) ? Math.min(ENH_MAX, Math.floor(v)) : 0; }
-    function effBonusOf(g) { // 含强化等级的有效属性加成（P2-6：强化只加正向属性，负加成保持不变，保留装备取舍）
-      var lvl = enhOf(g.id), b = {};
-      Object.keys(g.bonus || {}).forEach(function (k) { b[k] = g.bonus[k] > 0 ? g.bonus[k] + lvl : g.bonus[k]; });
+    function gearPctOf(g) { // 装备的基础 pct（定制拳套老存档只有 bonus 时按 ×4 换算兜底，与读档迁移同口径）
+      if (g.pct) return g.pct;
+      if (g.bonus) return legacyPctOf(g.bonus);
+      return {};
+    }
+    function effPctAt(g, lvl) { // 指定强化等级下的有效 pct（强化只加正向，负向保持不变）
+      var base = gearPctOf(g), b = {};
+      Object.keys(base).forEach(function (k) { b[k] = base[k] > 0 ? base[k] + lvl : base[k]; });
       return b;
     }
+    function effPctOf(g) { return effPctAt(g, enhOf(g.id)); }
     function effDrOf(g) { return g.dr ? g.dr + enhOf(g.id) : 0; } // 有效减伤%
     function gearDrPct() { // 全部已装备减伤合计（护齿 + 冠军护头等叠加）
       var t = 0;
@@ -455,28 +483,65 @@
       });
       return t;
     }
-    function bonusDescAt(g, lvl) { // 指定强化等级下的完整效果说明（属性 + 减伤；P2-6：负加成不随强化翻转）
-      var b = {};
-      Object.keys(g.bonus || {}).forEach(function (k) { b[k] = g.bonus[k] > 0 ? g.bonus[k] + lvl : g.bonus[k]; });
-      var parts = [], bd = bonusDesc(b);
+    /* 机制效果（批次 D）：mech 字段 trauma/stam/cd 均为倍率（<1 正面）；强化每级按 per 变强、下限 floor。
+       合计口径：已装备各件连乘后钳制在 [floor, 1]。 */
+    var MECH_DEFS = {
+      trauma: { floor: 0.5, per: 0.004, label: '所受重创积累' },
+      stam: { floor: 0.7, per: 0.003, label: '出拳体力消耗' },
+      cd: { floor: 0.6, per: 0.004, label: '指令冷却' }
+    };
+    function effMechAt(g, field, lvl) {
+      if (!g.mech || !g.mech[field]) return 1;
+      var d = MECH_DEFS[field];
+      return Math.max(d.floor, g.mech[field] - d.per * lvl);
+    }
+    function gearMechMul(field) {
+      var m = 1;
+      Object.keys(S.gear).forEach(function (slot) {
+        var g = S.gear[slot] ? gearById(S.gear[slot]) : null;
+        if (g) m *= effMechAt(g, field, enhOf(g.id));
+      });
+      return Math.max(MECH_DEFS[field].floor, Math.min(1, m));
+    }
+    function gearTraumaMul() { return gearMechMul('trauma'); } // 我方所受重创积累倍率（护齿/护头）
+    function gearStamMul() { return gearMechMul('stam'); }     // 我方出拳体力消耗倍率（战靴）
+    function gearCdMul() { return gearMechMul('cd'); }         // 我方指令冷却倍率（护腕）
+    function mechDescAt(g, lvl) {
+      var parts = [];
+      Object.keys(MECH_DEFS).forEach(function (f) {
+        if (g.mech && g.mech[f]) parts.push(MECH_DEFS[f].label + ' −' + Math.round((1 - effMechAt(g, f, lvl)) * 100) + '%');
+      });
+      return parts;
+    }
+    function bonusDescAt(g, lvl) { // 指定强化等级下的完整效果说明（pct + 减伤 + 机制；负向不随强化翻转）
+      var parts = [], bd = pctDesc(effPctAt(g, lvl));
       if (bd !== '无属性加成') parts.push(bd);
       if (g.dr) parts.push('减伤 ' + (g.dr + lvl) + '%');
+      parts = parts.concat(mechDescAt(g, lvl));
       return parts.length ? parts.join(' · ') : '无加成';
     }
     function gearDispName(g) { var lvl = enhOf(g.id); return g.name + (lvl > 0 ? ' +' + lvl : ''); }
     function gearEffDesc(g) { return enhOf(g.id) > 0 ? bonusDescAt(g, enhOf(g.id)) : g.desc; }
-    function enhYieldFor(g) { // 强化消耗的材料：[皮料, 内衬] 取对应的一种
+    function enhYieldFor(g) { // 强化/拆解对应的材料对：[皮料, 内衬]
       if (g.custom) return [g.custom.outer, g.custom.lining];
       return DISMANTLE_MAP[g.id] || ['synthetic', 'latex'];
     }
     function enhCost(g) {
       var lvl = enhOf(g.id), y = enhYieldFor(g);
-      var matId = (g.slot === 'guard' || g.slot === 'wrist') ? y[1] : y[0];
-      return { lvl: lvl, money: 200 * (lvl + 1), matId: matId, matCount: lvl + 1 };
+      return { lvl: lvl, money: 300 * (lvl + 1), matIds: y, matCount: lvl >= ENH_MAX ? 0 : ENH_MAT_CURVE[lvl] };
+    }
+    function enhMatStock(g) { // 该装备材料对（皮料＋内衬）的合计库存
+      var y = enhYieldFor(g);
+      return ((S.materials && S.materials[y[0]]) || 0) + ((S.materials && S.materials[y[1]]) || 0);
     }
     function enhShortage(g) { // 返回 {money:boolean, mat:boolean}，材料/金钱是否不足
       var c = enhCost(g);
-      return { money: S.money < c.money, mat: ((S.materials && S.materials[c.matId]) || 0) < c.matCount, cost: c };
+      return { money: S.money < c.money, mat: enhMatStock(g) < c.matCount, cost: c };
+    }
+    function enhMatText(g) { // 材料对库存文案：「小牛皮 ×a ＋ 乳胶 ×b（合计 N）」
+      var c = enhCost(g), y = c.matIds;
+      var a = (S.materials && S.materials[y[0]]) || 0, b = (S.materials && S.materials[y[1]]) || 0;
+      return materialName(y[0]) + ' ×' + a + ' ＋ ' + materialName(y[1]) + ' ×' + b + '（合计 ' + (a + b) + '）';
     }
     function confirmEnhance(id) {
       var g = gearById(id);
@@ -488,12 +553,12 @@
         title: '强化装备 · ' + g.name + ' +' + c.lvl + ' → +' + (c.lvl + 1),
         lines: [
           ['费用', '¥' + S.money + ' → ¥' + (S.money - c.money) + '（−' + c.money + '）'],
-          ['材料', materialName(c.matId) + ' ×' + c.matCount + '（现有 ' + ((S.materials && S.materials[c.matId]) || 0) + '）'],
+          ['材料', '对应材料 ×' + c.matCount + '（' + enhMatText(g) + '，从皮料＋内衬合计扣除）'],
           ['当前效果', bonusDescAt(g, c.lvl)],
           ['强化后效果', bonusDescAt(g, c.lvl + 1)],
           ['成功率', '100%（不会失败）']
         ],
-        note: lack ? '条件不足：' + (sh.money ? '金钱不够（需 ¥' + c.money + '）。' : '') + (sh.mat ? '材料不足：缺 ' + materialName(c.matId) + '（去背包拆解装备获得）。' : '') : '强化对已装备 / 未装备的都立即生效：每项正向属性 +1（负加成保持不变），减伤类再 +1%。最高 +10。',
+        note: lack ? '条件不足：' + (sh.money ? '金钱不够（需 ¥' + c.money + '）。' : '') + (sh.mat ? '材料不足：对应皮料＋内衬合计需 ' + c.matCount + ' 个（去背包拆解装备获得）。' : '') : '强化对已装备 / 未装备的都立即生效：每项正向百分比 +1 个百分点（负向保持不变），减伤类再 +1%，机制效果同步小幅增强。材料从该装备对应的皮料与内衬两类合计扣除。最高 +10。',
         okText: '确认强化',
         okDisabled: lack,
         onOk: function () {
@@ -503,28 +568,44 @@
           if (!S.materials) S.materials = defaultState().materials;
           if (!S.enh) S.enh = {};
           S.money -= c2.money;
-          S.materials[c2.matId] -= c2.matCount;
+          var takeA = Math.min((S.materials[c2.matIds[0]] || 0), c2.matCount); // 先扣皮料，不足部分由内衬补
+          S.materials[c2.matIds[0]] = (S.materials[c2.matIds[0]] || 0) - takeA;
+          S.materials[c2.matIds[1]] = (S.materials[c2.matIds[1]] || 0) - (c2.matCount - takeA);
           S.enh[id] = c2.lvl + 1;
           lastAttrs = effAttrs();
-          dailyLog('强化装备：' + g.name + ' 强化到 +' + S.enh[id] + '（花费 ¥' + c2.money + '、' + materialName(c2.matId) + ' ×' + c2.matCount + '），效果变为：' + bonusDescAt(g, S.enh[id]) + '。', 'good');
+          dailyLog('强化装备：' + g.name + ' 强化到 +' + S.enh[id] + '（花费 ¥' + c2.money + '、对应材料 ×' + c2.matCount + '），效果变为：' + bonusDescAt(g, S.enh[id]) + '。', 'good');
           render();
           toast('强化成功：' + gearDispName(g));
           checkAchievements(); // Phase 9：强化到 +5 / +10 成就判定
         }
       });
     }
-    function gearBonus() {
-      var b = {};
+    function gearPctTotals() { // 全部已装备 pct 合计（同属性跨件相加，含强化）
+      var t = {};
       Object.keys(S.gear).forEach(function (slot) {
         var g = S.gear[slot] ? gearById(S.gear[slot]) : null;
-        if (g) { var eb = effBonusOf(g); Object.keys(eb).forEach(function (k) { b[k] = (b[k] || 0) + eb[k]; }); }
+        if (g) { var ep = effPctOf(g); Object.keys(ep).forEach(function (k) { t[k] = (t[k] || 0) + ep[k]; }); }
+      });
+      return t;
+    }
+    function effAttrs() { // 修复批次 D：生效值 = 本体属性 ×(1+pct 合计/100)（属性面板与战斗共用）。
+      // 与属性硬顶的关系：硬顶 100 只约束「训练本体」（applyTrainingApply 在写入 S.attrs 时钳制），
+      // 装备百分比作用在生效值层面、可使实战生效值超过 100——这是设计内口径（装备是乘数不是本体），
+      // 批次 A 的对手浮动生成按玩家本体＋战绩标定，不读 effAttrs，故不会被装备反向抬高对手强度。
+      var t = gearPctTotals(), out = {};
+      ATTRS.forEach(function (a) {
+        var p = Math.max(-90, t[a.key] || 0);
+        out[a.key] = Math.round(S.attrs[a.key] * (1 + p / 100) * 10) / 10;
+      });
+      return out;
+    }
+    function gearBonus() { // 展示用：装备带来的生效值点数差（取整），供状态/据点的「+N 装备」标注
+      var ea = effAttrs(), b = {};
+      ATTRS.forEach(function (a) {
+        var d = Math.round(ea[a.key] - S.attrs[a.key]);
+        if (d) b[a.key] = d;
       });
       return b;
-    }
-    function effAttrs() { // 基础属性 + 装备加成（属性面板与战斗共用）
-      var b = gearBonus(), out = {};
-      ATTRS.forEach(function (a) { out[a.key] = S.attrs[a.key] + (b[a.key] || 0); });
-      return out;
     }
     /* Phase 2：排名奖金 = 基础(200+周数×100) × (1 + (50−排名)/50)，排名越高奖金越多 */
     /* 第二轮回炉：粉丝系统改为影响力（5 档，不刷数；用户纠正后改为动态档位制）
@@ -551,6 +632,85 @@
     function influenceBonusPct() { refreshInfluence(); return INFLUENCE_LEVELS[S.influence - 1].bonus; }
     function influencePrizeMul() { return 1 + influenceBonusPct() / 100; }
     function prizeForRank(w) { return Math.round((200 + w * 100) * (1 + (50 - S.rank) / 50) * influencePrizeMul()); }
+    /* ================= 修复批次 D（GAME_AUDIT2 M4）：持续消费口 =================
+       旧经济只有一次性装备买断（全店 ¥40,900），第 3 周后收入（奖金+赞助约 +¥2,500/周起、随周数
+       与排名继续涨）无处可去，20 周零消费余额 ¥46k+。本批加三个与现有系统咬合的复购型消费口：
+       ① 康复理疗（伤病管理）：医院的免 AP 高配档——¥1600 / 伤病 −40 / 每周 2 次；医院治疗
+          （2 AP + ¥500 → −30）仍在，AP 与金钱从此是一对可互换的资源。
+       ② 特训营（商店服务）：价格随周涨（900+周×240，定价经 20 周模拟复核收紧，见批次 D 记录），买入 4 次充能，每次训练结算收益 +50%；
+          每周限购 1 次。与训练边际递减叠乘的是「已递减后的实际增量」，不绕过递减与硬顶。
+       ③ 宣传造势（商店服务）：价格随周涨（500+周×180），心态 +15 ＋下一场正式赛奖金 ×1.4
+          （settleNow 获胜时消费）；每周限购 1 次。定价按各周奖金期望标定为净消耗（见批次 D 记录）。 */
+    function sinkSpend(kind, amount) {
+      if (!S.sinkStats || typeof S.sinkStats !== 'object') S.sinkStats = defaultState().sinkStats;
+      if (!S.sinkStats[kind]) S.sinkStats[kind] = { n: 0, spent: 0 };
+      S.sinkStats[kind].n += 1; S.sinkStats[kind].spent += amount;
+    }
+    var PHYSIO_PRICE = 1600, PHYSIO_HEAL = 40, PHYSIO_WEEKLY_MAX = 2;
+    function physioLeftThisWeek() { return S.physioW === weekOf(S.day) ? Math.max(0, PHYSIO_WEEKLY_MAX - (S.physioN || 0)) : PHYSIO_WEEKLY_MAX; }
+    function confirmClinic() { // 医院治疗（既有口径不变：2 AP + ¥500 → 伤病 −30），从外出菜单抽出与理疗并列
+      if (S.injury <= 0) { toast('身上没伤，不用去医院'); return; }
+      if (S.ap < 2) { toast('行动点不足（医院治疗需要 2 AP；不耗 AP 的康复理疗也可以看看）'); return; }
+      if (S.money < 500) { toast('钱不够治疗（需要 ¥500）'); return; }
+      askConfirm({
+        scene: 'hospital',
+        title: '外出 · 医院治疗',
+        lines: [
+          ['行动点', '−2 AP（' + S.ap + ' → ' + (S.ap - 2) + '）'],
+          ['金钱', '¥' + S.money + ' → ¥' + (S.money - 500) + '（−500）'],
+          ['伤病', fmtDelta(S.injury, Math.max(0, S.injury - 30))]
+        ],
+        note: '专业运动医学处理，伤病 −30。伤病 ≥30 时比赛全属性 −5%、≥60 时 −15%，别带伤硬撑。赶时间的话，隔壁康复理疗不耗 AP、好得更多，就是贵些。',
+        okText: '确认治疗',
+        onOk: function () {
+          if (S.ap < 2 || S.money < 500 || S.injury <= 0) { toast('条件已变化，无法治疗'); return; }
+          S.ap -= 2; S.money -= 500;
+          S.injury = Math.max(0, S.injury - 30);
+          dailyLog('Day ' + S.day + ' · 医院治疗：伤病 −30，花费 ¥500。', 'good');
+          var hl = $('hospitalList'); if (hl) hl.classList.remove('open');
+          var ol = $('outList'); if (ol) ol.classList.remove('open');
+          render();
+          toast('治疗完成，伤病减轻');
+        }
+      });
+    }
+    function confirmPhysio() { // 康复理疗（批次 D 新增）：不耗 AP，¥1600 → 伤病 −40，每周 2 次
+      if (S.injury <= 0) { toast('身上没伤，不用理疗'); return; }
+      if (physioLeftThisWeek() <= 0) { toast('本周理疗次数已用完（每周 ' + PHYSIO_WEEKLY_MAX + ' 次）'); return; }
+      if (S.money < PHYSIO_PRICE) { toast('钱不够理疗（需要 ¥' + PHYSIO_PRICE + '）'); return; }
+      askConfirm({
+        scene: 'hospital',
+        title: '外出 · 康复理疗',
+        lines: [
+          ['行动点', '不消耗（理疗中心随到随做）'],
+          ['金钱', '¥' + S.money + ' → ¥' + (S.money - PHYSIO_PRICE) + '（−' + PHYSIO_PRICE + '）'],
+          ['伤病', fmtDelta(S.injury, Math.max(0, S.injury - PHYSIO_HEAL))],
+          ['本周剩余', physioLeftThisWeek() + ' 次 → ' + (physioLeftThisWeek() - 1) + ' 次']
+        ],
+        note: '运动康复中心的理疗套餐：手法松解＋冷敷理疗，伤病 −' + PHYSIO_HEAL + '。比医院治疗贵，但不占行动点、好得更多——AP 紧的时候用钱换时间。',
+        okText: '确认理疗',
+        onOk: function () {
+          if (S.money < PHYSIO_PRICE || S.injury <= 0 || physioLeftThisWeek() <= 0) { toast('条件已变化，无法理疗'); return; }
+          S.money -= PHYSIO_PRICE;
+          S.injury = Math.max(0, S.injury - PHYSIO_HEAL);
+          var wk = weekOf(S.day);
+          if (S.physioW !== wk) { S.physioW = wk; S.physioN = 0; }
+          S.physioN += 1;
+          sinkSpend('physio', PHYSIO_PRICE);
+          dailyLog('Day ' + S.day + ' · 康复理疗：伤病 −' + PHYSIO_HEAL + '，花费 ¥' + PHYSIO_PRICE + '。', 'good');
+          var hl = $('hospitalList'); if (hl) hl.classList.remove('open');
+          var ol = $('outList'); if (ol) ol.classList.remove('open');
+          render();
+          toast('理疗完成，身体松快多了');
+        }
+      });
+    }
+    var CAMP_CHARGES = 4; // 特训营一次买入的充能次数（每次训练计划结算消耗 1 次，收益 +50%）
+    function campPrice() { return 900 + weekOf(S.day) * 240; }
+    function campLeftThisWeek() { return S.campW === weekOf(S.day) ? 0 : 1; }
+    var PROMO_PRIZE_MUL = 1.4; // 宣传造势：下一场正式赛奖金倍率
+    function promoPrice() { return 500 + weekOf(S.day) * 180; }
+    function promoLeftThisWeek() { return S.promoW === weekOf(S.day) ? 0 : 1; }
     /* ================= Phase 3：阶段 / 粉丝 / 赞助 ================= */
     var pendingStageNotice = []; // 已完成但还没弹祝贺窗的阶段（等结算窗关闭后再弹，避免弹窗叠罗汉）
     var pendingStageReward = 0;
@@ -670,7 +830,25 @@
           S.materials[k] = Math.floor(S.materials[k]);
         });
         if (!Array.isArray(S.customGear)) S.customGear = [];
-        S.customGear = S.customGear.filter(function (g) { return g && typeof g.id === 'string' && g.bonus && typeof g.bonus === 'object'; });
+        S.customGear = S.customGear.filter(function (g) { return g && typeof g.id === 'string' && ((g.pct && typeof g.pct === 'object') || (g.bonus && typeof g.bonus === 'object')); });
+        // 修复批次 D 迁移：批次 D 之前做出的定制/打造拳套只有固定 bonus —— 按 ×4 换算补 pct（此后 effPct 走 pct；bonus 字段保留备查，desc 文案仍为当时的固定值表述，不追改）
+        S.customGear.forEach(function (g) { if (!g.pct && g.bonus) g.pct = legacyPctOf(g.bonus); });
+        // 修复批次 D 兼容：服务周限次与消费记账字段补齐（老档无记录＝本周未用过、累计为 0）
+        ['physioW', 'physioN', 'campW', 'promoW'].forEach(function (k) {
+          if (typeof S[k] !== 'number' || isNaN(S[k]) || S[k] < 0) S[k] = 0; else S[k] = Math.floor(S[k]);
+        });
+        var defSink = defaultState().sinkStats;
+        if (!S.sinkStats || typeof S.sinkStats !== 'object') S.sinkStats = defSink;
+        Object.keys(defSink).forEach(function (k) {
+          var v = S.sinkStats[k];
+          if (!v || typeof v !== 'object') S.sinkStats[k] = { n: 0, spent: 0 };
+          else {
+            if (typeof v.n !== 'number' || isNaN(v.n) || v.n < 0) v.n = 0;
+            if (typeof v.spent !== 'number' || isNaN(v.spent) || v.spent < 0) v.spent = 0;
+          }
+        });
+        if (typeof S.buffs.camp !== 'number' || isNaN(S.buffs.camp) || S.buffs.camp < 0) S.buffs.camp = 0;
+        S.buffs.promo = !!S.buffs.promo;
         if (typeof S.customSeq !== 'number' || isNaN(S.customSeq) || S.customSeq < 0) S.customSeq = S.customGear.length;
         if (!Array.isArray(S.dexAch)) S.dexAch = [];
         if (!Array.isArray(data.dexSigs)) {
@@ -978,7 +1156,7 @@
     function renderTitle(hadSave) {
       titleHadSave = !!hadSave;
       var btn = $('btnTitleContinue'); if (btn) btn.disabled = !hadSave;
-      var tp = $('titlePortrait'); if (tp) tp.src = portraitSrc();
+      // 批次 E：titlePortrait 是常隐元素（无任何样式/脚本会显示它），不再在标题屏给它塞立绘 src（省 302KB 首访流量）；立绘本体由状态屏 portraitImg 懒加载
       var info = $('titleSlotInfo');
       if (info) info.textContent = hadSave
         ? '存档槽 ' + currentSlot() + '：' + slotSummaryText(currentSlot())
@@ -989,6 +1167,7 @@
       shopSession = false;
       showScene('daily');
       if (S.story && !S.story.prologueDone) { startPrologue(); return; }
+      checkStoryMilestones(); // 修复批次 C：门槛放宽后老档被卡住的剧情节点（前 25/前 10）在进游戏时兜底补排队（与读档追溯 flush 同点位）
       showNextPendingModal(); // 读档追溯的阶段/图鉴祝贺窗，进游戏后再弹（不在标题屏上叠罗汉）
     }
     function startNewGame() {
@@ -1058,38 +1237,26 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-out]'), function (b) {
       b.addEventListener('click', function () {
         var kind = b.getAttribute('data-out');
-        if (S.ap < 2) { toast('行动点不足（外出需要 2 AP）'); return; }
+        if (S.ap < 2 && kind !== 'hospital') { toast('行动点不足（外出需要 2 AP）'); return; } // 批次 D：医院菜单含免 AP 的理疗，AP 不足时也允许打开（治疗项各自再验 AP）
         if (kind === 'shop') {
           enterShopFlow(); // 进店先确认：确认后才扣 2 AP，取消不消耗（与场景导航「商店」共用同一流程）
         } else if (kind === 'hospital') {
-          // 医院治疗：先确认（2 AP + ¥500 → 伤病 −30），确认后才结算
+          // 修复批次 D：医院改为二级选择——医院治疗（2 AP + ¥500 → −30）/ 康复理疗（免 AP、¥1600 → −40、每周 2 次）
           if (S.injury <= 0) { toast('身上没伤，不用去医院'); return; }
-          if (S.money < 500) { toast('钱不够治疗（需要 ¥500）'); return; }
-          askConfirm({
-            scene: 'hospital', // A1：治疗确认框打开期间切医院场景，关闭自动复位
-            title: '外出 · 医院治疗',
-            lines: [
-              ['行动点', '−2 AP（' + S.ap + ' → ' + (S.ap - 2) + '）'],
-              ['金钱', '¥' + S.money + ' → ¥' + (S.money - 500) + '（−500）'],
-              ['伤病', fmtDelta(S.injury, Math.max(0, S.injury - 30))]
-            ],
-            note: '专业运动医学处理，伤病 −30。伤病 ≥30 时比赛全属性 −5%、≥60 时 −15%，别带伤硬撑。',
-            okText: '确认治疗',
-            onOk: function () {
-              if (S.ap < 2 || S.money < 500 || S.injury <= 0) { toast('条件已变化，无法治疗'); return; }
-              S.ap -= 2; S.money -= 500;
-              S.injury = Math.max(0, S.injury - 30);
-              dailyLog('Day ' + S.day + ' · 医院治疗：伤病 −30，花费 ¥500。', 'good');
-              $('outList').classList.remove('open');
-              render();
-              toast('治疗完成，伤病减轻');
-            }
-          });
+          closeSubLists('hospitalList');
+          $('hospitalList').classList.toggle('open');
+          setScene($('hospitalList').classList.contains('open') ? 'hospital' : 'gym');
         } else {
           if (S.money < 300) { toast('钱不够散心（需要 ¥300）'); return; }
           closeSubLists('relaxList');
           $('relaxList').classList.add('open');
         }
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-hosp]'), function (b) {
+      b.addEventListener('click', function () {
+        var kind = b.getAttribute('data-hosp');
+        if (kind === 'physio') confirmPhysio(); else confirmClinic();
       });
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-relax]'), function (b) {
@@ -1141,7 +1308,12 @@
     $('btnRest').addEventListener('click', confirmRest);
     $('btnSleep').addEventListener('click', confirmSleep);
     $('btnMatch').addEventListener('click', confirmMatch);
-    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); nextBattlePractice = false; setScene('gym'); }); // A1：取消赛前弹窗复位拳馆；新手期重构：取消练习赛模式选择须清练习标记，防误标下一场正式赛
+    /* 修复批次 C：约战入口——开指名列表（可选行在 renderSparList 里绑 startSpar）；取消按钮只关窗 */
+    var btnSparEl = $('btnSpar');
+    if (btnSparEl) btnSparEl.addEventListener('click', function () { renderSparList(); var m = $('sparModal'); if (m) m.classList.add('open'); });
+    var btnCancelSparEl = $('btnCancelSpar');
+    if (btnCancelSparEl) btnCancelSparEl.addEventListener('click', function () { var m = $('sparModal'); if (m) m.classList.remove('open'); });
+    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); if (nextBattleSpar) { S.ap = Math.min(6, S.ap + SPAR_AP_COST); save(); render(); } nextBattlePractice = false; nextBattleSpar = false; var sb = document.querySelector('#modeModal [data-mode="sim"]'); if (sb) sb.style.display = ''; var mt2 = $('modeTitle'); if (mt2) mt2.textContent = '选择战斗模式'; setScene('gym'); }); // A1：取消赛前弹窗复位拳馆；新手期重构：取消练习赛模式选择须清练习标记，防误标下一场正式赛；修复批次 C：约战取消＝全额退回 2 AP（未开打不算发起，与全工程确认框「取消不结算」口径一致），同时复原借用弹窗时改掉的标题/sim 按钮
     /* 新手期重构：据点练习赛入口（startPractice 在 battle.js）/ 情境提示条关闭 / 设置·帮助区 */
     $('btnPractice').addEventListener('click', function () { startPractice(); });
     $('btnTipOk').addEventListener('click', hideTip);
@@ -1191,6 +1363,7 @@
     $('cmdCombo').addEventListener('click', useCombo);
     $('cmdWall').addEventListener('click', useWall);
     $('cmdClinch').addEventListener('click', useClinch);
+    $('btnManualClinch').addEventListener('click', useClinch); // 修复批次 B（m3）：手动面板搂抱按钮与自动面板共用同一指令
     $('btnMute').addEventListener('click', function () {
       muted = !muted;
       // 界面架构批：静音键与设置屏联动——主静音状态同步写入设置（音乐/音效开关），设置屏拨动任一开关也会解除主静音
@@ -1444,3 +1617,4 @@
        补弹阶段/图鉴追溯祝贺。老存档 prologueDone=true（迁移保证），点继续即原进度，绝不被序章卡住。 */
     renderTitle(hadSave);
     showScene('title');
+    injectFontFaces(); // 批次 E：标题已显示，此刻才注入 @font-face 让字体开始下载（不与主文档抢带宽）

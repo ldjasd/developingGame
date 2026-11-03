@@ -4,16 +4,21 @@
     var B = null; // 战斗状态
     var battleTimer = null;
 
-    function makeFoe() {
+    function makeFoe(forceKey) {
       var w = weekOf(S.day);
       ensureRoster();
       // 角色池匹配：从池中取与玩家名次相差 ≤5 的在榜角色随机抽一位；窗口为空时取距离最近的 3 位兜底
-      var pool = S.roster.filter(function (m) { return m.rank > 0 && Math.abs(m.rank - S.rank) <= 5; });
-      if (!pool.length) {
-        pool = S.roster.filter(function (m) { return m.rank > 0; })
-          .sort(function (a, b) { return Math.abs(a.rank - S.rank) - Math.abs(b.rank - S.rank); }).slice(0, 3);
+      // 修复批次 C：forceKey 为约战指名——直接取该名册成员（属性/人格走与正式赛完全相同的生成口径）
+      var member = null;
+      if (forceKey) S.roster.forEach(function (m) { if (m.key === forceKey) member = m; });
+      if (!member) {
+        var pool = S.roster.filter(function (m) { return m.rank > 0 && Math.abs(m.rank - S.rank) <= 5; });
+        if (!pool.length) {
+          pool = S.roster.filter(function (m) { return m.rank > 0; })
+            .sort(function (a, b) { return Math.abs(a.rank - S.rank) - Math.abs(b.rank - S.rank); }).slice(0, 3);
+        }
+        member = pool[Math.floor(Math.random() * pool.length)];
       }
-      var member = pool[Math.floor(Math.random() * pool.length)];
       var rank = member.rank;
       // 对手强度 = 该角色当前 rating（钳制到旧公式封顶线 9.1 + 周数×0.70 + 49×0.3，下限 6）；w≤2 新手缓冲 −2（沿用旧规则）
       var base = clamp(member.rating, 6, 9.1 + w * 0.70 + 49 * 0.3);
@@ -57,15 +62,52 @@
         attrs: attrs, prof: prof,
         hpMax: 100 + attrs.endurance * 14, hp: 100 + attrs.endurance * 14,
         stam: 100, hits: 0, dmg: 0, used: {}, tactic: 'attack', speechBuff: false,
-        style: member.style, styleIntensity: intensity
+        style: member.style, styleIntensity: intensity,
+        persona: foePersonaFor(member.style, member.key) // 修复批次 B（M5）：整场战术人格，生成时定下
       };
     }
     function styleOf(f) { return f && f.style ? FOE_STYLES[f.style] : null; }
+    /* 修复批次 B（GAME_AUDIT2 M5）：对手整场战术人格——makeFoe 生成时定下，整场一致、只按既定
+       规则临场调整（endBreak 评估），不再每回合随机重掷。人格由「风格 × 角色 key 的确定性散列」
+       派生：同一名角色永远同一种打法（跨场、跨档可辨识）；派生只依赖 roster 成员的固有字段
+       （key/style，老档成员天然都有），不新增存档字段、不需要迁移。
+       base＝开局战术（风格定调：力量→强攻、速度→游走打点、防反→稳守反击、均衡按角色三选一）；
+       adjust＝临场调整规则（comeback 点数落后转强攻 / protect 点数领先转稳守 / desperate 残血转强攻 / none 整场不变）；
+       comboWhen/wallHp/clinchFan＝指令偏好（见 foeCommandAI）。陪练不设人格（教学行为固定，见 makePracticeFoe）。 */
+    var PERSONA_ADJUST_TXT = { comeback: '落后时会转强攻反扑', protect: '领先后会转稳守保胜果', desperate: '残血时会拼命强攻', none: '整场一种打法、不会变招' };
+    function personaHash(str) { var h = 0; for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
+    function foePersonaFor(style, key) {
+      var h = personaHash(String(key || '') + '|' + String(style || ''));
+      var baseByStyle = { power: 'attack', speed: 'points', guardcounter: 'counter' };
+      var base = baseByStyle[style] || ['attack', 'counter', 'points'][h % 3]; // 均衡型：按角色散列三选一
+      var adjustPool = {
+        attack: ['comeback', 'desperate', 'none'],
+        points: ['protect', 'comeback', 'none'],
+        counter: ['comeback', 'protect', 'none']
+      };
+      return {
+        base: base,
+        adjust: adjustPool[base][Math.floor(h / 3) % 3],
+        comboWhen: ['press', 'burst', 'closer'][Math.floor(h / 9) % 3],
+        wallHp: [0.28, 0.35, 0.42][Math.floor(h / 27) % 3], // 铁壁触发血线（占 hpMax 比例；批次 B 二调收一档：初版 0.5 血线+重创免疫让对手中盘近乎无敌）
+        clinchFan: (Math.floor(h / 81) % 3) !== 0, // 约 2/3 的人愿意搂抱（断连击/拖延/回体力）
+        name: { attack: '压迫型', counter: '后手型', points: '游击型' }[base]
+      };
+    }
+    function personaDesc(p) {
+      if (!p) return '';
+      return p.name + '（开局' + TACTICS[p.base].name + '，' + PERSONA_ADJUST_TXT[p.adjust] + '）';
+    }
     /* 第二轮回炉 P2-7：手动 / 自动共用的命中与格挡计算（相同输入 → 相同结果，两模式不再各算一套） */
     function calcHitChance(att, def, attTac, defTac) {
       var hc = 0.70 + (att.attrs.accuracy - def.attrs.footwork) * 0.01;
-      if (defTac === 'counter') hc *= 0.7;      // 稳守方闪避+
-      if (attTac === 'attack' && defTac !== 'counter') hc *= 1.02;
+      /* 修复批次 B（M1）：战术相克进入命中层，构成 强攻→游走→稳守→强攻 的克制环（双方同规则）：
+         稳守方闪避 +（原 ×0.7）——但打点拳短促、进出快，稳守只能吃掉一部分（×0.88），点数由此克稳守；
+         游走方靠步伐难被打正（×0.95）——唯强攻压制的追打能咬住移动中的对手（×1.10），强攻由此克游走；
+         稳守克强攻靠的是打空后的反击窗口（见 tryAttack 的 counterP，未动）。 */
+      if (defTac === 'counter') hc *= (attTac === 'points' ? 0.88 : 0.7); // 稳守方闪避+
+      else if (defTac === 'points') hc *= (attTac === 'attack' ? 1.06 : 0.95); // 游走方难被打正 / 强攻追打（批次 B 二调：1.10 过热——强攻克速度摸到 98%、点数被力量压到 27%，收一档保住克制但不做成墙）
+      else if (attTac === 'attack') hc *= 1.02;
       return clamp(hc, 0.30, 0.95);
     }
     function calcBlockChance(def) { // 对手抱架格挡概率：基数 0.16 + 稳守反击战术 0.08 + 防守反击型风格加成
@@ -87,7 +129,8 @@
       return {
         name: S.name, attrs: ea, prof: prof,
         hpMax: hpMax, hp: hpMax, stam: 100, hits: 0, dmg: 0, used: {}, tactic: 'attack', speechBuff: false,
-        dmgTakenMul: Math.max(0.5, 1 - gearDrPct() / 100) // 减伤装备（护齿/护头，含强化）合计减伤%
+        dmgTakenMul: Math.max(0.5, 1 - gearDrPct() / 100), // 减伤装备（护齿/护头，含强化）合计减伤%
+        traumaTakenMul: gearTraumaMul() // 修复批次 D：护齿/护头的机制效果——我方所受重创积累倍率（traumaGain 读取）
       };
     }
 
@@ -164,8 +207,132 @@
       $('modeModal').classList.add('open');
       setScene('ring_wide');
     }
+    /* ================= 修复批次 C（M6）：约战（指名挑战 · 不计排名） =================
+       定位：宿敌沈墨凛的保底接触点 + 与已交手关键对手的复盘场。规则（经济测算见 GAME_AUDIT2 批次 C 记录）：
+       - 入口：比赛屏「约战」按钮 → 指名列表（宿敌＝打过 1 场正式赛后解锁；其余＝正式赛交过手且在榜的角色）。
+       - 消耗 2 AP（与进店一趟同价）；每周至多 2 场、同一对手每周至多 1 场（S.sparWeek/sparCount/sparByKey）。
+       - 不计战绩/连胜、不动排名与对手 rating、不发奖金/名声、不刷新影响力与阶段、不写 lastMatchDay（不占正式赛位）。
+       - 收益：出拳熟练度经验半额（正式赛的 1/2）、获胜心态 +5；宿敌好感与正式赛同口径（胜 +8 / 负 +4）＋赛后对白；
+         队友 +2。风险：伤病概率为正式赛公式的一半（无被击倒/KO 附加伤），赛后体力 −25。
+       - 收益上限恒低于同期正式赛期望（正式赛＝全额奖金＋排名/影响力进度＋全额经验），不存在刷钱/刷好感最优解：
+         好感被「每周 2 场 × 同对手 1 场」钳住，宿敌好感最快 +8/周，与正式赛窗口内交手同速。 */
+    var nextBattleSpar = false; // 下一场是否为约战：startSpar 置位，startBattle 消费，openModeModal/btnCancelMode 清除防误标
+    function sparState() {
+      if (typeof S.sparFights !== 'number' || isNaN(S.sparFights) || S.sparFights < 0) S.sparFights = 0;
+      if (typeof S.sparRival !== 'number' || isNaN(S.sparRival) || S.sparRival < 0) S.sparRival = 0;
+      if (typeof S.sparWeek !== 'number' || isNaN(S.sparWeek)) S.sparWeek = 0;
+      if (typeof S.sparCount !== 'number' || isNaN(S.sparCount) || S.sparCount < 0) S.sparCount = 0;
+      if (!S.sparByKey || typeof S.sparByKey !== 'object' || Array.isArray(S.sparByKey)) S.sparByKey = {};
+      return S;
+    }
+    var SPAR_WEEKLY_CAP = 2, SPAR_AP_COST = 2;
+    function sparTargets() {
+      sparState(); ensureRoster();
+      var w = weekOf(S.day);
+      var played = (S.wins || 0) + (S.losses || 0) >= 1;
+      var faced = Array.isArray(S.facedFoes) ? S.facedFoes : [];
+      var weekUsed = S.sparWeek === w ? S.sparCount : 0;
+      var list = [];
+      S.roster.forEach(function (m) {
+        if (!(m.rank > 0)) return;
+        var isRival = m.key === 'opp_counter';
+        var unlocked = isRival ? played : faced.indexOf(m.key) >= 0;
+        if (!unlocked) return;
+        var why = '';
+        if (S.sparByKey[m.key] === w) why = '本周已约战过她';
+        else if (weekUsed >= SPAR_WEEKLY_CAP) why = '本周约战已满（' + SPAR_WEEKLY_CAP + ' 场）';
+        else if (S.ap < SPAR_AP_COST) why = '行动点不足（需 ' + SPAR_AP_COST + ' AP）';
+        list.push({ key: m.key, name: m.name, rank: m.rank, style: m.style, isRival: isRival, ok: !why, why: why });
+      });
+      list.sort(function (a, b) { if (a.isRival !== b.isRival) return a.isRival ? -1 : 1; return a.rank - b.rank; });
+      return list;
+    }
+    function startSpar(key) {
+      if (B) return false;
+      sparState();
+      var t = null;
+      sparTargets().forEach(function (x) { if (x.key === key) t = x; });
+      if (!t) { toast('这位对手还约不了'); return false; }
+      if (!t.ok) { toast(t.why); return false; }
+      S.ap -= SPAR_AP_COST;
+      pendingFoe = makeFoe(key);
+      nextBattleSpar = true;
+      nextBattlePractice = false;
+      var a = pendingFoe.attrs;
+      var mt = $('modeTitle'); if (mt) mt.textContent = '约战 · 指名挑战';
+      // modeNote 末句梢姐台词为新增文案（批次 C 待审清单第 1 条）
+      var mn = $('modeNote'); if (mn) mn.innerHTML = '约战对手：<b id="modeFoeInfo">—</b><br />约战<b>不计战绩、不动排名、没有奖金</b>，出拳经验半额；赢了心态 +5' + (pendingFoe.isRival ? '，<b>宿敌好感照常结算</b>，赛后有专属对白' : '') + '。梢姐在场边抱着手臂：「点名打谁都行——打完别喊累。」';
+      $('modeFoeInfo').textContent = pendingFoe.name + '（国内排名第 ' + pendingFoe.rank + ' 名｜力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique + '）' +
+        ' 风格：' + FOE_STYLES[pendingFoe.style].name + '。' +
+        (pendingFoe.persona ? ' 打法：' + personaDesc(pendingFoe.persona) + '。' : '') +
+        (pendingFoe.isRival ? ' 【宿敌约战】' : '');
+      var mfi = $('modeFoeImg'); if (mfi) { mfi.src = pendingFoe.img; mfi.alt = pendingFoe.name + ' 的立绘'; }
+      var mfl = $('modeFoeLine'); if (mfl) mfl.textContent = pendingFoe.name + '：「' + foeLine(pendingFoe.key, 'pre') + '」';
+      var simBtn = document.querySelector('#modeModal [data-mode="sim"]'); if (simBtn) simBtn.style.display = 'none'; // 约战要实打（与练习赛同口径，模式弹窗在正式报名时恢复）
+      $('modeModal').classList.add('open');
+      setScene('ring_wide');
+      save();
+      return true;
+    }
+    /* 约战专属结算：经验半额、宿敌好感同正式赛、伤病减半、无奖金/排名/影响力（见上方规则块） */
+    function settleSpar(win, how, delay) {
+      var w = weekOf(S.day);
+      var expGain = {};
+      PUNCH_KEYS.forEach(function (k) {
+        expGain[k] = Math.floor((B.me.used[k] || 0) * 2 * 0.5); // 正式赛公式的一半
+        if (expGain[k] > 0) addPunchExp(S, k, expGain[k]);
+      });
+      sparState();
+      S.sparFights = (S.sparFights || 0) + 1;
+      if (S.sparWeek === w) S.sparCount += 1; else { S.sparWeek = w; S.sparCount = 1; }
+      if (B.foe && B.foe.key) S.sparByKey[B.foe.key] = w;
+      var injured = false;
+      var dmgTakenRatio = 1 - B.me.hp / B.me.hpMax;
+      var injP = (0.15 + dmgTakenRatio * 0.25) * 0.5; // 正式赛伤病公式的一半，且不叠被击倒/KO 附加伤
+      if (Math.random() < injP) {
+        var add = Math.round(rnd(8, 18));
+        S.injury = Math.min(100, S.injury + add); injured = add;
+      }
+      S.stamina = clamp(S.stamina - 25, 0, 100);
+      if (win) changeMind(5);
+      if (B.foe.isRival) { // 宿敌：好感与赛后对白与正式赛完全同口径（约战的核心用途）
+        S.sparRival = (S.sparRival || 0) + 1;
+        addAffinity('rival', win ? 8 : 4);
+        queueStoryRepeat(win ? 'ev_rival_win' : 'ev_rival_lose');
+      }
+      if (B.foe.isTeammate) addAffinity('teammate', 2);
+      checkAchievements(); // 修复批次 C：约战类成就（擂台之约 / 宿敌之约）判定
+      var rows = '';
+      rows += '<tr><td>约战</td><td>不计入正式战绩（当前仍为 ' + S.wins + ' 胜 · ' + S.losses + ' 负），排名、影响力、奖金都不变</td></tr>';
+      PUNCH_KEYS.forEach(function (k) {
+        if (expGain[k] > 0) rows += '<tr><td>' + PUNCHES[k].name + '熟练度（出拳 ' + (B.me.used[k] || 0) + ' 次）</td><td>经验 +' + expGain[k] + '（约战半额）</td></tr>';
+      });
+      if (B.foe.isRival) rows += '<tr><td>宿敌好感</td><td>' + (win ? '+8' : '+4') + '（与正式赛同口径；赛后对白稍后就来）</td></tr>';
+      if (win) rows += '<tr><td>心态</td><td>+5（当前 ' + Math.round(S.mind) + ' · ' + mindTierName(S.mind) + '）</td></tr>';
+      if (injured) rows += '<tr><td>伤病</td><td>+' + injured + '（约战伤病概率已减半，休息可恢复）</td></tr>';
+      rows += '<tr><td>体力</td><td>−25（当前 ' + Math.round(S.stamina) + '）</td></tr>';
+      rows += '<tr><td>本周约战</td><td>' + S.sparCount + ' / ' + SPAR_WEEKLY_CAP + ' 场</td></tr>';
+      $('settleTable').innerHTML = rows;
+      $('settleTitle').textContent = '约战 · vs ' + B.foe.name;
+      var res = $('settleResult');
+      res.textContent = win ? '约战获胜' : '约战落败';
+      res.className = 'big-result ' + (win ? 'win' : 'lose');
+      /* 【新增文案·待用户审】约战赛后短文案（宿敌专用两句 + 通用两句，语气对齐 D1 对手台词） */
+      $('settleDesc').textContent = how + (B.foe.isRival
+        ? (win ? '　——约战归约战，她收拳时多看了你一眼：「……下次，用正式赛的规格。」' : '　——她把毛巾搭在肩上：「约战都赢不了我，还想在正式赛翻盘？练去。」')
+        : (win ? '　——不计名次的一场，打完反而更清楚彼此的斤两。' : '　——输了也不亏：她的出拳习惯，你这回记住了。'));
+      var sfl = $('settleFoeLine'); if (sfl && B.foe) sfl.textContent = B.foe.name + '：「' + foeLine(B.foe.key, win ? 'lose' : 'win') + '」';
+      dailyLog('约战 vs ' + B.foe.name + '（第 ' + B.foe.rank + ' 名）：' + how + '（不计战绩/排名）。', win ? 'good' : 'dim');
+      setTimeout(function () {
+        $('settleModal').classList.add('open');
+        setScene('ring_corner');
+      }, delay || 900);
+      save();
+    }
+
     function openModeModal() {
       nextBattlePractice = false; // 正式报名路径永不带练习标记（防练习模式弹窗取消后误标）
+      nextBattleSpar = false; // 同上：约战标记只由 startSpar 置位
       var mt0 = $('modeTitle'); if (mt0) mt0.textContent = '选择战斗模式';
       var mn0 = $('modeNote'); if (mn0) mn0.innerHTML = '本场对手：<b id="modeFoeInfo">—</b><br />重要比赛推荐<b>手动操作</b>，亲自上场把握胜负。';
       var simBtn0 = document.querySelector('#modeModal [data-mode="sim"]'); if (simBtn0) simBtn0.style.display = '';
@@ -177,6 +344,7 @@
       var mfi = $('modeFoeImg'); if (mfi) { mfi.src = pendingFoe.img; mfi.alt = pendingFoe.name + ' 的立绘'; }
       $('modeFoeInfo').textContent = pendingFoe.name + '（国内排名第 ' + pendingFoe.rank + ' 名，你是第 ' + S.rank + ' 名｜力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique + '）' +
         ' 风格：' + FOE_STYLES[pendingFoe.style].name + '。' +
+        (pendingFoe.persona ? ' 打法：' + personaDesc(pendingFoe.persona) + '。' : '') +
         (pendingFoe.isRival ? ' 【宿敌战】她就是沈墨凛——赛后会有专属对白。' : '') +
         (pendingFoe.weakness ? ' 弱点已侦察：' + PUNCHES[pendingFoe.weakness].name + '方向防守薄弱，用' + PUNCHES[pendingFoe.weakness].name + '打他伤害 +30%。' : '');
       var mfl = $('modeFoeLine'); if (mfl) mfl.textContent = pendingFoe.name + '：「' + foeLine(pendingFoe.key, 'pre') + '」'; // D1：赛前台词（专属或兜底，随机一条）
@@ -193,23 +361,35 @@
     /* 框架重构一期：开战准备态（选完模式先到准备层：双方对位卡＋规则一句话，点「开始战斗」才调 startBattle；
        准备层不建战斗状态、不起计时器，冒烟/平衡脚本直调 startBattle 的路径不受影响） */
     var readyMode = 'manual';
+    var _rigPartsPreloaded = false;
+    function preloadRigParts() { // 批次 E：纸偶部件（主角 8 件）在准备层预热，开战零等待；与 rig.js RIG_CHARS.me 的部件清单一致
+      if (_rigPartsPreloaded) return; _rigPartsPreloaded = true;
+      ['head', 'torso', 'armNearUpper', 'armNearFore', 'legNearThigh', 'legNearShin', 'legFarThigh', 'legFarShin'].forEach(function (p) {
+        var im = new Image(); im.src = 'assets/rig/me/' + p + '.webp';
+      });
+    }
     function openBattleReady(mode) {
       readyMode = mode;
       var foe = pendingFoe;
       if (!foe) return;
+      // 批次 E：准备层预热本场双方资源（姿势帧全套＋纸偶部件＋对手原图），点「开始战斗」不再等图
+      preloadPoses();
+      preloadRigParts();
+      if (foe.img) { var pf = new Image(); pf.src = foe.img; }
       var a = foe.attrs;
       var fi = $('brFoeImg'); if (fi) { fi.src = foeAlphaSrc(foe.img) || ''; fi.alt = foe.name + ' 的立绘'; }
       var mi = $('brMeImg'); if (mi && !mi.getAttribute('src')) mi.src = POSE_DIR + POSES.guard;
       $('brFoeName').textContent = foe.name;
-      $('brFoeMeta').innerHTML = '国内排名第 ' + foe.rank + ' 名 · 风格：' + FOE_STYLES[foe.style].name + '<br>力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique +
+      $('brFoeMeta').innerHTML = '国内排名第 ' + foe.rank + ' 名 · 风格：' + FOE_STYLES[foe.style].name + (foe.persona ? '<br>打法：' + personaDesc(foe.persona) : '') + '<br>力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique +
         (foe.isRival ? '<br>【宿敌战】赛后会有专属对白' : '') +
         (foe.weakness ? '<br>弱点已侦察：' + PUNCHES[foe.weakness].name + '方向防守薄弱（伤害 +30%）' : '');
       $('brMeMeta').innerHTML = '国内排名第 ' + S.rank + ' 名<br>力量 ' + effAttrs().power + ' · 速度 ' + effAttrs().speed + ' · 耐久 ' + effAttrs().endurance + ' · 技术 ' + effAttrs().technique;
       if (foe.practice) $('brFoeMeta').innerHTML += '<br>【练习赛】不计战绩 · 不动排名 · 不会受伤，只有经验照常涨';
+      if (nextBattleSpar || (B && B.spar)) $('brFoeMeta').innerHTML += '<br>【约战】指名挑战 · 不计战绩 · 不动排名 · 无奖金，出拳经验半额'; // 修复批次 C（准备层在 B 创建前打开，用待消费标记判读）
       $('brFoeLine').textContent = foe.name + '：「' + foeLine(foe.key, 'pre') + '」';
       $('brControls').textContent = mode === 'manual'
-        ? (isTouch ? '操作：左侧摇杆移动，右侧按钮出拳（前手/后手/上勾/击腹/摆拳），按住格挡，闪避取摇杆方向。' : '操作：A/D 移动、W/S 站位、J 前手、K 后手、U 上勾、B 击腹、空格格挡、Shift+方向闪避；开打后 H 键可再看键位。')
-        : '自动观看：战斗自动进行，你可以在下方切换战术倾向、用即时指令（组合拳/铁壁/搂抱）左右战局，也可调速。';
+        ? (isTouch ? '操作：左侧摇杆移动，右侧按钮出拳（前手/后手/上勾/击腹/摆拳），按住格挡，闪避取摇杆方向，「搂抱」按钮贴身停战回体力。' : '操作：A/D 移动、W/S 站位、J 前手、K 后手、U 上勾、B 击腹、空格格挡、Shift+方向闪避、C 搂抱停战回体力；开打后 H 键可再看键位。')
+        : '自动观看：战斗自动进行，你可以在下方切换战术倾向、用即时指令（组合拳/铁壁/搂抱）左右战局，也可调速。对手有整场打法、也会用指令。';
       $('btnReadyKeys').style.display = mode === 'manual' ? '' : 'none';
       $('battleReady').hidden = false;
     }
@@ -218,6 +398,7 @@
       B = {
         mode: mode,
         practice: nextBattlePractice, // 新手期重构：练习赛标记（结算走 settlePractice 轻量路径，见 settleNow 分流）
+        spar: nextBattleSpar, // 修复批次 C：约战标记（结算走 settleSpar，见 settleNow 分流）
         me: myFighter(), foe: pendingFoe || makeFoe(),
         round: 1, timeLeft: ROUND_SECONDS, phase: 'fight', // fight | break | over
         breakLeft: 0, treated: false, spoke: false,
@@ -225,6 +406,14 @@
         cd: { combo: 0, wall: 0, clinch: 0 },
         buff: { combo: 0, wall: 0 },
         clinchWarn: 0, result: null,
+        cdMax: { combo: 45, wall: 60, clinch: 30 }, // 修复批次 B 四调：指令疲劳——同场重复使用冷却递增（×1+0.5×已用次数），cdMax 记本次实际冷却供 UI 冷却条
+        meCdMul: gearCdMul(), // 修复批次 D：护腕机制——我方指令基础冷却倍率（开场快照，与 foe 无装备口径对称：对手不吃装备）
+        // 修复批次 B（M2）：对手侧指令状态（与玩家同 CD/同效果）＋指令用量遥测（实验室/验收采样用，不参与判定）
+        foeCd: { combo: 0, wall: 0, clinch: 0 },
+        foeBuff: { combo: 0, wall: 0 },
+        foeClinchWarn: 0,
+        cmdUse: { me: { combo: 0, wall: 0, clinch: 0 }, foe: { combo: 0, wall: 0, clinch: 0 } },
+        holdUntil: -1, // 搂抱缠抱停战截止时刻（B.time 口径）：期间双方都不能出拳/下指令
         meBlocking: false, foeBlocking: false, paused: false,
         // Phase 4：战斗时钟（秒，随 tick 推进）/ 连击 / 反击窗口 / 破防 / 击倒读秒
         time: 0,
@@ -242,18 +431,19 @@
       };
       pendingFoe = null;
       nextBattlePractice = false; // 练习标记已被本场消费
+      nextBattleSpar = false; // 修复批次 C：约战标记已被本场消费
       keysDown = {};
       touchBlock = false;
       $('meNameLabel').textContent = S.name + '（你 · 第 ' + S.rank + ' 名）';
-      // 绷带：本场生效，赛后伤病概率减半（练习赛不消耗绷带——它本来就不会产生伤病）
-      B.bandage = !B.practice && !!S.buffs.bandage; if (!B.practice) S.buffs.bandage = false;
-      // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留（练习赛不是正式比赛，不写 lastMatchDay）
-      if (!B.practice) S.lastMatchDay = S.day;
+      // 绷带：本场生效，赛后伤病概率减半（练习赛不消耗绷带——它本来就不会产生伤病；约战伤病公式自带减半，同样不消耗）
+      B.bandage = !B.practice && !B.spar && !!S.buffs.bandage; if (!B.practice && !B.spar) S.buffs.bandage = false;
+      // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留（练习赛/约战不是正式比赛，不写 lastMatchDay）
+      if (!B.practice && !B.spar) S.lastMatchDay = S.day;
       // 心态对比赛的影响（框架）：紧张（20~39）前两回合全属性 −5%；疲劳（0~19）体力消耗 +10%
       B.mindTense = S.mind >= 20 && S.mind < 40;
       B.mindStamMul = S.mind < 20 ? 1.1 : 1;
       if (B.mindTense) ATTRS.forEach(function (a) { B.me.attrs[a.key] = Math.round(B.me.attrs[a.key] * 0.95 * 10) / 10; });
-      B.foe.tactic = ['attack', 'counter', 'points'][Math.floor(Math.random() * 3)];
+      B.foe.tactic = (B.foe.persona && B.foe.persona.base) || 'attack'; // 修复批次 B（M5）：开局战术＝整场人格的 base，不再随机抽
       if (B.practice) B.foe.tactic = 'counter'; // 修复批次 A：陪练固定稳守反击（多格挡、少出拳），且回合间不重掷（见 endBreak）
       showScene('battle'); // 界面架构批：统一场景管理器切战斗屏（背景 ring_wide 由映射处理；顺带收起可能开着的状态/比赛屏）
       // A2 第二步：我方战斗内改用姿势帧（抱架图起手，动作中按事件切换姿势）；对手取角色池立绘
@@ -302,6 +492,7 @@
         blog('自动观看模式：你的 HP 上限 ' + B.me.hpMax + '（伤病影响 −' + Math.round(S.injury * 0.5) + '），用战术和指令干预比赛！', 'dim');
         setTactic('attack');
       }
+      if (B.foe.persona && !B.practice) blog('对手打法：' + personaDesc(B.foe.persona) + '。整场盯住他的节奏，也防着他用指令（残血铁壁、搂抱断连击）。', 'dim'); // 修复批次 B：人格在开场即可读
       if (B.foe.weakness) blog('录像研究奏效：对手弱点是「' + PUNCHES[B.foe.weakness].name + '」方向的防守，用' + PUNCHES[B.foe.weakness].name + '打他伤害 +30%！', 'good');
       if (B.mindTense) blog('心态有些紧张：前两回合全属性 −5%，第 3 回合起恢复正常。', 'bad');
       if (B.mindStamMul > 1) blog('心态疲劳：本场比赛体力消耗 +10%，注意分配体力。', 'bad');
@@ -663,6 +854,12 @@
         if (st) base *= (1 + (st.weights[k] - 1) * inten);
         return Math.max(0.15, base);
       });
+      // 修复批次 B（M1）：战术姿态的出拳构成倾向（双方同规则，叠在风格/熟练度之上）——
+      // 强攻抡重拳（摆/上勾 ×1.35）、游走靠刺/直打点（×1.5/×1.25、重拳 ×0.75）、稳守偏直拳等反击。
+      var tacBias = f.tactic === 'attack' ? { jab: 0.8, straight: 1.0, hook: 1.35, upper: 1.35, body: 1.15 }
+        : f.tactic === 'points' ? { jab: 1.5, straight: 1.25, hook: 0.75, upper: 0.75, body: 0.9 }
+        : f.tactic === 'counter' ? { jab: 0.9, straight: 1.15, hook: 1.0, upper: 1.05, body: 1.0 } : null;
+      if (tacBias) weights = weights.map(function (wgt, i) { return Math.max(0.1, wgt * (tacBias[PUNCH_KEYS[i]] || 1)); });
       var total = weights.reduce(function (a, b) { return a + b; }, 0);
       var r = Math.random() * total;
       for (var i = 0; i < PUNCH_KEYS.length; i++) { r -= weights[i]; if (r <= 0) return PUNCH_KEYS[i]; }
@@ -676,6 +873,7 @@
       var freq = 0.24 + att.attrs.speed * 0.012; // P0 联调：自动模式基础出拳频率 0.30→0.24，拉长回合内交锋节奏
       if (!isMeAttacking) freq *= 1.15 * styleVal(att, 'freqMul', 1); // 对手风格：速度型出拳快 / 力量型略慢
       if (att.tactic === 'counter') freq *= 0.6;
+      if (isMeAttacking ? (B.buff && B.buff.wall > 0) : (B.foeBuff && B.foeBuff.wall > 0)) freq *= 0.55; // 修复批次 B 三调：铁壁抱架期间自己出拳频率 ×0.55——抱死了就抡不开拳，铁壁的代价（双方同规则；也治对手铁壁期满频输出）
       if (att.practice) freq *= (B.round === 1 ? 0.45 : 0.65); // 修复批次 A：陪练少进攻（R1 尤其收着），把回合让给新手练手
       if (!isMeAttacking && att.style === 'guardcounter') freq *= 1.25; // 防守反击型平时收着，抓反击时不降频
       if (att.stam < 30) freq *= 0.7;
@@ -685,12 +883,14 @@
       var p = PUNCHES[key];
       att.used[key] = (att.used[key] || 0) + 1;
       var stamCost = p.stam * (att.tactic === 'attack' ? 1.5 : att.tactic === 'points' ? 0.7 : 1);
+      if (isMeAttacking ? (B.buff && B.buff.combo > 0) : (B.foeBuff && B.foeBuff.combo > 0)) stamCost *= 1.4; // 修复批次 B 三调：组合拳爆发期全力连打，出拳体力 ×1.4——爆发是拿体力换的，无脑开局乱开会中盘熄火（双方同规则）
       if (!isMeAttacking) stamCost *= styleVal(att, 'stamMul', 1); // 力量型重拳耗体力大
       if (isMeAttacking && B.mindStamMul) stamCost *= B.mindStamMul; // 心态疲劳：我方体力消耗 +10%
+      if (isMeAttacking) stamCost *= gearStamMul(); // 修复批次 D：战靴机制——我方出拳体力消耗倍率
       att.stam = Math.max(0, att.stam - stamCost);
       // Phase 4：对手随机抱架（防守反击型更爱格挡），供击腹破防判定；我方格挡由输入/铁壁决定
       if (isMeAttacking) {
-        var gbCh = calcBlockChance(B.foe); // P2-7：与手动模式共用同一格挡公式
+        var gbCh = (B.foeBuff && B.foeBuff.wall > 0) ? 1 : calcBlockChance(B.foe); // 修复批次 B：对手铁壁期间必抱架（与玩家铁壁的 meGuard 口径对称）
         if (B.time >= (B.foeBrokenUntil || -1) && Math.random() < gbCh) {
           B.foeBlocking = true;
           $('figFoe').classList.add('guarding');
@@ -718,6 +918,9 @@
         openCounterWindow(!isMeAttacking, null);
         if (!isMeAttacking) setMePose('dodge', POSE_TIMING.dodge); // 对手的拳打空＝我方闪避成功，切闪避姿势
         var counterP = def.tactic === 'counter' ? 0.45 : (def.style === 'guardcounter' ? 0.55 : 0.22);
+        if (att.tactic === 'points') counterP *= 0.35; // 修复批次 B（M1）：打点拳进出快、出拳即走，被闪开也只吃约三分之一立即反击——点数克稳守的另一环（初版 0.5 时稳守打速度仍有 60%，收紧后稳守才真正怕快拳量）
+        if (att.style === 'guardcounter') counterP *= 0.65; // 修复批次 B（M1）：防反型的拳收得快、不露空档——反击战术打它时「等空档」经常等不到
+        if (isMeAttacking ? (B.foeBuff && B.foeBuff.wall > 0) : (B.buff && B.buff.wall > 0)) counterP *= 0.35; // 修复批次 B 五调：防守方铁壁抱架中双手被占满，立即反击 ×0.35——治「稳守+无脑铁壁」对反击流近乎免费的问题（反击收入不走出拳频率、降频代价打不到它）；双方同规则，对手防反型开铁壁同理
         if (Math.random() < counterP && def.stam >= 8 && B.phase === 'fight') {
           // 防守方立刻抓反击窗口出拳（拳种取窗口对应的加成拳种，享受 +40%）
           var prefKey = COUNTER_PREF[!isMeAttacking ? B.meCounterDir : B.foeCounterDir] || 'straight';
@@ -738,6 +941,7 @@
       var mult = 1;
       if (att.tactic === 'attack') mult *= 1.3;
       if (isMeAttacking && B.buff.combo > 0) mult *= 1 + 0.5 * (0.7 + att.attrs.technique * 0.03);
+      if (!isMeAttacking && B.foeBuff && B.foeBuff.combo > 0) mult *= 1 + 0.5 * (0.7 + att.attrs.technique * 0.03); // 修复批次 B：对手组合拳爆发与玩家同公式
       if (att.speechBuff) mult *= 1.1;
       dealDamage(att, def, key, mult, isMeAttacking, false);
       B.foeBlocking = false;
@@ -796,13 +1000,17 @@
       // ---- Phase 4：组合拳连击（被格挡打断清零；干净命中累积并加成，防守方连击同时清零） ----
       var comboNow = 0, comboPct = 0;
       if (guarding && !pierce) {
-        resetCombo(isMeAttacking); // 自己的拳被格挡 → 连击被打断
+        // 修复批次 B（M2）：组合拳爆发期间连击不断——被格挡不清零（也不增长），指令由此成为真正的终结窗口；双方同规则
+        var comboBuffOn = isMeAttacking ? (B.buff && B.buff.combo > 0) : (B.foeBuff && B.foeBuff.combo > 0);
+        if (!comboBuffOn) resetCombo(isMeAttacking); // 自己的拳被格挡 → 连击被打断
       } else {
         if (isMeAttacking) { B.comboMe += 1; comboNow = B.comboMe; B.comboFoe = 0; }
         else { B.comboFoe += 1; comboNow = B.comboFoe; B.comboMe = 0; }
         comboPct = comboBonusPct(comboNow);
         if (comboPct > 0) dmg = Math.max(1, Math.round(dmg * (1 + comboPct / 100)));
       }
+      // 修复批次 B（M1）：游走卸力——打点姿态的防守方受击伤害 −10%（点数战术的保底：不至于被力量型一波直接 KO 出局，但仍是怕压制的脆皮打法）；双方同规则
+      if (def.tactic === 'points') dmg = Math.max(1, Math.round(dmg * 0.90));
       var hpBefore = def.hp;
       def.hp = Math.max(0, def.hp - dmg);
       att.hits += 1;
@@ -814,6 +1022,8 @@
       // KO 重创槽：有效命中积累，格挡命中只积一半，穿透格挡算全额（积累量由 traumaGain 按曲线计算，分母带 40% 最大 HP 下限）
       var traumaBefore = isMeAttacking ? (B.foeTrauma || 0) : (B.meTrauma || 0); // KO 定型：刻度跨越判定需要命中前的重创值
       var koAdd = traumaGain(key, dmg, def, hpBefore, guarding && !pierce);
+      // 修复批次 B（M2）：铁壁期间完全免疫重创积累——铁壁的局面价值从「少掉血」升级为「按住重创时钟」；双方同规则
+      if (isMeAttacking ? (B.foeBuff && B.foeBuff.wall > 0) : (B.buff && B.buff.wall > 0)) koAdd = 0;
       if (window.__hitLog) window.__hitLog.push([dmg, koAdd, key, (guarding && !pierce) ? 1 : 0]); // 测试埋点（trauma-ab 用，平时不存在该数组、零开销）
       var traumaAfter = 0;
       if (isMeAttacking) { B.foeTrauma = clamp((B.foeTrauma || 0) + koAdd, 0, 100); traumaAfter = B.foeTrauma; }
@@ -908,13 +1118,24 @@
       ['combo', 'wall', 'clinch'].forEach(function (k) { if (B.cd[k] > 0) B.cd[k] = Math.max(0, B.cd[k] - dt); });
       if (B.buff.combo > 0) B.buff.combo = Math.max(0, B.buff.combo - dt);
       if (B.buff.wall > 0) B.buff.wall = Math.max(0, B.buff.wall - dt);
+      // 修复批次 B：对手侧指令 CD/buff 同步递减，并由对手指令 AI 按人格评估本 tick 是否下指令
+      ['combo', 'wall', 'clinch'].forEach(function (k) { if (B.foeCd[k] > 0) B.foeCd[k] = Math.max(0, B.foeCd[k] - dt); });
+      if (B.foeBuff.combo > 0) B.foeBuff.combo = Math.max(0, B.foeBuff.combo - dt);
+      if (B.foeBuff.wall > 0) B.foeBuff.wall = Math.max(0, B.foeBuff.wall - dt);
+      foeCommandAI();
 
-      var atkRounds = Math.max(1, B.speed);
-      for (var ai = 0; ai < atkRounds; ai++) {
-        if (B.phase !== 'fight') break; // 已进入读秒/终局，停手
-        tryAttack(B.me, B.foe, true);
-        if (B.phase === 'fight' && B.foe.hp > 0) tryAttack(B.foe, B.me, false);
-        if (B.me.hp <= 0 || B.foe.hp <= 0) break;
+      if (B.time < (B.holdUntil || -1)) {
+        // 修复批次 B：搂抱缠抱停战中——双方都不出拳，贴身回气（重创照常衰减，见上方 decayTrauma）
+        B.me.stam = Math.min(100, B.me.stam + 5 * dt);
+        B.foe.stam = Math.min(100, B.foe.stam + 5 * dt);
+      } else {
+        var atkRounds = Math.max(1, B.speed);
+        for (var ai = 0; ai < atkRounds; ai++) {
+          if (B.phase !== 'fight') break; // 已进入读秒/终局，停手
+          tryAttack(B.me, B.foe, true);
+          if (B.phase === 'fight' && B.foe.hp > 0) tryAttack(B.foe, B.me, false);
+          if (B.me.hp <= 0 || B.foe.hp <= 0) break;
+        }
       }
       if (B.phase === 'down') { renderBattle(); return; }
       if (B.tickCount % 3 === 0) moveFighters();
@@ -980,7 +1201,7 @@
       var noteEl = $('breakCountNote'); if (noteEl) noteEl.textContent = isManual ? '等满 60 秒或点跳过进入下一回合' : '自动模式 5 秒后自动继续，也可点跳过';
       $('breakText').textContent = '第 ' + B.round + ' 回合结束，双方体力各回复 30 点。' + (isManual ? '休整 60 秒：可改下回合战术（强攻/均衡/稳守），可跳过或等满。' : '自动模式 5 秒后自动继续，可点跳过；战术切换用左侧原有战术按钮。');
       var sumEl = $('breakSummary'); if (sumEl) sumEl.innerHTML = '<b>本回合战况</b> — 你：命中 ' + rs.meHits + ' · 伤害 ' + rs.meDmg + ' · 最高连击 ' + rs.meMaxCombo + ' · 击倒对手 ' + (B.foeDownsRound || 0) + ' 次<br />对手：命中 ' + rs.foeHits + ' · 伤害 ' + rs.foeDmg + ' · 最高连击 ' + rs.foeMaxCombo + ' · 击倒你 ' + (B.meDownsRound || 0) + ' 次<br />重创值 — 你 ' + Math.round(B.meTrauma || 0) + ' / 100 · 对手 ' + Math.round(B.foeTrauma || 0) + ' / 100（休整期间每秒衰减 ' + KO_DECAY + '）';
-      var foeEl = $('breakFoeInfo'); if (foeEl) foeEl.innerHTML = '<b>敌人特点</b> — 风格：' + (B.foe.style ? FOE_STYLES[B.foe.style].name : '—') + ' · 当前战术：' + TACTICS[B.foe.tactic].name + '<br />观察：' + foeTendencyTxt() + '。';
+      var foeEl = $('breakFoeInfo'); if (foeEl) foeEl.innerHTML = '<b>敌人特点</b> — 风格：' + (B.foe.style ? FOE_STYLES[B.foe.style].name : '—') + (B.foe.persona ? ' · 打法：' + personaDesc(B.foe.persona) : '') + ' · 当前战术：' + TACTICS[B.foe.tactic].name + '<br />观察：' + foeTendencyTxt() + '。';
       var tipsEl = $('breakTips'); if (tipsEl) tipsEl.innerHTML = breakTips().map(function (t) { return '<li><b>提示：</b>' + t + '</li>'; }).join('');
       var tacBox = $('breakTacticBox'); if (tacBox) tacBox.style.display = isManual ? '' : 'none';
       $('breakInfo').textContent = '伤势 — 你：HP ' + mePct + '%（' + woundTxt(mePct) + (Math.round(S.injury) > 0 ? '；既有伤病 ' + Math.round(S.injury) + (injuryDebuffMul() < 1 ? '，本场属性受压制' : '') : '；无既有伤病') + '）· 体力已回复到 ' + Math.round(B.me.stam) +
@@ -1009,10 +1230,21 @@
       B.timeLeft = ROUND_SECONDS;
       B.me.speechBuff = B.pendingSpeech === true;
       B.pendingSpeech = false;
-      // 对手每回合可能换战术（练习赛陪练不换：整场稳守带攻，行为可预期才教得到东西）
-      if (!B.practice && Math.random() < 0.4) {
-        B.foe.tactic = ['attack', 'counter', 'points'][Math.floor(Math.random() * 3)];
-        blog('对手调整了战术：' + TACTICS[B.foe.tactic].name + '。', 'dim');
+      /* 修复批次 B（M5）：对手不再每回合随机重掷战术——整场人格在此按既定规则评估一次：
+         comeback 点数落后 ≥30 转强攻反扑 / protect 点数领先 ≥30 转稳守保胜果 / desperate 残血（HP<35%）转强攻拼命 / none 整场不变；
+         规则不满足时回到 base。发生切换才播报：整场一致、跨回合可辨识，玩家能「读人」。
+         （练习赛陪练不走人格：整场稳守带攻，行为可预期才教得到东西。） */
+      if (!B.practice && B.foe.persona) {
+        var per = B.foe.persona;
+        var ptsMeNow = pointsOf(B.me, 0), ptsFoeNow = pointsOf(B.foe, 0);
+        var wantTac = per.base;
+        if (per.adjust === 'comeback' && ptsMeNow - ptsFoeNow >= 30) wantTac = 'attack';
+        else if (per.adjust === 'protect' && ptsFoeNow - ptsMeNow >= 30) wantTac = 'counter';
+        else if (per.adjust === 'desperate' && B.foe.hp < B.foe.hpMax * 0.35) wantTac = 'attack';
+        if (wantTac !== B.foe.tactic) {
+          B.foe.tactic = wantTac;
+          blog('对手调整了战术：' + TACTICS[wantTac].name + '（' + (wantTac === per.base ? '回到惯用打法' : PERSONA_ADJUST_TXT[per.adjust]) + '）。', 'dim');
+        }
       }
       $('breakPanel').classList.remove('open');
       setMePose('guard', 0); // 新回合起手回抱架
@@ -1099,9 +1331,13 @@
     /* 结算（三种模式共用）：奖金、名声、熟练度经验、受伤、体力消耗 */
     function settleNow(win, how, delay) {
       if (B.practice) { settlePractice(win, how, delay); return; } // 新手期重构：练习赛走轻量结算，其余一律不变
+      if (B.spar) { settleSpar(win, how, delay); return; } // 修复批次 C：约战走专属结算（不计战绩/排名/奖金）
       var w = weekOf(S.day);
       var prizeFull = prizeForRank(w); // 基础奖金 × 排名加成 × 影响力加成（按赛前影响力档计算）
       var prize = win ? prizeFull : Math.floor(prizeFull / 2);
+      // 修复批次 D：宣传造势生效中——正式赛获胜奖金 ×PROMO_PRIZE_MUL，本场结算后消费（约战在上方已分流、奖金恒 0，不触发）
+      var promoApplied = false;
+      if (win && S.buffs && S.buffs.promo) { prize = Math.round(prize * PROMO_PRIZE_MUL); promoApplied = true; S.buffs.promo = false; }
       // 动态档位制：胜负不再加减粉丝数；影响力按当前胜场/排名重算（胜场/排名已在本函数后段更新，这里先记赛前档位，更新后刷新对比，可升可降）
       var influenceBefore = refreshInfluence();
       var influencePctBefore = influenceBonusPct();
@@ -1122,6 +1358,8 @@
       }
       S.money += prize;
       if (win) { S.wins += 1; S.fame += 1; S.winStreak = (S.winStreak || 0) + 1; } else { S.losses += 1; S.winStreak = 0; }
+      // 修复批次 C：正式赛击败伊芙琳（国内第 1 名）落盘——阶段 5「击败特定对手」通道与成就「弑王者」的依据（老档无此记录、不可追溯）
+      if (win && B.foe && B.foe.key === 'opp_world_champion') S.beatChamp = true;
       // Phase 9 纯计数：累计 KO 胜场（对手 HP 归零的胜场，含 TKO/模拟 KO）。只写入计数，不参与任何胜负/数值逻辑
       if (win && B.foe && B.foe.hp <= 0) S.koWins = (typeof S.koWins === 'number' && S.koWins >= 0 ? S.koWins : 0) + 1;
       // 排名升降：赢高排名 +3~5 名、赢低排名 +1~2 名；输低排名 −3~5 名、输高排名 −1~2 名（名次数字增减相反）
@@ -1173,6 +1411,7 @@
       if (oldRank > 25 && S.rank <= 25) queueStory('ev_top25');
       if (oldRank > 10 && S.rank <= 10) queueStory('ev_top10');
       if (oldRank > 1 && S.rank <= 1) queueStory('ev_champ');
+      checkStoryMilestones(); // 修复批次 C：剧情节点双通道补检（纯胜场路线达标也在结算时补排队）
       if (win && B.foe.hp <= 0) queueStory('ev_firstko');
       if (!win && B.me.hp <= 0) queueStory('ev_firstkoed');
       if (B.foe.isRival) { // 宿敌战：胜 +8 / 负 +4 好感，赛后对白每场至多一段
@@ -1182,8 +1421,8 @@
       if (B.foe.isTeammate) addAffinity('teammate', 2); // 同期队友林小葵（角色池 key 判定）：赛后小幅好感
 
       var rows = '';
-      rows += '<tr><td>奖金' + (win ? '' : '（出场费）') + '</td><td>¥<span class="tween-num" data-to="' + prize + '">0</span>（基础 ¥' + (200 + w * 100) + ' × 排名加成 × 影响力加成 +' + influencePctBefore + '%）</td></tr>'; // C2：奖金数字开窗后滚动到位
-      if (win) rows += '<tr><td>名声</td><td>+1（名声仅作纪念展示，不参与判定）</td></tr>';
+      rows += '<tr><td>奖金' + (win ? '' : '（出场费）') + '</td><td>¥<span class="tween-num" data-to="' + prize + '">0</span>（基础 ¥' + (200 + w * 100) + ' × 排名加成 × 影响力加成 +' + influencePctBefore + '%' + (promoApplied ? ' × 宣传造势 ' + PROMO_PRIZE_MUL + ' 倍' : '') + '）</td></tr>'; // C2：奖金数字开窗后滚动到位
+      if (win) rows += '<tr><td>名声</td><td>+1（名声随胜场积累；奖金加成与赞助门槛看影响力档位）</td></tr>';
       rows += '<tr><td>影响力</td><td>' + (influenceUp ? influenceLabel(influenceBefore) + ' → <b>' + influenceLabel(influenceAfter) + '</b>（档位提升！出场费加成 +' + influenceBonusPct() + '%）' : influenceDown ? influenceLabel(influenceBefore) + ' → <b>' + influenceLabel(influenceAfter) + '</b>（排名跌出门槛，档位下降！出场费加成 +' + influenceBonusPct() + '%）' : influenceLabel(influenceAfter) + '（动态档位：按当前胜场/排名计算，输比赛跌出门槛会掉档）') + '</td></tr>';
       rows += '<tr><td>连胜</td><td>' + (win ? S.winStreak + ' 连胜' : '中断，清零') + '</td></tr>';
       stageDoneNow.forEach(function (d) {
@@ -1353,11 +1592,12 @@
     function playerPunchDirect(key) { throwPunch(key); } // 专用按钮/快捷键：不依赖方向直接出拳
     function throwPunch(key) {
       if (!B || B.phase !== 'fight' || B.paused || B.meBlocking || touchBlock) return;
+      if (cmdHoldOn()) return; // 修复批次 B：搂抱缠抱停战中不能出拳（贴身缠着，先分开再说）
       var now = performance.now();
       if (now < B.man.dodgeUntil) return;
       var mp = MPUNCH[key];
       if (now < (B.man.punchReady[key] || 0)) return;
-      var stamCost = mp.stam * (B.mindStamMul || 1); // 心态疲劳时体力消耗 +10%
+      var stamCost = mp.stam * (B.mindStamMul || 1) * gearStamMul(); // 心态疲劳时体力消耗 +10%；修复批次 D：战靴机制倍率
       if (B.me.stam < stamCost) { toast('体力不足！拉开距离喘口气'); return; }
       var lowStam = B.me.stam < 30;
       // 出拳速度属性显著影响间隔：速度 10 ≈ ×0.98，20 ≈ ×0.66，30+ ≈ ×0.45（下限）
@@ -1380,6 +1620,7 @@
       B.me.used[mp.prof] = (B.me.used[mp.prof] || 0) + 1; // P2-8：出拳计数移到射程判定通过之后，超距空挥不涨熟练度
       var foeBrokenNow = B.time < (B.foeBrokenUntil || -1);
       var blockCh = calcBlockChance(B.foe); // P2-7：与自动模式共用同一格挡公式（原手动基数 0.23+周数×0.018 已废除）
+      if (B.foeBuff && B.foeBuff.wall > 0) blockCh = 1; // 修复批次 B：对手铁壁期间必抱架（手动模式同口径）
       B.foeBlocking = !foeBrokenNow && Math.random() < blockCh; // 破防期间格挡失效
       if (B.foeBlocking) {
         $('figFoe').classList.add('guarding');
@@ -1503,12 +1744,12 @@
       if (M.fX < M.mX + 6) M.fX = M.mX + 6;
       if (Math.random() < 0.03) M.fY = clamp(M.fY + rnd(-6, 6), -10, 10);
       foe.stam = Math.min(100, foe.stam + 3.5 * dt);
-      M.foePunchT -= dt;
+      M.foePunchT -= dt * ((B.foeBuff && B.foeBuff.wall > 0) ? 0.55 : 1); // 修复批次 B 三调：对手铁壁抱架期间出拳间隔同样放慢（与自动模式 freq ×0.55 对称）
       if (M.foePunchT <= 0) {
         var w = weekOf(S.day);
         M.foePunchT = Math.max(0.33, (rnd(0.55, 1.0) - w * 0.03) * 0.87) * (foe.tactic === 'counter' ? 1.5 : 1) / styleVal(foe, 'freqMul', 1) * (foe.practice ? (B.round === 1 ? 2.2 : 1.6) : 1); // 修复批次 A：手动模式陪练同样少进攻（出拳间隔拉长）
         if (B.time < (B.foeCounterUntil || -1)) M.foePunchT = Math.min(M.foePunchT, 0.45); // 有反击窗口时抢着出拳
-        if (dist <= 19 && foe.stam >= 6) foePunchManual(dist);
+        if (dist <= 19 && foe.stam >= 6 && !cmdHoldOn()) foePunchManual(dist); // 修复批次 B：缠抱停战中对手也不出拳
       }
     }
 
@@ -1529,6 +1770,16 @@
       B.time += dt;
       decayTrauma(dt);
       B.timeLeft -= dt;
+      // 修复批次 B：手动模式同样推进双方指令 CD/buff 并跑对手指令 AI（此前手动下 CD 永不递减、对手不用指令）
+      ['combo', 'wall', 'clinch'].forEach(function (k) {
+        if (B.cd[k] > 0) B.cd[k] = Math.max(0, B.cd[k] - dt);
+        if (B.foeCd[k] > 0) B.foeCd[k] = Math.max(0, B.foeCd[k] - dt);
+      });
+      if (B.buff.combo > 0) B.buff.combo = Math.max(0, B.buff.combo - dt);
+      if (B.buff.wall > 0) B.buff.wall = Math.max(0, B.buff.wall - dt);
+      if (B.foeBuff.combo > 0) B.foeBuff.combo = Math.max(0, B.foeBuff.combo - dt);
+      if (B.foeBuff.wall > 0) B.foeBuff.wall = Math.max(0, B.foeBuff.wall - dt);
+      foeCommandAI();
       var M = B.man, me = B.me;
       var meBrokenNow = B.time < (B.meBrokenUntil || -1);
       B.meBlocking = !!(keysDown.space || touchBlock) && !meBrokenNow; // 破防期间抱架失效
@@ -1561,7 +1812,8 @@
         $('distBar').textContent = '距离：' + ds + (ds === '超远' ? ' · 太远了，刺拳/直拳也够不着，先靠近！' : ds === '远' ? ' · 只有刺拳/直拳够得着' : ds === '中' ? ' · 摆拳/击腹/上勾都可达' : ' · 全部拳种可达，贴身缠斗');
       }
       $('meTacticName').textContent = B.meBlocking ? '格挡中' : '手动操作';
-      $('manualStatus').textContent = meBrokenNow ? '破防中！格挡失效（对手直拳 +20%）' :
+      $('manualStatus').textContent = cmdHoldOn() ? '缠抱中：双方停手回气（搂抱停战，分开后继续）' :
+        meBrokenNow ? '破防中！格挡失效（对手直拳 +20%）' :
         (B.time < (B.meCounterUntil || -1) ? '反击窗口！' + COUNTER_PREF_TXT[B.meCounterDir] + ' +40% / 其余拳种 +30%' :
         B.meBlocking ? '格挡抱架（减伤 70%）· 小心击腹破防' : (performance.now() < M.dodgeUntil ? '闪避中（无敌帧）' : (me.stam < 30 ? '体力吃紧：出拳变慢、伤害降低' : (B.comboMe >= 2 ? B.comboMe + ' 连击中（伤害 +' + comboBonusPct(B.comboMe) + '%）' : '正常'))));
       if (B.phase === 'fight' && (me.hp <= 0 || B.foe.hp <= 0)) { finishBattle(); renderBattle(); return; }
@@ -1591,6 +1843,7 @@
         var now = performance.now();
         if (now - lastTap[k] < 280) { dash(k); lastTap[k] = 0; } else lastTap[k] = now;
       }
+      if (k === 'c') { useClinch(); return; } // 修复批次 B（m3）：手动模式搂抱（键盘 C）
       if (k === 'j') playerPunch('j');
       else if (k === 'k') playerPunch('k');
       else if (k === 'u') playerPunchDirect('upperR'); // U：直接上勾拳
@@ -1665,6 +1918,7 @@
         tryDodge(dir || 'a'); // 无方向输入时默认后闪
       });
       tap('btnDashT', function () { dash(joy.dx < -0.2 ? 'a' : 'd'); });
+      tap('btnClinchT', function () { useClinch(); }); // 修复批次 B（m3）：手动模式搂抱入口（触屏）
       var blk = $('btnBlockT');
       if (blk) {
         blk.addEventListener('pointerdown', function (e) {
@@ -1710,7 +1964,8 @@
         if (B.meRoundMod && B.meRoundMod !== 'balanced') $('meTacticName').textContent = (B.meBlocking ? '格挡中 · ' : '手动 · ') + '本回合' + BREAK_TACTICS[B.meRoundMod].name;
         else if (B.meBlocking) $('meTacticName').textContent = '格挡中';
       }
-      $('foeTacticName').textContent = TACTICS[B.foe.tactic].name + (B.foe.style ? ' · ' + FOE_STYLES[B.foe.style].name : '');
+      $('foeTacticName').textContent = TACTICS[B.foe.tactic].name + (B.foe.style ? ' · ' + FOE_STYLES[B.foe.style].name : '') +
+        (B.foeBuff && B.foeBuff.combo > 0 ? ' · 组合拳爆发中！' : '') + (B.foeBuff && B.foeBuff.wall > 0 ? ' · 铁壁中' : ''); // 修复批次 B：对手指令状态在状态行可见
       // Phase 4：状态条（连击 / 反击窗口 / 破防 / 本回合击倒数）
       var cp = $('comboPill');
       if (cp) {
@@ -1731,9 +1986,10 @@
         $('downPill').textContent = '本回合击倒 你 ' + (B.meDownsRound || 0) + ' · 对手 ' + (B.foeDownsRound || 0) + '（3 次触发 TKO 判定）';
       }
       // 指令按钮冷却显示
-      cmdState('cmdCombo', B.cd.combo, 45, B.buff.combo > 0 ? '生效中 ' + Math.ceil(B.buff.combo) + 's' : '');
-      cmdState('cmdWall', B.cd.wall, 60, B.buff.wall > 0 ? '生效中 ' + Math.ceil(B.buff.wall) + 's' : '');
-      cmdState('cmdClinch', B.cd.clinch, 30, '');
+      cmdState('cmdCombo', B.cd.combo, (B.cdMax && B.cdMax.combo) || 45, B.buff.combo > 0 ? '生效中 ' + Math.ceil(B.buff.combo) + 's' : '');
+      cmdState('cmdWall', B.cd.wall, (B.cdMax && B.cdMax.wall) || 60, B.buff.wall > 0 ? '生效中 ' + Math.ceil(B.buff.wall) + 's' : '');
+      cmdState('cmdClinch', B.cd.clinch, (B.cdMax && B.cdMax.clinch) || 30, '');
+      cmdState('btnManualClinch', B.cd.clinch, (B.cdMax && B.cdMax.clinch) || 30, cmdHoldOn() ? '缠抱中' : ''); // 修复批次 B（m3）：手动面板搂抱按钮与自动面板共用同一 CD
     }
     function cmdState(id, cd, max, extra) {
       var btn = $(id);
@@ -1744,31 +2000,101 @@
       else { lbl.textContent = '就绪'; btn.disabled = !B || B.phase !== 'fight'; bar.style.width = '0%'; }
     }
 
-    /* 指令 */
+    /* 指令（修复批次 B · M2 重构：玩家与对手 AI 共用同一套指令——同 CD、同效果、同判罚；
+       缠抱停战中双方都不能下指令。指令用量记入 B.cmdUse 遥测，供实验室 A/B 采样。） */
+    function cmdHoldOn() { return B && B.time < (B.holdUntil || -1); }
     function useCombo() {
-      if (!B || B.phase !== 'fight' || B.cd.combo > 0) return;
-      B.buff.combo = 10; B.cd.combo = 45;
-      blog('指令：组合拳爆发！接下来 10 秒火力全开。', 'good');
+      if (!B || B.phase !== 'fight' || B.cd.combo > 0 || cmdHoldOn()) return;
+      B.buff.combo = 10;
+      B.cdMax.combo = Math.round(45 * (B.meCdMul || 1) * (1 + 0.5 * (B.cmdUse ? B.cmdUse.me.combo : 0))); B.cd.combo = B.cdMax.combo; // 指令疲劳：喊得越多、冷却越久；修复批次 D：护腕机制先缩短基础冷却
+      if (B.cmdUse) B.cmdUse.me.combo++;
+      blog('指令：组合拳爆发！接下来 10 秒火力全开，期间连击被格挡也不清零。', 'good');
       renderBattle();
     }
     function useWall() {
-      if (!B || B.phase !== 'fight' || B.cd.wall > 0) return;
-      B.buff.wall = 10; B.cd.wall = 60;
-      blog('指令：铁壁防守！10 秒内大幅减伤。', 'good');
+      if (!B || B.phase !== 'fight' || B.cd.wall > 0 || cmdHoldOn()) return;
+      B.buff.wall = 10;
+      B.cdMax.wall = Math.round(60 * (B.meCdMul || 1) * (1 + 0.5 * (B.cmdUse ? B.cmdUse.me.wall : 0))); B.cd.wall = B.cdMax.wall; // 修复批次 D：护腕机制先缩短基础冷却
+      if (B.cmdUse) B.cmdUse.me.wall++;
+      blog('指令：铁壁防守！10 秒内大幅减伤，且重创值不积累。', 'good');
       renderBattle();
     }
     function useClinch() {
-      if (!B || B.phase !== 'fight' || B.cd.clinch > 0) return;
-      B.cd.clinch = 30;
-      B.me.stam = Math.min(100, B.me.stam + 20);
-      B.clinchWarn += 1;
-      if (B.clinchWarn >= 4) {
-        // P2-12：同场比赛第 4 次起，每次搂抱被裁判判罚扣 10 点战斗体力（不再只是口头警告）
-        B.me.stam = Math.max(0, B.me.stam - 10);
-        blog('指令：搂抱拖时间，体力回复 20。裁判判罚：本场第 ' + B.clinchWarn + ' 次搂抱，消极比赛——扣 10 点体力！', 'bad');
-        toast('裁判判罚：搂抱过多，扣 10 点体力');
-      } else {
-        blog('指令：搂抱拖时间，体力回复 20。' + (B.clinchWarn === 3 ? '裁判口头警告：再抱下去要判罚扣体力了！' : ''), 'good');
-      }
+      if (!B || B.phase !== 'fight' || B.cd.clinch > 0 || cmdHoldOn()) return;
+      doClinch(true);
       renderBattle();
+    }
+    /* 搂抱执行体（双方共用）：使用者体力 +20、对手 +8（被迫停顿同样回了口气），双方连击同时清零
+       ——打断对手连击是它的核心价值，抱错时机（自己连击正盛/给对手重创衰减窗口）同样会反噬；
+       随后 1.2 秒缠抱停战：双方都不能出拳（tick/manualTick 按 holdUntil 停手），重创照常衰减。
+       裁判判罚沿用 P2-12：同场第 4 次起每次扣使用者 10 点体力，双方同规则。 */
+    function doClinch(isMe) {
+      var user = isMe ? B.me : B.foe;
+      var other = isMe ? B.foe : B.me;
+      var warn;
+      if (isMe) { B.cdMax.clinch = Math.round(30 * (B.meCdMul || 1) * (1 + 0.5 * (B.cmdUse ? B.cmdUse.me.clinch : 0))); B.cd.clinch = B.cdMax.clinch; B.clinchWarn += 1; warn = B.clinchWarn; if (B.cmdUse) B.cmdUse.me.clinch++; } // 修复批次 D：护腕机制同样作用于搂抱冷却（对手侧不吃装备）
+      else { B.foeCd.clinch = Math.round(30 * (1 + 0.5 * (B.cmdUse ? B.cmdUse.foe.clinch : 0))); B.foeClinchWarn = (B.foeClinchWarn || 0) + 1; warn = B.foeClinchWarn; if (B.cmdUse) B.cmdUse.foe.clinch++; }
+      // 修复批次 B 三调：回体力按需求缩放——体力 <50 回满 20，体力还多时只回 8（抱这一口主要是停战，不是充电）；乱抱喂对手 +8 反成净亏
+      var stamGain = user.stam < 50 ? 20 : 8;
+      user.stam = Math.min(100, user.stam + stamGain);
+      other.stam = Math.min(100, other.stam + 8);
+      B.comboMe = 0; B.comboFoe = 0;
+      B.holdUntil = B.time + 1.2;
+      var brokeCombo = isMe ? '对手' : '你';
+      if (warn >= 4) {
+        user.stam = Math.max(0, user.stam - 10);
+        if (isMe) {
+          blog('指令：搂抱拖时间，体力回复 ' + stamGain + '（对手 +8），双方连击清零、缠抱停战。裁判判罚：本场第 ' + warn + ' 次搂抱，消极比赛——扣 10 点体力！', 'bad');
+          toast('裁判判罚：搂抱过多，扣 10 点体力');
+        } else {
+          blog('对手搂抱拖时间，体力回复 ' + stamGain + '（你 +8），双方连击清零、缠抱停战。裁判判罚：对手本场第 ' + warn + ' 次搂抱——扣对手 10 点体力！', 'good');
+        }
+      } else if (isMe) {
+        blog('指令：搂抱拖时间，体力回复 ' + stamGain + '（对手 +8），双方连击清零、缠抱停战。' + (warn === 3 ? '裁判口头警告：再抱下去要判罚扣体力了！' : ''), 'good');
+      } else {
+        blog('对手搂抱！贴身缠抱停战——对手体力回复 ' + stamGain + '（你 +8），双方连击清零（' + brokeCombo + '的连击被打断了）。' + (warn === 3 ? '裁判口头警告对手：再抱要判罚了。' : ''), 'bad');
+      }
+    }
+    /* 对手指令（与玩家同 CD/同效果，触发由 foeCommandAI 按人格评估） */
+    function foeUseCombo() {
+      if (!B || B.phase !== 'fight' || B.foeCd.combo > 0 || cmdHoldOn()) return false;
+      B.foeBuff.combo = 10; B.foeCd.combo = Math.round(45 * (1 + 0.5 * (B.cmdUse ? B.cmdUse.foe.combo : 0)));
+      if (B.cmdUse) B.cmdUse.foe.combo++;
+      blog('对手指令：组合拳爆发！对手接下来 10 秒火力全开（连击被格挡也不清零），小心！', 'bad');
+      renderBattle();
+      return true;
+    }
+    function foeUseWall() {
+      if (!B || B.phase !== 'fight' || B.foeCd.wall > 0 || cmdHoldOn()) return false;
+      B.foeBuff.wall = 10; B.foeCd.wall = Math.round(60 * (1 + 0.5 * (B.cmdUse ? B.cmdUse.foe.wall : 0)));
+      if (B.cmdUse) B.cmdUse.foe.wall++;
+      blog('对手指令：铁壁防守！对手 10 秒内大幅减伤，且重创值不积累。', 'bad');
+      renderBattle();
+      return true;
+    }
+    function foeUseClinch() {
+      if (!B || B.phase !== 'fight' || B.foeCd.clinch > 0 || cmdHoldOn()) return false;
+      doClinch(false);
+      renderBattle();
+      return true;
+    }
+    /* 对手指令 AI（修复批次 B · M2）：按人格偏好在真实时机下指令，每 tick 至多一条、优先级 铁壁＞搂抱＞组合拳。
+       陪练不用指令（教学行为纯净）；缠抱停战中不用；开局 1 秒内不用（先让双方碰上）。 */
+    function foeCommandAI() {
+      if (!B || B.phase !== 'fight' || B.practice || !B.foe.persona) return;
+      if (B.time < 1 || cmdHoldOn()) return;
+      var p = B.foe.persona, foe = B.foe, me = B.me;
+      /* 批次 B 二调：初版触发线太贪（铁壁 60 重创就开、组合拳开局 1 秒即爆），实验室里对手指令
+         把玩家胜率全表压低 20~47pp——收紧到「真窗口才用」，与玩家 smart 策略同一量级。 */
+      // 铁壁：残血（人格血线，第 2 回合起）或重创逼近 KO 时按住重创时钟（R1 只留给重创急救：开局被打崩不许靠铁壁把 R1 击杀窗口整段吞掉）
+      if (B.foeCd.wall <= 0 && ((B.round >= 2 && foe.hp < foe.hpMax * p.wallHp) || (B.foeTrauma || 0) >= 72)) { foeUseWall(); return; }
+      // 搂抱：体力见底 / 玩家连击正盛且自己体力也不满（断连击）/ 重创过高拖衰减——且人格愿意抱
+      if (p.clinchFan && B.foeCd.clinch <= 0 && (foe.stam < 22 || ((B.comboMe || 0) >= 4 && foe.stam < 65) || ((B.foeTrauma || 0) >= 78 && B.round >= 2))) { foeUseClinch(); return; }
+      // 组合拳：press 压迫（开局先碰几拳再爆）/ burst 抓窗口（自己连击 ≥3 或玩家重创 ≥60）/ closer 末回合或点数领先时收官
+      if (B.foeCd.combo <= 0) {
+        var ptsLead = pointsOf(foe, 0) > pointsOf(me, 0);
+        if ((p.comboWhen === 'press' && foe.stam > 70 && B.time > 8) ||
+            (p.comboWhen === 'burst' && ((B.comboFoe || 0) >= 3 || (B.meTrauma || 0) >= 60)) ||
+            (p.comboWhen === 'closer' && (B.round >= 3 || (B.round >= 2 && ptsLead)))) foeUseCombo();
+      }
     }

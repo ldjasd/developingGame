@@ -37,7 +37,7 @@
       var ea = effAttrs(), gb = gearBonus();
       $('attrGrid').innerHTML = ATTRS.map(function (a) {
         var up = lastAttrs && ea[a.key] > lastAttrs[a.key] ? '<span class="up">↑</span>' : '';
-        var bonus = gb[a.key] ? '<span class="up"> +' + gb[a.key] + '</span>' : '';
+        var bonus = gb[a.key] ? '<span class="' + (gb[a.key] > 0 ? 'up' : 'down') + '"> ' + (gb[a.key] > 0 ? '+' : '−') + Math.abs(gb[a.key]) + '</span>' : ''; // 修复批次 D：装备差值改百分比生效值后可能为负（如重炮拳套速度 −5%），负值红字
         return attrRowHTML(a, ea[a.key], bonus + up);
       }).join('');
 
@@ -66,17 +66,25 @@
       $('btnMatch').classList.toggle('match', match);
       $('btnMatch').disabled = !match;
       var bpEl = $('btnPractice'); if (bpEl) bpEl.style.display = practicePending() ? '' : 'none'; // 新手期重构：练习赛未打且没打过正式赛时，据点出线金色练习赛按钮
+      /* 修复批次 C：约战入口状态——打过 1 场正式赛才解锁（宿敌线），AP/本周额度在约战列表里逐个标注 */
+      var bsEl = $('btnSpar');
+      if (bsEl) {
+        var sparUnlocked = (S.wins || 0) + (S.losses || 0) >= 1;
+        bsEl.disabled = !sparUnlocked || !!B;
+        bsEl.textContent = sparUnlocked ? '🥊 约 战' : '🔒 约战（打完第 1 场正式赛后解锁）';
+      }
       renderHubGoal();
       $('btnTrain').disabled = S.ap < 2;
       $('btnOut').disabled = S.ap < 2;
       $('btnWork').disabled = S.ap < 3 || S.stamina < 15;
       $('btnRest').disabled = S.ap < 1;
-      $('recordLine').innerHTML = '战绩：<b>' + S.wins + ' 胜 · ' + S.losses + ' 负</b>' + ((S.winStreak || 0) > 0 ? '（<b>' + S.winStreak + ' 连胜</b>中）' : '') + '　|　名声 <b>' + S.fame + '</b>（仅作纪念展示，不参与判定）　|　影响力 <b>' + influenceLabel(refreshInfluence()) + '</b>　|　国内排名 <b>第 ' + S.rank + ' 名</b>　|　伤病会降低比赛 HP 上限，≥30 还会让比赛全属性下降，休息或医院治疗可消除';
+      $('recordLine').innerHTML = '战绩：<b>' + S.wins + ' 胜 · ' + S.losses + ' 负</b>' + ((S.winStreak || 0) > 0 ? '（<b>' + S.winStreak + ' 连胜</b>中）' : '') + '　|　名声 <b>' + S.fame + '</b>（随获胜积累；奖金加成与赞助门槛看影响力）　|　影响力 <b>' + influenceLabel(refreshInfluence()) + '</b>　|　国内排名 <b>第 ' + S.rank + ' 名</b>　|　伤病会降低比赛 HP 上限，≥30 还会让比赛全属性下降，休息或医院治疗可消除';
       renderCareerDaily();
       renderPlan();
       renderShop();
       renderStatus();
       renderMatchStage();
+      activateLazyInActiveView(); // 批次 E：重渲染产生的新图只在可见视图内兑现下载
       save();
     }
     /* ================= 训练计划（2 AP，5 点自由组合，一次结算） ================= */
@@ -108,7 +116,7 @@
     }
     function planUsedPts() { return planSel.reduce(function (sum, id) { var t = trainingById(id); return sum + (t ? t.pts : 0); }, 0); }
     function closeSubLists(except) {
-      ['trainList', 'outList', 'shopList', 'relaxList'].forEach(function (id) { if (id !== except) $(id).classList.remove('open'); });
+      ['trainList', 'outList', 'shopList', 'relaxList', 'hospitalList'].forEach(function (id) { if (id !== except) $(id).classList.remove('open'); });
     }
     function planPreviewHTML() {
       // P1-5：结算前总预览——用克隆状态试算一遍计划（不改动真实存档），汇总 AP / 体力 / 各项目收益合计 / 当前→结算后数值
@@ -137,6 +145,7 @@
         '体力消耗：' + Math.round(S.stamina) + ' → ' + Math.max(0, Math.round(S.stamina - effCost)) + '（−' + effCost + (S.buffs.drink ? '，能量饮料 −30% 已计入' : '') + (S.stamina - effCost < 0 ? '，<b style="color:var(--red)">将透支 ' + Math.round(effCost - S.stamina) + ' 点，伤病约 +' + overdraftInjury(Math.round(effCost - S.stamina)) + '</b>' : '') + '）<br />' +
         '收益合计：' + (rows.length ? rows.join(' · ') : '无') +
         '<br /><span style="color:var(--ink-2)">心态效率修正（高昂 +10% / 疲劳 −15%）会在结算时另行应用；实战陪练的受伤为概率事件，预览不计。</span>' +
+        (S.buffs.camp > 0 ? '<br /><b>特训营充能生效中（剩余 ' + S.buffs.camp + ' 次）：本次训练结算收益额外 +50%，结算时自动消耗 1 次。</b>' : '') +
         (used < PLAN_POINTS ? '<br /><b>提示：计划未满 5 点也可以直接开始（AP 照常消耗 2 点），也可以继续点上面的项目补满。</b>' : '') +
         '</div>';
       return html;
@@ -239,6 +248,26 @@
         (stepC ? '✓ 首场正式赛' : '③ Day 7 首场正式赛') +
         '（全完成奖励 ¥300）';
     }
+    /* 修复批次 C：约战指名列表渲染（数据源 sparTargets()；点可选行 → startSpar） */
+    function renderSparList() {
+      var box = $('sparList'); if (!box) return;
+      var list = sparTargets();
+      if (!list.length) {
+        box.innerHTML = '<p class="spar-empty">暂时没有可约战的对手——打过正式赛的对手会出现在这里；宿敌沈墨凛在你打完第 1 场正式赛后解锁。</p>';
+        return;
+      }
+      box.innerHTML = list.map(function (t) {
+        return '<button type="button" class="spar-opt' + (t.ok ? '' : ' off') + '" data-spar="' + t.key + '"' + (t.ok ? '' : ' disabled') + '>' +
+          '<span class="t">' + t.name + (t.isRival ? '（宿敌）' : '') + ' · 第 ' + t.rank + ' 名</span>' +
+          '<span class="d">' + (t.ok ? '指名约战 · 2 AP · 不计排名，经验半额' + (t.isRival ? ' · 宿敌好感与正式赛同口径' : '') : t.why) + '</span></button>';
+      }).join('');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-spar]'), function (btn) {
+        btn.addEventListener('click', function () {
+          $('sparModal').classList.remove('open');
+          startSpar(btn.getAttribute('data-spar'));
+        });
+      });
+    }
     function doPlanTrain() {
       if (!planSel.length || S.ap < 2) return;
       var stamBefore = S.stamina;
@@ -259,6 +288,14 @@
         ATTRS.forEach(function (a) { var d = S.attrs[a.key] - snapAttrs[a.key]; if (d) S.attrs[a.key] = snapAttrs[a.key] + Math.round(d * eff); });
         PUNCH_KEYS.forEach(function (k) { var d = S.punchExp[k] - snapExp[k]; if (d) S.punchExp[k] = snapExp[k] + Math.round(d * eff); });
         dailyLog(eff > 1 ? '心态高昂，训练效率 +10%，练得格外投入。' : '心态疲劳，训练效率 −15%，有点不在状态。', eff > 1 ? 'good' : 'bad');
+      }
+      // 修复批次 D：特训营充能——本次训练结算（已含心态修正）的属性与拳种经验增量再 +50%，消耗 1 次充能。
+      // 增量取「已递减后的实际增量」，不绕过训练边际递减；属性仍钳在硬顶 100 内。
+      if (S.buffs.camp > 0) {
+        S.buffs.camp -= 1;
+        ATTRS.forEach(function (a) { var d = S.attrs[a.key] - snapAttrs[a.key]; if (d > 0) S.attrs[a.key] = Math.min(100, S.attrs[a.key] + Math.round(d * 0.5)); });
+        PUNCH_KEYS.forEach(function (k) { var d = S.punchExp[k] - snapExp[k]; if (d > 0) S.punchExp[k] = snapExp[k] + d + Math.round(d * 0.5); });
+        dailyLog('特训营充能生效：本次训练收益额外 +50%（剩余充能 ' + S.buffs.camp + ' 次）。', 'good');
       }
       var mindGain = planSel.reduce(function (sum, id) { return sum + (trainingById(id).mind || 0); }, 0);
       if (mindGain) changeMind(mindGain);
@@ -449,7 +486,7 @@
           ['落败出场费', '¥' + Math.floor(prize / 2)],
           ['排名变化', '获胜上升、落败下降（赢高排名升得多，输低排名降得多）'],
           ['影响力', '当前 ' + influenceLabel(refreshInfluence()) + '（动态档位：首胜 Lv2、10 胜或前 25 名 Lv3、前 10 名或 25 胜 Lv4、登顶 Lv5；输比赛跌出排名门槛会掉档，靠胜场达成的档位不掉）'],
-          ['名声', '获胜提升，落败不变（名声仅作纪念展示，不参与判定）']
+          ['名声', '获胜 +1、落败不变（名声随胜场积累；奖金加成与赞助门槛由影响力档位决定）']
         ],
         note: note,
         okText: '确认报名',
@@ -490,9 +527,10 @@
       }
       // 角色池：每周第 1 天（与赞助周薪同点）池内成长 + 名次重排 + 候补轮换
       if (S.day % 7 === 1) { weeklyRosterGrowth(weekOf(S.day)); checkAchievements(); } // Phase 9：每周重排后排名类成就判定
+      checkStoryMilestones(); // 修复批次 C：跨日兜底补检剧情双通道节点（胜场路/排名路任一达标即排队）
       planSel = [];
       closeSubLists(null);
-      ['trainList', 'outList', 'shopList', 'relaxList'].forEach(function (id) { $(id).classList.remove('open'); });
+      ['trainList', 'outList', 'shopList', 'relaxList', 'hospitalList'].forEach(function (id) { $(id).classList.remove('open'); });
       render();
       if (isMatchDay(S.day)) toast('比赛日到了！去报名比赛吧');
     }
@@ -518,7 +556,7 @@
         lines: [
           ['版型 / 外皮', GLOVE_PATTERNS[sel.pattern].name + ' / ' + GLOVE_OUTERS[sel.outer].name],
           ['内衬 / 盎司 / 固定', GLOVE_LININGS[sel.lining].name + ' / ' + sel.oz + 'oz / ' + GLOVE_FIX[sel.fix].name],
-          ['最终属性', bonusDesc(c.bonus)],
+          ['最终属性', pctDesc(c.pct)],
           ['价格', '¥' + S.money + ' → ¥' + (S.money - c.price) + '（−' + c.price + '）']
         ],
         note: '价格 = ' + c.breakdown + '，实际总价区间 ¥1100～3900。成品存入背包（不自动装备，去状态页背包换上），这个组合会登记进拳套图鉴。斗牛系/马毛内衬的伤手风险体现在手部保护（防守）降低上。',
@@ -543,17 +581,24 @@
       });
     }
     function gearCmpHTML(g) {
-      // 框架重构三期：商品卡上直读的属性对比——与当前同部位已装备比（含强化的有效加成为准，新旧差 ▲▼ 箭头）
+      // 框架重构三期：商品卡上直读的属性对比——与当前同部位已装备比（含强化的有效值为准，新旧差 ▲▼ 箭头）
+      // 修复批次 D：比较口径随装备百分比/机制化（pct 百分点、dr 百分点、机制倍率降低为正向）；
+      // 同步修复旧版 dr 显示 bug（曾把已是百分点的 dr 再 ×100，显示成 500%）
       var cur = S.gear[g.slot] ? gearById(S.gear[g.slot]) : null;
       if (!cur) return '<span class="sc-cmp"><span class="sc-cmp-line same">该部位还没有装备</span></span>';
       if (cur.id === g.id) return '';
-      var nb = effBonusOf(g), ob = effBonusOf(cur), rows = [];
+      var np = effPctOf(g), op = effPctOf(cur), rows = [];
       ATTRS.forEach(function (a) {
-        var d = (nb[a.key] || 0) - (ob[a.key] || 0);
-        if (d) rows.push('<span class="sc-cmp-line ' + (d > 0 ? 'up' : 'down') + '">' + a.name + ' ' + (ob[a.key] || 0) + ' → ' + (nb[a.key] || 0) + '（' + (d > 0 ? '▲+' + d : '▼' + d) + '）</span>');
+        var d = (np[a.key] || 0) - (op[a.key] || 0);
+        if (d) rows.push('<span class="sc-cmp-line ' + (d > 0 ? 'up' : 'down') + '">' + a.name + '生效 ' + ((op[a.key] || 0) > 0 ? '+' : '') + (op[a.key] || 0) + '% → ' + ((np[a.key] || 0) > 0 ? '+' : '') + (np[a.key] || 0) + '%（' + (d > 0 ? '▲+' + d : '▼' + d) + '）</span>');
       });
       var ndr = effDrOf(g), odr = effDrOf(cur), dd = ndr - odr;
-      if (Math.abs(dd) > 0.001) rows.push('<span class="sc-cmp-line ' + (dd > 0 ? 'up' : 'down') + '">减伤 ' + Math.round(odr * 100) + '% → ' + Math.round(ndr * 100) + '%（' + (dd > 0 ? '▲+' : '▼') + Math.round(Math.abs(dd) * 100) + '%）</span>');
+      if (Math.abs(dd) > 0.001) rows.push('<span class="sc-cmp-line ' + (dd > 0 ? 'up' : 'down') + '">减伤 ' + Math.round(odr) + '% → ' + Math.round(ndr) + '%（' + (dd > 0 ? '▲+' : '▼') + Math.round(Math.abs(dd)) + '%）</span>');
+      Object.keys(MECH_DEFS).forEach(function (f) {
+        var nm = Math.round((1 - effMechAt(g, f, enhOf(g.id))) * 100), om = Math.round((1 - effMechAt(cur, f, enhOf(cur.id))) * 100);
+        var md = nm - om;
+        if (md) rows.push('<span class="sc-cmp-line ' + (md > 0 ? 'up' : 'down') + '">' + MECH_DEFS[f].label + ' −' + om + '% → −' + nm + '%（' + (md > 0 ? '▲−' : '▼+') + Math.abs(md) + '%）</span>');
+      });
       if (!rows.length) rows.push('<span class="sc-cmp-line same">效果相同</span>');
       return '<span class="sc-cmp"><span class="sc-cmp-cur">现装备：' + gearDispName(cur) + '</span>' + rows.join('') + '</span>';
     }
@@ -580,6 +625,20 @@
           '<span class="sc-desc">' + c.desc + '</span>' +
           '<span class="sc-foot"><span class="sc-own">拥有 ' + (S.bag[c.id] || 0) + ' 个</span><span class="sc-price">¥' + c.price + '</span></span></button>';
       }).join('') + '</div>';
+      /* 修复批次 D：增值服务货架——特训营/宣传造势两个复购型消费口（价格随周上涨、每周各限购 1 次，
+         价格与效果都在卡上明示；康复理疗在据点·外出·医院里） */
+      html += '<div class="shop-sec-h">增值服务<span>每周各限购 1 次 · 价格随赛季周数上涨</span></div><div class="shop-grid">';
+      var campP = campPrice(), campOk = campLeftThisWeek() > 0;
+      html += '<button class="shop-card item" data-buy-camp' + ((!campOk || S.money < campP) ? ' disabled' : '') + '>' +
+        '<span class="sc-name">特训营（' + CAMP_CHARGES + ' 次）</span>' +
+        '<span class="sc-desc">买入 ' + CAMP_CHARGES + ' 次特训充能：之后 ' + CAMP_CHARGES + ' 次训练结算的收益额外 +50%（当前充能 ' + (S.buffs.camp || 0) + ' 次）。价格随周上涨，早买早练。</span>' +
+        '<span class="sc-foot"><span class="sc-own">' + (campOk ? '本周可购买' : '本周已购买') + '</span><span class="sc-price">¥' + campP + '</span></span></button>';
+      var promoP = promoPrice(), promoOk = promoLeftThisWeek() > 0;
+      html += '<button class="shop-card item" data-buy-promo' + ((!promoOk || S.money < promoP || (S.buffs && S.buffs.promo)) ? ' disabled' : '') + '>' +
+        '<span class="sc-name">宣传造势</span>' +
+        '<span class="sc-desc">造势宣传一波：心态 +15，下一场正式赛获胜奖金 ×' + PROMO_PRIZE_MUL + '（输了不触发、保留到获胜为止；约战不算）' + ((S.buffs && S.buffs.promo) ? '。当前已生效，赢下一场正式赛后消费。' : '。') + '</span>' +
+        '<span class="sc-foot"><span class="sc-own">' + (promoOk ? '本周可购买' : '本周已购买') + '</span><span class="sc-price">¥' + promoP + '</span></span></button>';
+      html += '</div>';
       html += '<div class="shop-sec-h">定制拳套工坊<span>改选实时预览 · 确认购买才扣钱</span></div>';
       html += '<div class="custom-box"><p class="shop-note" style="margin:0 0 8px">双层结构：版型定骨架，外皮＋内衬定手感，再用盎司与固定方式微调。</p>';
       html += '<label class="cs-lab">版型（第一层 · 骨架）<select id="csPattern">' + optTags(GLOVE_PATTERNS, customSel.pattern, function (o) { return o.name + ' · 基础 ¥' + o.base + ' · ' + o.note; }) + '</select></label>';
@@ -597,6 +656,12 @@
       Array.prototype.forEach.call(document.querySelectorAll('[data-buy-item]'), function (btn) {
         btn.addEventListener('click', function () { buyConsumable(btn.getAttribute('data-buy-item')); });
       });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-buy-camp]'), function (btn) {
+        btn.addEventListener('click', function () { buyCampService(); });
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-buy-promo]'), function (btn) {
+        btn.addEventListener('click', function () { buyPromoService(); });
+      });
       $('btnShopBack').addEventListener('click', function () { $('shopList').classList.remove('open'); shopSession = false; showScene('daily'); }); // 离开商店回据点（再次进店重新走外出确认）
       $('btnShopDex').addEventListener('click', function () { // 图鉴联动：从商店直达画廊的设计款式页签（纯展示）
         $('shopList').classList.remove('open');
@@ -613,6 +678,61 @@
       updateCustomPreview();
     }
 
+    /* 修复批次 D：商店增值服务购买（走与装备相同的舞台内确认框） */
+    function buyCampService() {
+      var price = campPrice();
+      if (campLeftThisWeek() <= 0) { toast('特训营本周已购买（每周限 1 次）'); return; }
+      if (S.money < price) { toast('钱不够报名特训营（需要 ¥' + price + '）'); return; }
+      askShopConfirm({
+        title: '增值服务 · 特训营',
+        lines: [
+          ['金钱', '¥' + S.money + ' → ¥' + (S.money - price) + '（−' + price + '）'],
+          ['效果', '特训充能 +' + CAMP_CHARGES + ' 次（当前 ' + (S.buffs.camp || 0) + ' 次）'],
+          ['规则', '之后每次训练结算消耗 1 次充能，本次训练收益额外 +50%']
+        ],
+        note: '价格随赛季周数上涨（本周 ¥' + price + '），每周限购 1 次。充能不清零、跨周保留，什么时候练什么时候生效。',
+        okText: '确认报名',
+        onOk: function () {
+          if (S.money < campPrice() || campLeftThisWeek() <= 0) { toast('条件已变化，无法购买'); return; }
+          var p2 = campPrice();
+          S.money -= p2;
+          S.buffs.camp = (S.buffs.camp || 0) + CAMP_CHARGES;
+          S.campW = weekOf(S.day);
+          sinkSpend('camp', p2);
+          dailyLog('报名特训营：花费 ¥' + p2 + '，特训充能 +' + CAMP_CHARGES + ' 次（现有 ' + S.buffs.camp + ' 次）。', 'good');
+          render();
+          toast('特训营报名成功，充能 +' + CAMP_CHARGES + ' 次');
+        }
+      });
+    }
+    function buyPromoService() {
+      var price = promoPrice();
+      if (promoLeftThisWeek() <= 0) { toast('宣传造势本周已购买（每周限 1 次）'); return; }
+      if (S.buffs && S.buffs.promo) { toast('宣传造势已生效，等下一场正式赛获胜后消费'); return; }
+      if (S.money < price) { toast('钱不够做宣传造势（需要 ¥' + price + '）'); return; }
+      askShopConfirm({
+        title: '增值服务 · 宣传造势',
+        lines: [
+          ['金钱', '¥' + S.money + ' → ¥' + (S.money - price) + '（−' + price + '）'],
+          ['心态', fmtDelta(Math.round(S.mind), Math.min(100, Math.round(S.mind) + 15))],
+          ['效果', '下一场正式赛获胜奖金 ×' + PROMO_PRIZE_MUL]
+        ],
+        note: '海报、短视频、采访一波造势。价格随赛季周数上涨（本周 ¥' + price + '），每周限购 1 次；输了不触发，保留到获胜为止，约战不算正式赛。',
+        okText: '确认造势',
+        onOk: function () {
+          if (S.money < promoPrice() || promoLeftThisWeek() <= 0 || (S.buffs && S.buffs.promo)) { toast('条件已变化，无法购买'); return; }
+          var p2 = promoPrice();
+          S.money -= p2;
+          S.mind = clamp(S.mind + 15, 0, 100);
+          S.buffs.promo = true;
+          S.promoW = weekOf(S.day);
+          sinkSpend('promo', p2);
+          dailyLog('宣传造势：花费 ¥' + p2 + '，心态 +15，下一场正式赛获胜奖金 ×' + PROMO_PRIZE_MUL + ' 待生效。', 'good');
+          render();
+          toast('造势完成，下一场赢了奖金翻涨');
+        }
+      });
+    }
     function buyGear(id) {
       var g = gearById(id);
       if (!g || S.money < g.price || S.owned.indexOf(id) >= 0) return;
@@ -738,7 +858,7 @@
     function renderGalleryPortraits() {
       var el = $('galPortraits'); if (!el) return;
       el.innerHTML = portraitGalleryList().map(function (e) {
-        return '<figure class="gal-portrait" data-gal-img="' + e.src + '" data-gal-cap="' + e.label + '"><img src="' + e.src + '" alt="' + e.label + ' 立绘" loading="lazy" /><figcaption>' + e.label + '</figcaption></figure>';
+        return '<figure class="gal-portrait" data-gal-img="' + e.src + '" data-gal-cap="' + e.label + '"><img data-src="' + e.src + '" alt="' + e.label + ' 立绘" loading="lazy" /><figcaption>' + e.label + '</figcaption></figure>';
       }).join('');
       Array.prototype.forEach.call(el.querySelectorAll('[data-gal-img]'), function (f) {
         f.addEventListener('click', function () {
@@ -880,7 +1000,7 @@
         if (m.key === 'opp_rookie') line += ' · 同期队友';
         return '<div class="foe-dex-item' + (met ? '' : ' unmet') + '">' +
           (met ? '' : '<span class="fd-unmet">未交手</span>') +
-          '<img src="assets/opponents/' + m.key + '.webp" alt="' + m.name + ' 的立绘" loading="lazy" />' +
+          '<img data-src="assets/opponents/' + m.key + '.webp" alt="' + m.name + ' 的立绘" loading="lazy" />' +
           '<div class="fd-name">' + m.name + '</div>' +
           '<div class="fd-rank">' + (m.rank > 0 ? '国内第 ' + m.rank + ' 名' : '候补 · 未入榜') + '</div>' +
           '<div class="fd-line">' + line + '</div></div>';
@@ -888,7 +1008,7 @@
       html += [['senior', '拳馆前辈'], ['manager', '经纪人']].map(function (pair) {
         var c = STORY_CHARS[pair[0]];
         return '<div class="foe-dex-item"><span class="fd-staff">' + pair[1] + '</span>' +
-          '<img src="' + c.img + '" alt="' + c.name + ' 的立绘" loading="lazy" />' +
+          '<img data-src="' + c.img + '" alt="' + c.name + ' 的立绘" loading="lazy" />' +
           '<div class="fd-name">' + c.name + '</div>' +
           '<div class="fd-rank">' + pair[1] + '</div>' +
           '<div class="fd-line">' + c.role + '</div></div>';
@@ -899,7 +1019,7 @@
       Array.prototype.forEach.call(el.querySelectorAll('.foe-dex-item'), function (item) {
         item.addEventListener('click', function () {
           var img = item.querySelector('img'), nm = item.querySelector('.fd-name');
-          if (img) openImgZoom(img.getAttribute('src'), nm ? nm.textContent : '');
+          if (img) openImgZoom(img.getAttribute('src') || img.getAttribute('data-src'), nm ? nm.textContent : '');
         });
       });
     }
@@ -1002,14 +1122,14 @@
       for (var r = 1; r <= 50; r++) {
         var badge = '<span class="rr-badge num' + (r <= 3 ? ' r' + r : '') + '">' + r + '</span>';
         if (r === S.rank) {
-          rows.push('<div class="rank-row me">' + badge + '<img src="' + portraitSrc() + '" alt="" /><span class="rr-name">' + S.name + '（你）</span><span class="rr-meta">' + S.wins + ' 胜 · ' + S.losses + ' 负</span></div>');
+          rows.push('<div class="rank-row me">' + badge + '<img data-src="' + portraitSrc() + '" alt="" /><span class="rr-name">' + S.name + '（你）</span><span class="rr-meta">' + S.wins + ' 胜 · ' + S.losses + ' 负</span></div>');
         } else if (byRank[r]) {
           var m = byRank[r];
-          rows.push('<div class="rank-row">' + badge + '<img src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
+          rows.push('<div class="rank-row">' + badge + '<img data-src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
         }
       }
       S.roster.forEach(function (m) {
-        if (m.rank === 0) rows.push('<div class="rank-row reserve"><span class="rr-badge wide">候补</span><img src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">候补 · 未入榜 · ' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
+        if (m.rank === 0) rows.push('<div class="rank-row reserve"><span class="rr-badge wide">候补</span><img data-src="assets/opponents/' + m.key + '.webp" alt="" loading="lazy" /><span class="rr-name">' + m.name + '</span><span class="rr-meta">候补 · 未入榜 · ' + FOE_STYLES[m.style].name + ' · ' + (GROWTH_LABELS[m.growth] || m.growth) + '</span></div>');
       });
       el.innerHTML = rows.join('');
     }
@@ -1031,7 +1151,7 @@
       matchVsSig = sig;
       var ea = effAttrs();
       var meSide = '<div class="mv-side me">' +
-        '<img src="assets/pose/guard.webp" alt="" />' +
+        '<img data-src="assets/pose/guard.webp" alt="" />' +
         '<div class="mv-name">' + S.name + '（你）</div>' +
         '<div class="mv-meta">国内排名第 ' + S.rank + ' 名 · ' + S.wins + ' 胜 · ' + S.losses + ' 负<br>力量 ' + ea.power + ' · 速度 ' + ea.speed + '<br>耐久 ' + ea.endurance + ' · 技术 ' + ea.technique + '</div></div>';
       var html;
@@ -1044,7 +1164,7 @@
         html = meSide +
           '<div class="mv-mid"><div class="mv-vs">VS</div><div class="mv-day">今日比赛</div></div>' +
           '<div class="mv-side foe">' +
-          '<img src="' + foeAlphaSrc(foe.img) + '" alt="" />' +
+          '<img data-src="' + foeAlphaSrc(foe.img) + '" alt="" />' +
           '<div class="mv-name">' + foe.name + (foe.isRival ? ' <span class="mv-rival">宿敌</span>' : '') + '</div>' +
           '<div class="mv-meta">国内排名第 ' + foe.rank + ' 名<br>风格：' + FOE_STYLES[foe.style].name + '<br>力量 ' + a.power + ' · 速度 ' + a.speed + '<br>耐久 ' + a.endurance + ' · 技术 ' + a.technique + '</div>' +
           '<p class="mv-line">「' + foe._line + '」</p>' +
@@ -1097,6 +1217,8 @@
       if (S.buffs.drink) buffTxt.push('能量饮料生效中（下次训练体力消耗 −30%）');
       if (S.buffs.bandage) buffTxt.push('绷带生效中（下场比赛伤病概率减半）');
       if (S.buffs.meal) buffTxt.push('营养餐生效中（下次睡觉体力恢复 +20）');
+      if (S.buffs.camp > 0) buffTxt.push('特训营充能 ×' + S.buffs.camp + '（每次训练结算收益 +50%，用一次少一次）'); // 修复批次 D
+      if (S.buffs.promo) buffTxt.push('宣传造势生效中（下一场正式赛获胜奖金 ×' + PROMO_PRIZE_MUL + '）'); // 修复批次 D
       if (S.scoutedForDay && S.scoutedForDay >= S.day) buffTxt.push('已侦察下场比赛对手弱点'); // P1-6：过期的侦察不再显示
       var curSp = currentSponsor();
       if (curSp) buffTxt.push('赞助：' + curSp.name + '（周薪 ¥' + curSp.weekly + '，每周第 1 天到账）');
@@ -1133,7 +1255,7 @@
           if (!items.length) return;
           html += '<h4 class="dex-gal-cat">' + c[1] + ' <span class="tag">' + items.length + ' 款</span></h4><div class="dex-gal-grid">' +
             items.map(function (e) {
-              return '<figure class="dex-gal-item"><img src="' + e[2] + '" alt="' + e[1] + '" loading="lazy" /><figcaption>' + e[1] + '</figcaption></figure>';
+              return '<figure class="dex-gal-item"><img data-src="' + e[2] + '" alt="' + e[1] + '" loading="lazy" /><figcaption>' + e[1] + '</figcaption></figure>';
             }).join('') + '</div>';
         });
         return html + '</div>';
@@ -1183,7 +1305,7 @@
         Array.prototype.forEach.call(galDesignEl.querySelectorAll('.dex-gal-item'), function (item) {
           item.addEventListener('click', function () {
             var img = item.querySelector('img'), cap = item.querySelector('figcaption');
-            if (img) openImgZoom(img.getAttribute('src'), cap ? cap.textContent : '');
+            if (img) openImgZoom(img.getAttribute('src') || img.getAttribute('data-src'), cap ? cap.textContent : '');
           });
         });
       }
@@ -1193,6 +1315,7 @@
       renderBag();
       renderCraft();
       renderGalleryProgress(); // 框架重构四期：画廊收集进度环（数据同源，渲染跟随 renderStatus）
+      activateLazyInActiveView(); // 批次 E：同 render() 钩子（openGallery 等直调 renderStatus 的路径）
     }
     function syncBagTabs() {
       Array.prototype.forEach.call(document.querySelectorAll('[data-bagtab]'), function (b) {
@@ -1248,7 +1371,7 @@
           var lvl = enhOf(g.id), enhLine = '';
           if (lvl < ENH_MAX) {
             var sh = enhShortage(g);
-            if (sh.money || sh.mat) enhLine = '<div class="bi-d" style="color:var(--red)">强化到 +' + (lvl + 1) + ' 需 ¥' + sh.cost.money + '＋' + materialName(sh.cost.matId) + ' ×' + sh.cost.matCount + '（现有 ' + ((S.materials && S.materials[sh.cost.matId]) || 0) + '）' + (sh.money ? '，金钱不足' : '') + (sh.mat ? '，材料不足' : '') + '</div>';
+            if (sh.money || sh.mat) enhLine = '<div class="bi-d" style="color:var(--red)">强化到 +' + (lvl + 1) + ' 需 ¥' + sh.cost.money + '＋对应材料 ×' + sh.cost.matCount + '（' + enhMatText(g) + '）' + (sh.money ? '，金钱不足' : '') + (sh.mat ? '，材料不足' : '') + '</div>';
           }
           return '<div class="bag-item">' + gearImgHTML(g) + '<div style="flex:1;min-width:0"><span class="bi-t">' + gearDispName(g) + '</span><div class="bi-d">' + gearEffDesc(g) + '</div>' + enhLine + '</div>' +
             '<span class="bag-btns"><button data-equip="' + g.id + '"' + (equipped ? ' disabled' : '') + '>' + (equipped ? '已装备' : '装备') + '</button>' +
@@ -1317,7 +1440,7 @@
           ['消耗材料', craftNeeds().map(function (n) { return materialName(n.id) + ' ×' + CRAFT_MAT_NEED; }).join(' ＋ ')],
           ['手工费', '¥' + S.money + ' → ¥' + (S.money - CRAFT_FEE) + '（−' + CRAFT_FEE + '）'],
           ['成品规格', '12oz · 魔术贴（工坊标准规格）'],
-          ['成品属性', bonusDesc(c.bonus)]
+          ['成品属性', pctDesc(c.pct)]
         ],
         note: '用拆解攒下的材料打造，只收手工费。成品存入背包（不自动装备），新组合会登记进拳套图鉴。',
         okText: '确认打造',

@@ -261,8 +261,99 @@
         { w: 'senior', t: '收好。这种东西，比奖杯沉。以后打不动了，翻出来看看。' } ],
         choices: [
           { text: '认真写一封回信，附上训练注意事项', fx: { mind: 6 }, result: '你写了满满一页：热身、护具、找正规的馆。寄出那一刻，心里某个地方被稳稳地托住了。' },
-          { text: '把信贴在更衣室的镜子旁边', fx: { aff: { senior: 4 }, mind: 3 }, result: '后来每次换衣服，你都会看它一眼。小葵也在旁边加了一行小字：「我也是你的粉丝哦。」' } ] }
+          { text: '把信贴在更衣室的镜子旁边', fx: { aff: { senior: 4 }, mind: 3 }, result: '后来每次换衣服，你都会看它一眼。小葵也在旁边加了一行小字：「我也是你的粉丝哦。」' } ] },
+      /* ===== 修复批次 C（M6）：新增可重复日常 4 段（daily_r1~r4，短/轻/氛围向；微变版本见 DAILY_ALTS）【新增文案·待用户审】 ===== */
+      daily_r1: { char: 'senior', title: '日常 · 清晨的拳馆', pages: [
+        { w: 'narr', t: '你到得比平时早，拳馆还没开灯。梢姐已经在了，正踮着脚擦擂台的围绳。' },
+        { w: 'senior', t: '来得正好。擂台这东西，你敬它一分，它护你一分。搭把手。' } ],
+        choices: [
+          { text: '挽起袖子一起擦', fx: { aff: { senior: 3 } }, result: '两个人把围绳和台面擦得发亮。她退后两步端详：「嗯，今天它心情不错。」' },
+          { text: '先帮她把沙袋都归位', fx: { stamina: 3 }, result: '沙袋一个个摆正，拳馆慢慢有了开工的样子。' } ] },
+      daily_r2: { char: 'manager', title: '日常 · 贩卖机的灯', pages: [
+        { w: 'narr', t: '训练结束，楼下的自动贩卖机还亮着。真纪姐站在机器前，盯着最后一罐热咖啡发呆。' },
+        { w: 'manager', t: '……你也来买？先说好，这罐是我的。谈判桌上我都不让，贩卖机前更不可能。' } ],
+        choices: [
+          { text: '把硬币投进去，请她这罐', fx: { money: -30, aff: { manager: 4 } }, result: '她捧着咖啡，难得没算账：「……下次我请。记我账上，利息照付。」' },
+          { text: '选了旁边的运动饮料', fx: { stamina: 4 }, result: '你们并排靠在墙边喝完。楼道的灯忽明忽暗，谁也没急着走。' } ] },
+      daily_r3: { char: 'rival', title: '日常 · 末班车', pages: [
+        { w: 'narr', t: '末班电车上人不多。你刚坐下，对面的人把杂志往下挪了挪——沈墨凛。' },
+        { w: 'rival', t: '……这节车厢归我。算了，今天懒得跟你计较。坐吧，别出声。' } ],
+        choices: [
+          { text: '安安静静坐到站', fx: { aff: { rival: 3 }, mind: 3 }, result: '车窗外的灯一盏盏退过去。下车时她先站起来：「……明天，擂台上见。」' },
+          { text: '小声问她在看什么杂志', fx: { aff: { rival: 4 } }, result: '是拳击月刊，折角的那页正好是你的报道。她把杂志合上：「看什么看。」' } ] },
+      daily_r4: { char: 'teammate', title: '日常 · 特价蛋白粉', pages: [
+        { w: 'narr', t: '超市门口贴着大红海报：蛋白粉限时特价。小葵抱着两大罐从人群里挤出来，眼睛发亮。' },
+        { w: 'teammate', t: '快！还有最后三罐！一人限购两罐——你也去抢！我们四罐，练到年底！' } ],
+        choices: [
+          { text: '冲进去抢下最后两罐', fx: { money: -160, stamina: 5 }, result: '满载而归。她举起罐子像举奖杯：「这波啊，这波是营养自由！」金钱 −¥160（特价囤货）。' },
+          { text: '帮她把罐子抱回拳馆', fx: { aff: { teammate: 4 } }, result: '两大罐一路沉甸甸。她哼着歌：「有蛋白粉的日子，训练都更有劲了。」' } ] }
     };
 
-    /* D2：日常事件触发池（训练后 / 散心时由 triggerDailyEvent 从未触发的日常里随机抽取） */
-    var DAILY_EVENT_IDS = ['daily_1', 'daily_2', 'daily_3', 'daily_4', 'daily_5', 'daily_6', 'daily_7', 'daily_8', 'daily_9', 'daily_10', 'daily_11', 'daily_12', 'daily_13', 'daily_14', 'daily_15'];
+    /* ===== 修复批次 C（M6）：可重复日常池 =====
+       DAILY_REPEATABLE 里的段落首次触发走正文、之后按冷却（DAILY_REPEAT_CD 天）可再触发，
+       再触发时用 DAILY_ALTS 的微变版本（台词/数值小改，避免逐字重播感）。一次性事件不在此列。
+       【DAILY_ALTS 全部为新增文案·待用户审】 */
+    var DAILY_REPEATABLE = ['daily_1', 'daily_2', 'daily_7', 'daily_9', 'daily_11', 'daily_12', 'daily_r1', 'daily_r2', 'daily_r3', 'daily_r4'];
+    var DAILY_ALTS = {
+      daily_1: { pages: [
+        { w: 'teammate', t: '又在河边碰上你了！我发现了——只要我跑五公里，准能捡到一个你。' } ],
+        choices: [
+          { text: '陪她边走边聊下一场比赛', fx: { aff: { teammate: 4 }, mind: 3 }, result: '河风把你们的说话声吹得很远。她说到激动处，差点跑进自行车道。' },
+          { text: '老规矩，竞速最后一程', fx: { aff: { teammate: 3 }, attr: 'footwork', attrN: 1 }, result: '这次她只落后了半个身位，扶着膝盖喊：「下次！下次我先到！」步伐速度 +1。' } ] },
+      daily_2: { pages: [
+        { w: 'manager', t: '又是你。这个点还开着的，也就这家便利店和我们两个傻瓜了。' } ],
+        choices: [
+          { text: '帮她把关东煮的最后一串萝卜夹出来', fx: { aff: { manager: 4 } }, result: '她吹了吹热气，小口咬着：「谈判耗掉的，都补回来了。」' },
+          { text: '吐槽她又把饭团当晚饭', fx: { aff: { manager: 3 }, mind: 4 }, result: '「下次吧。」她把这句话说得像句承诺——你已经听她说了三次了。' } ] },
+      daily_7: { pages: [
+        { w: 'teammate', t: '铛铛——！今日便当：煎鸡腿、胡萝卜、紫薯！我妈说我最近带饭带得特别勤，是不是交朋友了。' },
+        { w: 'teammate', t: '我说是啊，交了个特别能吃的。她说那多带点。' } ],
+        choices: [
+          { text: '连紫薯一起吃光', fx: { aff: { teammate: 5 }, stamina: 8 }, result: '她托着腮看你吃：「我妈要是看见你这吃相，能再塞给你一盒。」' },
+          { text: '分她一块煎鸡腿', fx: { aff: { teammate: 3 }, mind: 4 }, result: '你们在台阶上分完了一盒便当，像分完了一个小小的庆功宴。' } ] },
+      daily_9: { pages: [
+        { w: 'manager', t: '拉面店又搞活动了。这次老板学精了，提前把你的海报印在了门口——报酬照旧，不多，但曝光是真的。' } ],
+        choices: [
+          { text: '熟门熟路，吆喝加空击一条龙', fx: { money: 180, stamina: -5 }, result: '有回头客认出了你，队伍比上次还长。老板笑得见牙不见眼。金钱 +¥180。' },
+          { text: '这次安安静静吃面打卡', fx: { money: 120, mind: 4 }, result: '照片底下有人留言：「她又来了，这家面是真好吃吧。」' } ] },
+      daily_11: { pages: [
+        { w: 'narr', t: '食堂窗口——又是最后一块鸡胸肉。不过这次，小葵的餐盘比你快了零点一秒。' },
+        { w: 'teammate', t: '嘿嘿，风水轮流转！说吧，同期，这次我们怎么分？' } ],
+        choices: [
+          { text: '愿赌服输，自己啃蛋白棒', fx: { aff: { teammate: 5 }, stamina: 4 }, result: '她还是掰了一半给你：「一人一半，这才叫同期——这话我说过吧？」' },
+          { text: '石头剪刀布，再战一局', fx: { aff: { teammate: 3 }, mind: 5 }, result: '这次是你二比一输了。她捶胸顿足地笑——上次输的好像不是她一样。' } ] },
+      daily_12: { pages: [
+        { w: 'teammate', t: '不好了！测力机纪录又被破了！还是那个大叔！他是不是住在街机厅啊？！' },
+        { w: 'teammate', t: '这次高了三分！三分！游戏币，拿好——夺回来！' } ],
+        choices: [
+          { text: '投币，四拳之内夺回纪录', fx: { money: -50, attr: 'power', attrN: 1 }, result: '第四拳，纪录刷新。围观的人群里，大叔笑着冲你竖了个大拇指。力量 +1。' },
+          { text: '先请大叔喝罐饮料，聊聊他的发力', fx: { aff: { teammate: 3 }, attr: 'technique', attrN: 1 }, result: '大叔年轻时练过拳，三言两语点透了沉肩的窍门。技术 +1——纪录先寄存在他那儿。' } ] },
+      daily_r1: { pages: [
+        { w: 'narr', t: '清晨的拳馆，梢姐在给围绳做例行检查，一根根拉过去，听声音。' },
+        { w: 'senior', t: '来得早。这根松了，帮我扶着——擂台的脾气，得天天摸才知道。' } ],
+        choices: [
+          { text: '扶着围绳听她讲检查的门道', fx: { aff: { senior: 3 }, attr: 'defense', attrN: 1 }, result: '她说听绳如听拳，松紧都在声音里。你似懂非懂，但架子稳了些。防守技术 +1。' },
+          { text: '默默把台面又擦了一遍', fx: { mind: 3 }, result: '她在你背后轻轻哼了一声，像是满意。' } ] },
+      daily_r2: { pages: [
+        { w: 'narr', t: '贩卖机的灯还亮着。真纪姐蹲在机器前，跟卡住的咖啡罐较劲。' },
+        { w: 'manager', t: '别笑。拍一下侧面——对，就是这样。这台机器的脾气，我比它厂家还懂。' } ],
+        choices: [
+          { text: '照她说的拍了一下侧面', fx: { aff: { manager: 4 } }, result: '咖啡哐当掉下来。她把罐子抛给你：「情报费。下次的谈判，你跟我去拎包。」' },
+          { text: '帮她再投一罐热的', fx: { money: -30, aff: { manager: 3 }, mind: 3 }, result: '两罐咖啡，一人一罐。她喝了一口，长长舒了口气：「活过来了。」' } ] },
+      daily_r3: { pages: [
+        { w: 'narr', t: '末班车，对面又是熟悉的身影。沈墨凛闭着眼睛，耳机里不知道放着什么。' },
+        { w: 'rival', t: '……感觉到视线了。看够了没有。……算了，今天我也累了。' } ],
+        choices: [
+          { text: '在她到站前小声提醒她别坐过站', fx: { aff: { rival: 4 } }, result: '她睁开眼愣了一下，起身下车，走出两步又回头：「……多管闲事。」语气却不凶。' },
+          { text: '各自安静地坐到终点', fx: { mind: 4 }, result: '车厢轻轻晃着。你们在同一个站台下车，一前一后走进夜里。' } ] },
+      daily_r4: { pages: [
+        { w: 'narr', t: '超市的特价牌又换了一张：鸡蛋第二盒半价。小葵推着购物车，路线熟练得像在打比赛。' },
+        { w: 'teammate', t: '听好了，蛋白质补给战分三个阶段——抢鸡蛋、抢鸡胸、最后杀去拿牛奶！跟上！' } ],
+        choices: [
+          { text: '全程跟上她的补给路线', fx: { stamina: 5, aff: { teammate: 3 } }, result: '战果辉煌。她把购物袋往你手里一塞：「今晚，蛋炒饭管够！」' },
+          { text: '在冷柜前帮她比价挑鸡胸', fx: { aff: { teammate: 4 } }, result: '她对着两个价签算了半天，最后满意地拍板：「省下的钱，够加一顿好的了。」' } ] }
+    };
+
+    /* D2：日常事件触发池（训练后 / 散心时由 triggerDailyEvent 抽取：未触发的一次性/首次优先，
+       池空后由 DAILY_REPEATABLE 的冷却可重复段托底——修复批次 C · M6） */
+    var DAILY_EVENT_IDS = ['daily_1', 'daily_2', 'daily_3', 'daily_4', 'daily_5', 'daily_6', 'daily_7', 'daily_8', 'daily_9', 'daily_10', 'daily_11', 'daily_12', 'daily_13', 'daily_14', 'daily_15', 'daily_r1', 'daily_r2', 'daily_r3', 'daily_r4'];

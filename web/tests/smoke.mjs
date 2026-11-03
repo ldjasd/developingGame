@@ -107,11 +107,11 @@ async function suite(label, dir) {
 
     // 【架构批改动】启动先到标题屏（不再自动进日常/自动开序章）：先断言标题屏与置灰规则，再点「新的开始」进游戏并跳过序章，
     // 让后续全部断言回到与旧版相同的「已进主界面」前提，行为等价。
-    ok('标题屏出现（titleView 显示 / 日常隐藏 / 游戏名大字与主角立绘就位）',
+    ok('标题屏出现（titleView 显示 / 日常隐藏 / 游戏名大字就位 / 批次 E：常隐 titlePortrait 不再预拉立绘）',
       w.document.getElementById('titleView').style.display === 'block' &&
       w.document.getElementById('dailyView').style.display === 'none' &&
       (w.document.querySelector('.game-title').textContent || '').includes('心跳在左，拳头在右') &&
-      (w.document.getElementById('titlePortrait').getAttribute('src') || '').includes('portrait'),
+      !w.document.getElementById('titlePortrait').getAttribute('src'),
       w.document.getElementById('titleView').style.display + '/' + w.document.getElementById('dailyView').style.display);
     ok('无存档时「继续游戏」置灰（新档 btnTitleContinue disabled / 读取存档·画廊·设置入口可用）',
       w.document.getElementById('btnTitleContinue').disabled === true &&
@@ -304,6 +304,22 @@ async function suite(label, dir) {
     ok('姿势期满自动回抱架（受击姿势保持期过后回到 pose/guard.webp）',
       meImgSrc().includes('assets/pose/guard.webp'), meImgSrc());
 
+    // 修复批次 B（M5/M2/m3）：对手整场人格 + 手动模式搂抱入口与效果 + 赛前打法展示
+    ok('批次B 对手人格（带 persona / 开局战术=人格 base / foePersonaFor 确定性派生 / 防反型 base=counter）',
+      !!w.eval('B.foe.persona') && w.eval('B.foe.tactic') === w.eval('B.foe.persona.base') &&
+      w.eval("foePersonaFor('power','smokeA').base") === w.eval("foePersonaFor('power','smokeA').base") &&
+      w.eval("foePersonaFor('guardcounter','smokeB').base") === 'counter');
+    w.eval("B.me.stam = 40; B.comboMe = 3; B.comboFoe = 2; useClinch();");
+    ok('批次B 手动搂抱（体力 40→60 / 冷却中 / 缠抱停战 holdUntil>time / 双方连击清零 / 手动+触屏按钮齐全）',
+      w.eval('B.me.stam') === 60 && w.eval('B.cd.clinch > 0') === true && w.eval('B.holdUntil > B.time') === true &&
+      w.eval('B.comboMe') === 0 && w.eval('B.comboFoe') === 0 &&
+      !!w.document.getElementById('btnManualClinch') && !!w.document.getElementById('btnClinchT'));
+    w.eval("pendingFoe = B.foe; openModeModal(); openBattleReady('manual');"); // 走真实赛前路径填充两处对手卡（直接 startBattle 时 pendingFoe 为空、填充层会提前返回）
+    ok('批次B 赛前打法展示（对手卡 modeFoeInfo 与准备层 brFoeMeta 含人格「打法：」文本）',
+      (w.document.getElementById('modeFoeInfo').textContent || '').indexOf('打法：') >= 0 &&
+      (w.document.getElementById('brFoeMeta').innerHTML || '').indexOf('打法：') >= 0);
+    w.eval("pendingFoe = null; document.getElementById('modeModal').classList.remove('open'); document.getElementById('battleReady').hidden = true;");
+
     w.eval("clearInterval(battleTimer); B = null; document.getElementById('dailyView').style.display = ''; document.getElementById('battleView').style.display = '';");
 
     // 打磨批次 4 · B2：出拳残影 / 命中点闪光 / 连击计数演出（只验演出元素，判定数值不查）
@@ -394,11 +410,11 @@ async function suite(label, dir) {
       replaySnap());
     w.eval('closeStatus();');
 
-    // 打磨批次 4 · D2：日常事件池扩充至 15 段（原 3 段），触发函数统一走 triggerDailyEvent
-    ok('D2 日常事件池扩充（DAILY_EVENT_IDS = 15 段且定义齐全 / 事件总数 ≥42（原 30+新 12） / triggerDailyEvent 为函数）',
-      w.eval('DAILY_EVENT_IDS.length') === 15 &&
+    // 打磨批次 4 · D2：日常事件池扩充至 15 段（原 3 段），触发函数统一走 triggerDailyEvent；修复批次 C 再 +4 段可重复日常 → 19 段 / 事件总数 46
+    ok('D2 日常事件池扩充（DAILY_EVENT_IDS = 19 段且定义齐全 / 事件总数 ≥46 / triggerDailyEvent 为函数）',
+      w.eval('DAILY_EVENT_IDS.length') === 19 &&
       w.eval('DAILY_EVENT_IDS.every(function (id) { return !!STORY_EVENTS[id]; })') &&
-      w.eval('Object.keys(STORY_EVENTS).length') >= 42 &&
+      w.eval('Object.keys(STORY_EVENTS).length') >= 46 &&
       w.eval('typeof triggerDailyEvent') === 'function',
       w.eval('Object.keys(STORY_EVENTS).length'));
     const drainStory = async () => {
@@ -501,7 +517,11 @@ async function suite(label, dir) {
       again.w.document.getElementById('dailyView').style.display);
     ok('重读后战绩一致', again.w.S.wins === savedObj.wins && again.w.S.losses === savedObj.losses);
     ok('重读后 roster 逐字一致（50 人/名次/评分）', JSON.stringify(again.w.S.roster) === rosterJson);
-    ok('重读后 story 一致（prologueDone 保持 true）', again.w.S.story.prologueDone === true && JSON.stringify(again.w.S.story) === JSON.stringify(JSON.parse(saved).story));
+    ok('重读后 story 一致（prologueDone 保持 true / seenEvents·affinity 逐项一致；修复批次 C 新增 dailyCd 字段由迁移补入，不再要求整对象逐字相等）',
+      again.w.S.story.prologueDone === true &&
+      JSON.stringify(again.w.S.story.seenEvents) === JSON.stringify(JSON.parse(saved).story.seenEvents) &&
+      JSON.stringify(again.w.S.story.affinity) === JSON.stringify(JSON.parse(saved).story.affinity) &&
+      typeof again.w.S.story.dailyCd === 'object');
     // 注：重读时阶段补结算会把生涯推进到阶段 4，追溯判定可合法新增 stage_4，故只断言「存档已有成就逐条逐字保留」
     ok('重读后成就保留（存档已有成就逐条保留）',
       Object.keys(savedObj.achievements || {}).every((id) => JSON.stringify((again.w.S.achievements || {})[id]) === JSON.stringify(savedObj.achievements[id])),
@@ -590,8 +610,8 @@ async function suite(label, dir) {
     };
     slotPage.w.close();
     const reSlot = await loadPage(origin, snapSave, snapExtra);
-    ok('多存档槽：meta 当前槽重读后保持（重载后仍为槽 3 且进度一致）',
-      reSlot.w.eval('currentSlot()') === 3 && reSlot.w.S.wins === 33 && reSlot.w.S.money === 7777,
+    ok('多存档槽：meta 当前槽重读后保持（重载后仍为槽 3 且进度一致；金钱 7777→12777 系修复批次 C 阶段双通道追溯补完阶段 4 的 +¥5000 奖励——33 胜走胜场路解锁，老档解卡的预期行为）',
+      reSlot.w.eval('currentSlot()') === 3 && reSlot.w.S.wins === 33 && reSlot.w.S.money === 12777,
       `${reSlot.w.eval('currentSlot()')}/${reSlot.w.S.wins}/${reSlot.w.S.money}`);
     reSlot.w.close();
 
@@ -677,12 +697,135 @@ async function suite(label, dir) {
     })()`);
     const gatePreRet = fix.w.eval('triggerDailyEvent(1)');
     const gatePreSeen = fix.w.eval("S.story.seenEvents.indexOf('daily_15') >= 0 || S.story.seenEvents.indexOf('daily_6') >= 0");
-    ok('事件门禁：0 场比赛时粉丝签名 / 读者来信（needMatch）不触发', gatePreRet === false && !gatePreSeen, `${gatePreRet}/${gatePreSeen}`);
+    const gatePreQueued = fix.w.eval("storyQueue.indexOf('daily_15') >= 0 || storyQueue.indexOf('daily_6') >= 0");
+    // 修复批次 C 后 triggerDailyEvent 在一次性池被门禁挡空时可由可重复池托底返回 true，门禁本身改验「两段既未触发也未排队」
+    ok('事件门禁：0 场比赛时粉丝签名 / 读者来信（needMatch）不触发（未 seen 且未入队；返回值可为可重复池托底的 true）', !gatePreSeen && !gatePreQueued, `${gatePreRet}/${gatePreSeen}/${gatePreQueued}`);
     fix.w.eval('S.wins = 1;');
     const gatePostRet = fix.w.eval('triggerDailyEvent(1)');
     const gatePostSeen = fix.w.eval("S.story.seenEvents.indexOf('daily_15') >= 0 || S.story.seenEvents.indexOf('daily_6') >= 0");
     ok('事件门禁：打过首场后粉丝签名 / 读者来信可正常触发', gatePostRet === true && gatePostSeen, `${gatePostRet}/${gatePostSeen}`);
     fix.w.close();
+
+    // 【修复批次 C】内容投放：约战入口与取消退款 / 阶段与剧情节点双通道 / 可重复日常池 / 新成就 / 文案口径
+    const bc = await loadPage(origin, null);
+    bc.w.eval(`(function () {
+      S.wins = 12; S.losses = 2; S.rank = 18; S.ap = 6; S.day = 30; S.money = 300;
+      if (!Array.isArray(S.facedFoes)) S.facedFoes = [];
+      if (S.facedFoes.indexOf('opp_counter') < 0) S.facedFoes.push('opp_counter');
+      ensureRoster(); render();
+    })()`);
+    ok('批次C：约战目标含宿敌且可用，startSpar 扣 2 AP 打开模式弹窗且 sim 按钮隐藏',
+      bc.w.eval(`sparTargets().some(function (t) { return t.key === 'opp_counter' && t.ok; })`) === true &&
+      bc.w.eval('startSpar("opp_counter")') === true &&
+      bc.w.eval('S.ap') === 4 &&
+      bc.w.document.getElementById('modeModal').classList.contains('open') &&
+      bc.w.document.querySelector('#modeModal [data-mode="sim"]').style.display === 'none');
+    bc.w.eval(`document.getElementById('btnCancelMode').click()`);
+    ok('批次C：取消约战全额退回 2 AP、sim 按钮与标题复原、约战标记清除',
+      bc.w.eval('S.ap') === 6 && bc.w.document.querySelector('#modeModal [data-mode="sim"]').style.display === '' &&
+      bc.w.eval('nextBattleSpar') === false);
+    ok('批次C：阶段双通道（12 胜未进前 25 可过阶段 3 的排名路；阶段 5 可凭 beatChamp 通过、无 beatChamp 且未登顶则不过）',
+      bc.w.eval(`STAGES[2].check({ rank: 30, wins: 12, winStreak: 3, influence: 3 })`) === true &&
+      bc.w.eval(`STAGES[4].check({ rank: 20, wins: 30, influence: 4, beatChamp: true })`) === true &&
+      bc.w.eval(`STAGES[4].check({ rank: 20, wins: 30, influence: 4, beatChamp: false })`) === false);
+    ok('批次C：剧情节点双通道 checkStoryMilestones（10 胜排 ev_top25 / 25 胜排 ev_top10 / ev_champ 不跟随胜场通道）',
+      bc.w.eval(`(function () { storyState(); S.rank = 30; S.wins = 10; storyQueue.length = 0; checkStoryMilestones(); var a = storyQueue.indexOf('ev_top25') >= 0; storyQueue.length = 0; S.wins = 25; checkStoryMilestones(); var b = storyQueue.indexOf('ev_top10') >= 0; var c = storyQueue.indexOf('ev_champ') < 0; return a && b && c; })()`) === true);
+    ok('批次C：可重复日常池（19 段全见过且冷却记录为空时仍可触发；全部刚触发时冷却内返回 false）',
+      bc.w.eval(`(function () {
+        storyState();
+        DAILY_EVENT_IDS.forEach(function (id) { if (S.story.seenEvents.indexOf(id) < 0) S.story.seenEvents.push(id); });
+        S.story.dailyCd = {}; S.day = 100; storyQueue.length = 0;
+        var a = triggerDailyEvent(1);
+        storyQueue.length = 0;
+        DAILY_EVENT_IDS.forEach(function (id) { S.story.dailyCd[id] = S.day; });
+        var b = triggerDailyEvent(1);
+        return a === true && b === false;
+      })()`) === true);
+    ok('批次C：日常池规模（日常共 19 段 / 可重复 10 段且微变版本齐备）',
+      bc.w.eval('DAILY_EVENT_IDS.length') === 19 && bc.w.eval('DAILY_REPEATABLE.length') === 10 &&
+      bc.w.eval(`DAILY_REPEATABLE.every(function (id) { return !!DAILY_ALTS[id]; })`) === true);
+    ok('批次C：成就共 29 个且 6 个新锚点判定正确（custom_first 与 craft 严格区分）',
+      bc.w.eval('ACHIEVEMENTS.length') === 29 &&
+      bc.w.eval(`(function () { var by = {}; ACHIEVEMENTS.forEach(function (a) { by[a.id] = a; });
+        return by.streak_10.check({ winStreak: 10 }) && by.money_10k.check({ money: 10000 }) &&
+          by.custom_first.check({ customGear: [{ source: 'custom' }] }) && !by.custom_first.check({ customGear: [{ source: 'craft' }] }) &&
+          by.spar_first.check({ sparFights: 1 }) && by.spar_rival_3.check({ sparRival: 3 }) && by.champ_slayer.check({ beatChamp: true }); })()`) === true);
+    ok('批次C：文案口径（阶段 5 改名「国内之巅」且页面无「仅作纪念展示」残留）',
+      bc.w.eval(`STAGES[4].name`) === '国内之巅' &&
+      !bc.w.document.body.innerHTML.includes('仅作纪念展示'));
+    // 【修复批次 D】经济与装备复活：装备百分比/机制化 + 强化曲线 + 三消费口（理疗/特训营/宣传）
+    ok('批次D：装备百分比生效值（属性 20 顶配 power 24.8 / end 23.4；属性 50 顶配 power 62——随本体成长不缩水）',
+      bc.w.eval(`(function () {
+        S = defaultState();
+        S.attrs = { power: 20, speed: 20, accuracy: 20, technique: 20, footwork: 20, defense: 20, endurance: 20, will: 20 };
+        S.gear = { gloves: 'gloves3', guard: 'guard3', boots: 'boots3', head: 'head3', robe: 'robe3', wrist: 'wrist3' };
+        var ea = effAttrs();
+        S.attrs.power = 50;
+        var ea2 = effAttrs();
+        return Math.abs(ea.power - 24.8) < 0.01 && Math.abs(ea.endurance - 23.4) < 0.01 && Math.abs(ea2.power - 62) < 0.01;
+      })()`) === true);
+    ok('批次D：机制倍率（顶配所受重创积累 ×0.72 / 出拳体力 ×0.96 / 冠军护腕指令冷却 ×0.85；护腕 +10 强化后 ≤×0.81 且不破下限 0.6）',
+      bc.w.eval(`(function () {
+        S = defaultState();
+        S.gear = { gloves: 'gloves3', guard: 'guard3', boots: 'boots3', head: 'head3', robe: 'robe3', wrist: 'wrist3' };
+        var t = gearTraumaMul(), s = gearStamMul(), c = gearCdMul();
+        S.enh = { wrist3: 10 };
+        var c10 = gearCdMul();
+        return Math.abs(t - 0.72) < 0.001 && Math.abs(s - 0.96) < 0.001 && Math.abs(c - 0.85) < 0.001 && c10 <= 0.811 && c10 >= 0.6;
+      })()`) === true);
+    ok('批次D：强化曲线（材料逐级 [1,1,1,1,2,2,2,2,3,3] 合计 18、费用 ¥300×(等级+1)、双类材料合计口径）',
+      bc.w.eval(`(function () {
+        S = defaultState(); S.enh = {};
+        var g = gearById('gloves1'), tot = 0;
+        for (var l = 0; l < 10; l++) { S.enh['gloves1'] = l; tot += enhCost(g).matCount; }
+        S.enh['gloves1'] = 0; var c0 = enhCost(g);
+        S.enh['gloves1'] = 9; var c9 = enhCost(g);
+        S.materials = { calf: 1, latex: 2 };
+        var stock = enhMatStock(gearById('gloves2')); // gloves2 拆解对 = [calf, latex]，合计库存 1+2=3
+        return tot === 18 && c0.money === 300 && c0.matCount === 1 && c9.money === 3000 && c9.matCount === 3 && stock === 3;
+      })()`) === true);
+    ok('批次D：老档定制拳套兼容（bonus 按 ×4 换算 pct、gearPctOf 兜底不缩水）',
+      bc.w.eval(`(function () {
+        var p = gearPctOf({ bonus: { power: 2, defense: -1 } });
+        return p.power === 8 && p.defense === -4;
+      })()`) === true);
+    ok('批次D：康复理疗（免 AP、¥1600 → 伤病 −40、周限 2 次、消费记账）',
+      bc.w.eval(`(function () {
+        S = defaultState(); S.money = 10000; S.injury = 50; S.day = 3; S.ap = 0;
+        var left0 = physioLeftThisWeek();
+        confirmPhysio();
+        var opened = document.getElementById('confirmModal').classList.contains('open');
+        document.getElementById('btnCfOk').click();
+        return left0 === 2 && opened && S.injury === 10 && S.money === 8400 && S.ap === 0 &&
+          physioLeftThisWeek() === 1 && S.sinkStats.physio.n === 1 && S.sinkStats.physio.spent === 1600;
+      })()`) === true);
+    ok('批次D：特训营（W1 ¥1140 买 4 次充能、周限 1 次、训练结算消耗 1 次且同计划收益高于无充能基线）',
+      bc.w.eval(`(function () {
+        function setup() {
+          S = defaultState(); S.money = 10000; S.day = 3; S.ap = 6; S.stamina = 100;
+          S.attrs = { power: 10, speed: 10, accuracy: 10, technique: 10, footwork: 10, defense: 10, endurance: 10, will: 10 };
+        }
+        setup();
+        planSel = ['strength', 'strength']; doPlanTrain();
+        var gainNoCamp = S.attrs.power - 10;
+        setup();
+        buyCampService();
+        var sheetOpen = !document.getElementById('shopSheet').hidden;
+        document.getElementById('btnShopCfOk').click();
+        var bought = S.buffs.camp === 4 && S.money === 10000 - 1140 && campLeftThisWeek() === 0;
+        planSel = ['strength', 'strength']; doPlanTrain();
+        var gainCamp = S.attrs.power - 10;
+        return sheetOpen && bought && S.buffs.camp === 3 && gainCamp > gainNoCamp;
+      })()`) === true);
+    ok('批次D：宣传造势（W1 ¥680、心态 +15、buff 置位、周限 1 次）',
+      bc.w.eval(`(function () {
+        S = defaultState(); S.money = 10000; S.day = 3; S.mind = 50;
+        buyPromoService();
+        document.getElementById('btnShopCfOk').click();
+        return S.buffs.promo === true && Math.round(S.mind) === 65 && S.money === 10000 - 680 &&
+          promoLeftThisWeek() === 0 && S.sinkStats.promo.n === 1;
+      })()`) === true);
+    bc.w.close();
   } finally {
     srv.close();
   }

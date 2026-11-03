@@ -38,14 +38,18 @@ const out = shell
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(root, 'dist/index.html'), out);
-// 发布包瘦身：assets/portrait/ 与 assets/equipment/ 的 PNG 原件只留工程内，
-// dist 只带同名 webp（引用已全部指向 .webp）
+// 发布包瘦身：assets/portrait/ 的 PNG 原件只留工程内，dist 只带同名 webp（引用已全部指向 .webp）；
+// assets/equipment/ 是已弃用的旧写实装备图（data.js GEAR_IMG_SRC 已全量改指 equipment_pool，
+// 全工程零引用，2026-11-04 批次 E 核实）——整目录不进 dist（省 1.6MB），原件留工程内备查；
+// assets/fonts2/fonts.css 是分片 @font-face 的生成中间物（已内联进 index.html），不进 dist。
 fs.rmSync(path.join(root, 'dist/assets'), { recursive: true, force: true });
 fs.cpSync(path.join(root, 'assets'), path.join(root, 'dist/assets'), {
   recursive: true,
   filter: (src) => {
     const rel = path.relative(path.join(root, 'assets'), src);
-    const webpOnlyDir = rel.startsWith('portrait' + path.sep) || rel.startsWith('equipment' + path.sep);
+    if (rel.startsWith('equipment' + path.sep)) return false;
+    if (rel === 'fonts2' + path.sep + 'fonts.css') return false;
+    const webpOnlyDir = rel.startsWith('portrait' + path.sep);
     return !(webpOnlyDir && rel.endsWith('.png'));
   },
 });
@@ -57,4 +61,4 @@ for (const f of ['manifest.webmanifest', 'sw.js']) {
 
 console.log('dist/index.html 已生成：', out.length, '字节');
 console.log('dist PWA 文件已复制：manifest.webmanifest、sw.js');
-console.log('dist/assets 已复制（portrait/、equipment/ 仅含 webp，PNG 原件不进发布包）');
+console.log('dist/assets 已复制（portrait/ 仅含 webp；equipment/ 旧图与 fonts2/fonts.css 不进发布包）');

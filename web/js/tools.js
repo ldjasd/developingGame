@@ -109,9 +109,46 @@
       saves: 'savesView', settings: 'settingsView', battle: 'battleView'
     };
     var SCENE_BG = { // 各场景的同世界背景图（setScene 语义名，见 assets/scenes/）
-      title: 'ring_wide', daily: 'gym', train: 'training_room', shop: 'shop',
+      // 批次 E（m1）：title 无条目——标题屏自带封面底图（title_bg），全局场景底图在标题下不可见，
+      // 不再于启动时白拉 ring_wide；进游戏切 daily 时照常加载。
+      daily: 'gym', train: 'training_room', shop: 'shop',
       status: 'street', match: 'ring_wide', gallery: 'street', saves: 'gym', settings: 'gym', battle: 'ring_wide'
     };
+    /* 批次 E（m1）：图片懒加载——非标题场景的 <img> 在 HTML 里只写 data-src（不触发下载），
+       视图首次显示（showScene）或其内容在可见视图内重渲染（render/renderStatus 末尾钩子）时才由
+       activateLazyImgs 兑现为 src。JS 模板生成的图鉴/名鉴/货架图同走 data-src。
+       已兑现的图会摘掉 data-src，重复调用零副作用。 */
+    function activateLazyImgs(rootEl) {
+      if (!rootEl || !rootEl.querySelectorAll) return;
+      Array.prototype.forEach.call(rootEl.querySelectorAll('img[data-src]'), function (im) {
+        var s = im.getAttribute('data-src');
+        if (s) { im.src = s; im.removeAttribute('data-src'); }
+      });
+      Array.prototype.forEach.call(rootEl.querySelectorAll('source[data-srcset]'), function (so) {
+        var s = so.getAttribute('data-srcset');
+        if (s) { so.srcset = s; so.removeAttribute('data-srcset'); }
+      });
+    }
+    /* 批次 E：字体声明延迟注入——@font-face 不写进 index.html 的 <style>，标题显示后（game.js 初始化末尾）
+       才由 injectFontFaces 注入，避免字体文件与主文档在弱网下抢带宽、拖慢标题可交互；
+       注入后字体按 font-display: swap 换上，标题文字先以系统字体呈现几百毫秒（观感待用户确认）。
+       FONT_FACE_CSS 由 scripts/make-font-shards.mjs 生成并自动同步（标记行之间勿手改）。 */
+    /* FONT_FACE_CSS:BEGIN */
+    var FONT_FACE_CSS = "@font-face { font-family: \"Noto Sans SC\"; font-style: normal; font-weight: 400; font-display: swap; src: url(\"assets/fonts2/noto-400-a.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC B\"; font-style: normal; font-weight: 400; font-display: swap; src: url(\"assets/fonts2/noto-400-b.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 400; font-display: swap; src: url(\"assets/fonts2/noto-400-x1.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 400; font-display: swap; src: url(\"assets/fonts2/noto-400-x2.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC\"; font-style: normal; font-weight: 500; font-display: swap; src: url(\"assets/fonts2/noto-500-a.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC B\"; font-style: normal; font-weight: 500; font-display: swap; src: url(\"assets/fonts2/noto-500-b.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 500; font-display: swap; src: url(\"assets/fonts2/noto-500-x1.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 500; font-display: swap; src: url(\"assets/fonts2/noto-500-x2.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC\"; font-style: normal; font-weight: 700; font-display: swap; src: url(\"assets/fonts2/noto-700-a.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC B\"; font-style: normal; font-weight: 700; font-display: swap; src: url(\"assets/fonts2/noto-700-b.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 700; font-display: swap; src: url(\"assets/fonts2/noto-700-x1.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 700; font-display: swap; src: url(\"assets/fonts2/noto-700-x2.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC\"; font-style: normal; font-weight: 900; font-display: swap; src: url(\"assets/fonts2/noto-900-a.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC B\"; font-style: normal; font-weight: 900; font-display: swap; src: url(\"assets/fonts2/noto-900-b.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 900; font-display: swap; src: url(\"assets/fonts2/noto-900-x1.woff2\") format(\"woff2\"); } @font-face { font-family: \"Noto Sans SC X\"; font-style: normal; font-weight: 900; font-display: swap; src: url(\"assets/fonts2/noto-900-x2.woff2\") format(\"woff2\"); }";
+    /* FONT_FACE_CSS:END */
+    var _fontsInjected = false;
+    function injectFontFaces() {
+      if (_fontsInjected || !FONT_FACE_CSS) return;
+      _fontsInjected = true;
+      var st = document.createElement('style');
+      st.id = 'fontFaces';
+      st.textContent = FONT_FACE_CSS;
+      document.head.appendChild(st);
+    }
+    function activateLazyInActiveView() { // 当前可见视图内的待兑现图（重渲染后补兑现）
+      var id = SCENE_VIEWS[currentSceneView]; if (!id) return;
+      activateLazyImgs($(id));
+    }
     var currentSceneView = '';
     var gameEntered = false; // 是否已从标题屏进入游戏（决定画廊/存档/设置等功能屏的返回目标）
     function showScene(name) {
@@ -126,6 +163,10 @@
         b.classList.toggle('active', b.getAttribute('data-nav') === name);
       });
       if (SCENE_BG[name]) setScene(SCENE_BG[name]);
+      activateLazyImgs($(id)); // 批次 E：该视图的图首次显示时才下载
+      if (name !== 'title') { // 顶栏装饰图（视图外元素）：进游戏后才需要
+        var tb = document.querySelector('.topbar'); if (tb) activateLazyImgs(tb);
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return true;
     }

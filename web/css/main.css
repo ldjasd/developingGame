@@ -53,11 +53,11 @@
       body {
         background: var(--bg);
         color: var(--ink);
-        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        font-family: "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", "PingFang SC", "Microsoft YaHei", sans-serif;
         -webkit-font-smoothing: antialiased;
         line-height: 1.5;
       }
-      .num { font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .02em; }
+      .num { font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; letter-spacing: .02em; }
       button { font-family: inherit; cursor: pointer; }
       button:disabled { cursor: not-allowed; opacity: .45; }
 
@@ -123,7 +123,7 @@
         box-shadow: var(--shadow), inset 0 1px 0 var(--card-hi); padding: 16px;
       }
       /* 改版：标题 Oswald＋粉紫渐变竖条，标题下加粉/白/紫围绳纹理细条（拳台围绳） */
-      .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 900; display: flex; align-items: center; gap: 8px; font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em; padding-bottom: 8px;
+      .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 900; display: flex; align-items: center; gap: 8px; font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; letter-spacing: .05em; padding-bottom: 8px;
         background: linear-gradient(90deg, var(--pink) 0 33%, var(--panel) 33% 66%, var(--purple) 66% 100%) bottom / 100% 3px no-repeat; }
       .card h2::before { content: ''; flex: none; width: 5px; align-self: stretch; min-height: 17px; border-radius: 3px; background: linear-gradient(180deg, var(--pink), var(--purple)); }
       .card h2 .tag { font-size: 11px; font-weight: 500; color: var(--ink-2); }
@@ -203,7 +203,7 @@
       .fighter-card { border-radius: 18px; padding: 6px; background: linear-gradient(160deg, rgba(242, 123, 181, .30), rgba(123, 75, 181, .24));
         box-shadow: 0 0 0 1px var(--line), 0 0 28px rgba(242, 123, 181, .35), 0 12px 26px rgba(74, 42, 122, .18); }
       .fighter-card .portrait { border: none; border-radius: 13px; }
-      .file-ribbon { margin-top: 6px; text-align: center; font-family: "Oswald", "Noto Sans SC", sans-serif; font-weight: 700; font-size: 12.5px; letter-spacing: .22em; color: #fff;
+      .file-ribbon { margin-top: 6px; text-align: center; font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; font-weight: 700; font-size: 12.5px; letter-spacing: .22em; color: #fff;
         background: linear-gradient(90deg, var(--purple-deep), var(--red), var(--purple-deep)); border-radius: 9px; padding: 5px 0 5px .22em; }
       /* Phase 6：外观自定义（状态页立绘下方；手机上按钮够大、横向不溢出） */
       .app-panel { margin-top: 12px; }
@@ -509,6 +509,17 @@
       .mode-opt .t { font-weight: 900; font-size: 15px; display: block; }
       .mode-opt .rec { font-size: 11px; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
       .mode-opt .d { font-size: 12.5px; color: var(--ink-2); display: block; margin-top: 3px; }
+      /* 修复批次 C：约战指名列表（视觉语言与 .mode-opt 一致，不可用项置灰） */
+      .spar-opt {
+        text-align: left; background: var(--panel-2); border: 1.5px solid var(--line); border-radius: 12px;
+        padding: 12px 14px; color: var(--ink); width: 100%;
+      }
+      .spar-opt:hover { border-color: var(--red); }
+      .spar-opt .t { font-weight: 900; font-size: 15px; display: block; }
+      .spar-opt .d { font-size: 12.5px; color: var(--ink-2); display: block; margin-top: 3px; }
+      .spar-opt.off { opacity: .55; }
+      .spar-opt.off:hover { border-color: var(--line); }
+      .spar-empty { font-size: 13.5px; color: var(--ink-2); }
       kbd {
         display: inline-block; min-width: 24px; text-align: center; padding: 1px 6px; margin: 0 1px;
         background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px;
@@ -592,7 +603,7 @@
       /* 连击计数演出：飘字上方「N 连击」小字（字号由 JS 按连段内联放大），弹跳后上浮淡出自回收 */
       .combo-pop {
         position: absolute; top: -44px; left: 50%; z-index: 7; pointer-events: none; white-space: nowrap;
-        font-family: "Oswald", "Noto Sans SC", sans-serif; font-weight: 700; letter-spacing: .05em;
+        font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; font-weight: 700; letter-spacing: .05em;
         color: #ff8a3c; text-shadow: 0 1px 3px rgba(0,0,0,.65), 0 0 12px rgba(255, 138, 40, .45);
         animation: comboPop .7s ease-out forwards;
       }
@@ -666,7 +677,7 @@
         background: var(--panel); color: var(--ink); border-radius: 16px; max-width: 520px; width: 100%;
         max-height: 88vh; overflow-y: auto; padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,.3);
       }
-      .modal h2 { margin: 0 0 10px; font-size: 20px; font-weight: 900; font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em; padding-bottom: 9px;
+      .modal h2 { margin: 0 0 10px; font-size: 20px; font-weight: 900; font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; letter-spacing: .05em; padding-bottom: 9px;
         background: linear-gradient(90deg, var(--pink) 0 33%, var(--panel) 33% 66%, var(--purple) 66% 100%) bottom / 100% 3px no-repeat; }
       .modal h3 { margin: 16px 0 6px; font-size: 15px; }
       .modal p, .modal li { font-size: 14px; color: var(--ink-2); }
@@ -781,7 +792,7 @@
         background: rgba(16, 20, 32, .78); border: 1px solid rgba(255, 255, 255, .22);
         box-shadow: 0 10px 28px rgba(5, 8, 16, .45);
       }
-      .vs-banner .vsb-name { font-family: "Oswald", "Noto Sans SC", sans-serif; font-weight: 700; font-size: 19px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .vs-banner .vsb-name { font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; font-weight: 700; font-size: 19px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .vs-banner .vsb-name.foe { color: #ffd9d4; }
       .vs-banner .vsb-vs { font-family: "Oswald", sans-serif; font-weight: 700; font-size: 15px; color: #10131c; background: var(--gold); border-radius: 8px; padding: 2px 9px; }
       @keyframes vsBannerIn {
@@ -858,7 +869,7 @@
       .scene-nav button {
         border: 1.5px solid var(--line); background: var(--panel); color: var(--ink);
         border-radius: 99px; padding: 8px 15px; font-weight: 700; font-size: 13.5px;
-        box-shadow: var(--shadow); font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em;
+        box-shadow: var(--shadow); font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; letter-spacing: .05em;
         display: inline-flex; align-items: center; gap: 6px;
       }
       .scene-nav button .sn-ic { color: var(--pink); font-size: 12px; }
@@ -1358,7 +1369,7 @@ body[data-view="match"] #matchView { display: flex !important; }
 }
 .match-ladder h2 {
   margin: 0 0 12px; font-size: 16px; font-weight: 900; display: flex; align-items: center; gap: 8px;
-  font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .05em; padding-bottom: 8px;
+  font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; letter-spacing: .05em; padding-bottom: 8px;
   background: linear-gradient(90deg, var(--pink) 0 33%, var(--bg) 33% 66%, var(--purple) 66% 100%) bottom / 100% 3px no-repeat;
 }
 .match-ladder h2::before { content: ''; flex: none; width: 5px; align-self: stretch; min-height: 17px; border-radius: 3px; background: linear-gradient(180deg, var(--pink), var(--purple)); }
@@ -1630,7 +1641,7 @@ body[data-view="train"] #trainView { display: flex !important; }
 @keyframes trPop { 0% { transform: scale(.6) translateY(14px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
 .tr-card h3 {
   margin: 6px 0 10px; font-size: 20px; font-weight: 900; letter-spacing: .05em;
-  font-family: "Oswald", "Noto Sans SC", sans-serif;
+  font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif;
 }
 .tr-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .tr-chip {
@@ -1781,7 +1792,7 @@ body[data-view="shop"] #shopView { display: flex !important; }
 .ss-head .gear-img { width: 76px; height: 76px; }
 .shop-sheet h2 {
   margin: 0 0 10px; font-size: 18px; font-weight: 900; letter-spacing: .05em;
-  font-family: "Oswald", "Noto Sans SC", sans-serif; padding-bottom: 9px;
+  font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; padding-bottom: 9px;
   background: linear-gradient(90deg, var(--pink) 0 33%, var(--panel) 33% 66%, var(--purple) 66% 100%) bottom / 100% 3px no-repeat;
 }
 .ss-lines { margin: 4px 0; }
@@ -1831,7 +1842,7 @@ body[data-view="status"] #statusView { display: flex !important; }
 }
 .status-side .app-panel::before {
   content: '衣柜 · 换装'; display: block; font-weight: 900; font-size: 14px; margin-bottom: 10px;
-  font-family: "Oswald", "Noto Sans SC", sans-serif; letter-spacing: .06em;
+  font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; letter-spacing: .06em;
 }
 .status-back { flex: none; width: 100%; padding: 11px; }
 .status-main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -1907,7 +1918,7 @@ body[data-view="gallery"] #galleryView { display: flex !important; }
 .gp-ringwrap .gp-fg { stroke: var(--pink); stroke-linecap: round; transition: stroke-dashoffset .4s; }
 .gp-pct {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-weight: 900; font-size: 17px; font-family: "Oswald", "Noto Sans SC", sans-serif;
+  font-weight: 900; font-size: 17px; font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif;
 }
 .gp-pct small { font-size: 11px; margin-left: 1px; }
 .gp-cap {
@@ -2049,7 +2060,7 @@ body[data-view="settings"] #settingsView { display: flex !important; }
 .saves-stage .save-slot-head { font-size: 16px; }
 .save-slot-name { display: inline-flex; align-items: baseline; gap: 9px; min-width: 0; }
 .save-slot-no {
-  font-family: "Oswald", "Noto Sans SC", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .14em;
+  font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .14em;
   color: var(--purple); background: color-mix(in srgb, var(--purple) 13%, transparent);
   border-radius: 6px; padding: 2.5px 8px;
 }
@@ -2099,7 +2110,7 @@ body[data-view="settings"] #settingsView { display: flex !important; }
 }
 .set-panel-h {
   margin: 0 0 4px; font-size: 13px; font-weight: 900; letter-spacing: .14em; color: var(--purple);
-  font-family: "Oswald", "Noto Sans SC", sans-serif;
+  font-family: "Oswald", "Noto Sans SC", "Noto Sans SC B", "Noto Sans SC X", sans-serif;
   border-bottom: 2px solid color-mix(in srgb, var(--pink) 45%, var(--line)); padding-bottom: 7px;
 }
 .settings-stage .set-row { padding: 12px 2px; }

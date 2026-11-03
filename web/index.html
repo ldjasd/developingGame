@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="description" content="二次元美少女拳击养成经营游戏：从无名新人打起，一路登上世界冠军的擂台。" />
+    <meta name="description" content="二次元美少女拳击养成经营游戏：从无名新人打起，先登顶国内，再向世界擂台进发。" />
     <link rel="icon" type="image/png" href="assets/icons/favicon.png" />
     <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
@@ -14,26 +14,24 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="心跳在左" />
     <title>心跳在左，拳头在右</title>
-    <!-- 字体自托管（RC 毛边④）：原 Google Fonts 外链在受限网络会加载失败（RELEASE_WEB 差距 #4），
-         改为本地 assets/fonts/ 子集 woff2（fonttools 子集化：语料＝游戏全部文案＋项目文档＋GB2312 一级汉字；
-         Oswald 为 latin 可变字体一份覆盖 500~700）。缺字时按 css 字体栈回退系统字体，不影响游玩。 -->
-    <style>
-      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 400; font-display: swap; src: url("assets/fonts/noto-sans-sc-400.woff2") format("woff2"); }
-      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 500; font-display: swap; src: url("assets/fonts/noto-sans-sc-500.woff2") format("woff2"); }
-      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 700; font-display: swap; src: url("assets/fonts/noto-sans-sc-700.woff2") format("woff2"); }
-      @font-face { font-family: "Noto Sans SC"; font-style: normal; font-weight: 900; font-display: swap; src: url("assets/fonts/noto-sans-sc-900.woff2") format("woff2"); }
-      @font-face { font-family: "Oswald"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("assets/fonts/oswald.woff2") format("woff2"); }
-    </style>
+    <!-- 字体自托管＋分片（RC 毛边④＋批次 E m1）：Noto Sans SC 每字重切 4 片（assets/fonts2/，生成脚本 scripts/make-font-shards.mjs，源整包子集在 scripts/font-src/）：
+         -a 首片＝静态文本全字＋语料高频字（族名 "Noto Sans SC"，标题屏每字重只付这一片 ~140KB）；
+         -b 语料余片（族 "Noto Sans SC B"）、-x1/-x2 扩展片＝GB2312 一级余字（族 "Noto Sans SC X"，给玩家自填名等罕见字）。
+         css 字体栈按 A→B→X 回退排列，浏览器只在某字于前一族缺字形时才下载后一片（实测口径；不用 unicode-range——
+         其范围与已渲染文本相交即触发下载，分片重叠会全量误拉）。Oswald 仅 21KB 单份不分片。缺字按字体栈回退系统字体，不影响游玩。
+         @font-face 声明不在本文件：放在 js/tools.js 的 FONT_FACE_CSS，标题显示后才注入——避免字体与 index.html
+         主文档在弱网下抢带宽（标题先到、字体随后 swap 换上）。分片重跑脚本时会自动同步那份字符串。 -->
+    <style>/* 字体声明见 js/tools.js FONT_FACE_CSS（启动后注入） */</style>
     <link rel="stylesheet" href="css/main.css" />
   </head>
-  <body>
+  <body data-view="title">
     <!-- 场景背景层（A1）：按界面语义切换的同世界场景图，内容卡片均为不透明面板，正文可读性不受影响 -->
-    <div class="scene-bg" aria-hidden="true"><img id="sceneBgImg" src="assets/scenes/gym.webp" alt="" /></div>
+    <div class="scene-bg" aria-hidden="true"><img id="sceneBgImg" alt="" /></div>
     <div class="wrap">
       <!-- 顶部状态栏 -->
       <header class="topbar">
         <div class="tb-rope" aria-hidden="true"></div>
-        <img class="tb-glove" src="assets/equipment_pool/gloves/glove_compact_star_pink.webp" alt="" aria-hidden="true" />
+        <img class="tb-glove" data-src="assets/equipment_pool/gloves/glove_compact_star_pink.webp" alt="" aria-hidden="true" />
         <span class="tb-stars" aria-hidden="true">★★★</span>
         <div class="tb-item"><span class="lbl">日期</span><span class="val num" id="tbDay">Day 1</span></div>
         <div class="tb-item" id="testBadgeWrap" style="display:none"><span class="test-badge">测试档</span></div>
@@ -42,7 +40,7 @@
         <button class="ghost-btn tb-more" id="btnHudMore" type="button" aria-expanded="false">展开 ▾</button>
         <div class="tb-item tb-stam"><span class="lbl">体力</span><span class="bar stam"><i id="tbStam" style="width:100%"></i></span><span class="val num" id="tbStamNum">100</span></div>
         <div class="tb-item tb-opt"><span class="lbl">伤病</span><span class="bar inj"><i id="tbInj" style="width:0%"></i></span><span class="val num" id="tbInjNum">0</span></div>
-        <div class="tb-item tb-opt"><span class="lbl">名声（纪念）</span><span class="val num" id="tbFame" title="名声仅作纪念展示，不参与任何判定">0</span></div>
+        <div class="tb-item tb-opt"><span class="lbl">名声</span><span class="val num" id="tbFame" title="名声随获胜场次积累；奖金加成与赞助门槛由影响力档位决定">0</span></div>
         <div class="tb-item tb-opt"><span class="lbl">影响力</span><span class="val" id="tbInfluence">Lv1 · 无名之辈</span></div>
         <div class="tb-item tb-opt"><span class="lbl">国内排名</span><span class="val num" id="tbRank">第 50 名</span></div>
         <div class="tb-item tb-opt"><span class="lbl">心态</span><span class="val" id="tbMind">60 · 良好</span></div>
@@ -70,8 +68,8 @@
       <!-- 标题画面（界面架构批：启动先到此屏；继续=有档时进游戏，新的开始=当前槽新开生涯） -->
       <div id="titleView">
         <picture class="title-bg" aria-hidden="true">
-          <source media="(orientation: portrait)" srcset="assets/title_bg_portrait.webp" />
-          <img src="assets/title_bg_wide.webp" alt="" />
+          <source media="(orientation: portrait)" data-srcset="assets/title_bg_portrait.webp" />
+          <img data-src="assets/title_bg_wide.webp" alt="" />
         </picture>
         <div class="title-shade" aria-hidden="true"></div>
         <section class="title-screen">
@@ -81,15 +79,15 @@
               <img class="title-logo" src="assets/title_logo.png" alt="" aria-hidden="true" />
               <img class="title-charm" src="assets/title_charm.png" alt="" aria-hidden="true" />
             </div>
-            <p class="title-sub title-sub--top">从无名新人打起，一路登上世界冠军的擂台</p>
+            <p class="title-sub title-sub--top">从无名新人打起，先登顶国内，再向世界进发</p>
             <div class="title-ekg" aria-hidden="true">
               <svg viewBox="0 0 1440 120" preserveAspectRatio="none" focusable="false"><path pathLength="1000" vector-effect="non-scaling-stroke" d="M-10 62 H398 l16 -11 16 11 H470 l24 -45 28 90 20 -45 H928 l22 -19 22 19 H1450" /></svg>
               <span class="title-ekg-star">★</span>
             </div>
           </div>
-          <img id="titlePortrait" src="assets/portrait.webp" alt="" hidden />
+          <img id="titlePortrait" alt="" hidden />
           <div class="title-bottom">
-            <p class="title-sub title-sub--bottom" aria-hidden="true">从无名新人打起，一路登上世界冠军的擂台</p>
+            <p class="title-sub title-sub--bottom" aria-hidden="true">从无名新人打起，先登顶国内，再向世界进发</p>
             <p class="title-slot" id="titleSlotInfo"></p>
             <div class="title-menu">
               <button class="primary-btn title-btn" id="btnTitleContinue">继续游戏</button>
@@ -107,8 +105,8 @@
       <!-- 训练场景（框架重构三期：训练场舞台——训练区场景底＋训练卡阵列＋结算钉底坞＋结算演出层） -->
       <div id="trainView" style="display:none">
         <div class="train-stage">
-          <img class="train-bg" src="assets/scenes/training_room.webp" alt="" />
-          <div class="train-figwrap" aria-hidden="true"><img class="train-fig" src="assets/pose/jab.webp" alt="" /></div>
+          <img class="train-bg" data-src="assets/scenes/training_room.webp" alt="" />
+          <div class="train-figwrap" aria-hidden="true"><img class="train-fig" data-src="assets/pose/jab.webp" alt="" /></div>
           <div class="train-topchips">
             <p class="train-title-chip"><b>训练场</b><span>2 AP · 5 点自由组合 · 一次结算</span></p>
             <button class="train-back-btn" id="btnTrainBack" type="button">← 回据点</button>
@@ -118,7 +116,7 @@
           <div class="train-dock" id="trainDock"></div>
           <div class="train-result" id="trainResult" hidden>
             <div class="tr-card">
-              <img class="tr-fig" src="assets/pose/victory.webp" alt="" />
+              <img class="tr-fig" data-src="assets/pose/victory.webp" alt="" />
               <h3>训练完成！</h3>
               <div class="tr-chips" id="trainResultChips"></div>
               <p class="tr-sub" id="trainResultSub"></p>
@@ -131,7 +129,7 @@
       <!-- 商店场景（框架重构三期：用品店货架舞台——场景底＋商品卡货架＋舞台内购买确认；进店仍走日常「外出」确认、每次 2 AP 规则不变） -->
       <div id="shopView" style="display:none">
         <div class="shop-stage">
-          <img class="shop-bg" src="assets/scenes/shop.webp" alt="" />
+          <img class="shop-bg" data-src="assets/scenes/shop.webp" alt="" />
           <div class="shop-topchips">
             <p class="shop-title-chip"><b>体育用品店</b><span>装备与消耗品 · 买下自动换上 · 每买一件心态 +10</span></p>
           </div>
@@ -143,7 +141,7 @@
       <!-- 比赛场景（框架重构二期：VS 对手卡舞台＋排名梯；报名仍走既有确认→模式选择→准备层流程） -->
       <div id="matchView" style="display:none">
         <div class="match-stage">
-          <img class="match-bg" src="assets/scenes/ring_wide.webp" alt="" />
+          <img class="match-bg" data-src="assets/scenes/ring_wide.webp" alt="" />
           <div class="match-vs" id="matchVs"></div>
           <div class="match-cta">
             <p class="week-note match-note" id="matchWeekNote"></p>
@@ -151,6 +149,11 @@
                   <button class="act-btn" id="btnMatch">
                     <span class="t"><span><span class="btn-star">★</span>报名比赛</span> <span class="cost">免费 · 0 AP</span></span>
                     <span class="d" id="matchDesc">每周第 7 天开放</span>
+                  </button>
+                  <!-- 修复批次 C：约战入口（指名挑战，不占正式赛位；宿敌线保底接触点） -->
+                  <button class="act-btn" id="btnSpar">
+                    <span class="t"><span>约 战</span> <span class="cost">2 AP</span></span>
+                    <span class="d">指名挑战已交手的对手 · 不计排名、经验半额 · 每周至多 2 场</span>
                   </button>
             </div>
             <p class="match-mode-note">报名后选模式：手动 / 自动 / 模拟 · 对手排名 ±5</p>
@@ -262,7 +265,7 @@
             <section class="set-panel set-about">
               <h3 class="set-panel-h">关于</h3>
               <p><b>心跳在左，拳头在右 v0.9.0</b> · 二次元美少女拳击养成经营游戏</p>
-              <p>从无名新人打起：训练、打工、买装备、打比赛，从国内第 50 名一路登上世界冠军的擂台。进度自动保存在本浏览器（3 个存档槽），设置单独保存、互不影响。</p>
+              <p>从无名新人打起：训练、打工、买装备、打比赛，从国内第 50 名一路打到国内之巅——世界擂台，是下一个目标。进度自动保存在本浏览器（3 个存档槽），设置单独保存、互不影响。</p>
             </section>
             <div class="danger-zone">
               <h3>危险区</h3>
@@ -274,10 +277,10 @@
       </div>
 
       <!-- 日常视图（框架重构二期：据点舞台——拳馆全幅场景＋主角立绘＋底部行动坞；属性/生涯/日志收进二级档案面板） -->
-      <div id="dailyView">
+      <div id="dailyView" style="display:none">
         <div class="hub-stage">
-          <img class="hub-bg" src="assets/scenes/gym.webp" alt="" />
-          <div class="hub-figwrap"><img class="hub-fig" src="assets/pose/guard.webp" alt="" /></div>
+          <img class="hub-bg" data-src="assets/scenes/gym.webp" alt="" />
+          <div class="hub-figwrap"><img class="hub-fig" data-src="assets/pose/guard.webp" alt="" /></div>
           <div class="hub-topchips">
             <p class="week-note hub-goal" id="hubGoal" hidden></p>
             <p class="week-note hub-note" id="weekNote"></p>
@@ -290,7 +293,7 @@
                   <span class="d">和同期队友打一场教学战：不计战绩、不动排名、不会受伤，先亲手打一场再安排日程</span>
                 </button>
                 <button class="act-btn" id="btnTrain">
-                  <span class="t"><span><img class="btn-ic" src="assets/equipment_pool/gloves/glove_classic2_lightning_purple.webp" alt="" aria-hidden="true" />训练</span> <span class="cost">2 AP</span></span>
+                  <span class="t"><span><img class="btn-ic" data-src="assets/equipment_pool/gloves/glove_classic2_lightning_purple.webp" alt="" aria-hidden="true" />训练</span> <span class="cost">2 AP</span></span>
                   <span class="d">制定训练计划（5 点自由组合），一次结算</span>
                 </button>
                 <button class="act-btn" id="btnOut">
@@ -311,8 +314,12 @@
               </div>
               <div class="train-list" id="outList">
                 <button class="train-opt" data-out="shop"><span class="t">体育用品店</span><span class="d"> 购买拳套/护齿/战靴/护头/战袍/护腕和消耗品（购买后自动存入背包，装备自动换上）</span></button>
-                <button class="train-opt" data-out="hospital"><span class="t">医院治疗</span><span class="d"> 伤病 −30 · 花费 ¥500（外出 2 AP）</span></button>
+                <button class="train-opt" data-out="hospital"><span class="t">医院 / 康复中心</span><span class="d"> 医院治疗：伤病 −30 · ¥500（2 AP）／康复理疗：伤病 −40 · ¥1600（不耗 AP，每周 2 次）</span></button>
                 <button class="train-opt" data-out="relax"><span class="t">散心</span><span class="d"> 看电影 / 逛街 / 吃美食：心态 +20，体力 +10，花费 ¥300</span></button>
+              </div>
+              <div class="train-list" id="hospitalList">
+                <button class="train-opt" data-hosp="clinic"><span class="t">医院治疗</span><span class="d"> 伤病 −30 · 花费 ¥500 · 消耗 2 AP</span></button>
+                <button class="train-opt" data-hosp="physio"><span class="t">康复理疗</span><span class="d"> 伤病 −40 · 花费 ¥1600 · 不耗 AP（每周限 2 次）</span></button>
               </div>
               <div class="train-list" id="relaxList">
                 <button class="train-opt" data-relax="看电影"><span class="t">看电影</span><span class="d"> 心态 +20 · 体力 +10 · ¥300</span></button>
@@ -353,11 +360,11 @@
       </div>
 
       <!-- 状态视图（框架重构四期：选手档案舞台——立绘＋衣柜侧栏＋四页签面板，不耗 AP，随时查看） -->
-      <div id="statusView">
+      <div id="statusView" style="display:none">
         <div class="status-stage">
           <aside class="status-side">
               <div class="fighter-card">
-                <img class="portrait" id="portraitImg" src="assets/portrait.webp" alt="主角正式立绘：粉发高马尾、粉紫训练服与紫色拳套的少女拳手（v8 漫画风）" />
+                <img class="portrait" id="portraitImg" data-src="assets/portrait.webp" alt="主角正式立绘：粉发高马尾、粉紫训练服与紫色拳套的少女拳手（v8 漫画风）" />
                 <div class="file-ribbon">★ 选手档案 ★</div>
               </div>
               <div class="status-id">
@@ -367,7 +374,7 @@
                 <input id="nameInput" maxlength="8" placeholder="输入新名字" />
                 <button class="ghost-btn" id="btnRename">改名</button>
               </div>
-              <p style="margin:0 0 4px;font-size:14px">名声 <b class="num" id="stFame">0</b>（仅作纪念展示，不参与判定）　·　影响力 <b id="stInfluence">Lv1 · 无名之辈</b>　·　金钱 <b class="num" style="color:var(--gold)">¥<span id="stMoney">0</span></b>　·　战绩 <b id="stRecord">0 胜 · 0 负</b>　·　国内排名 <b class="num" id="stRank">第 50 名</b></p>
+              <p style="margin:0 0 4px;font-size:14px">名声 <b class="num" id="stFame">0</b>（随获胜积累；奖金加成/赞助门槛看影响力）　·　影响力 <b id="stInfluence">Lv1 · 无名之辈</b>　·　金钱 <b class="num" style="color:var(--gold)">¥<span id="stMoney">0</span></b>　·　战绩 <b id="stRecord">0 胜 · 0 负</b>　·　国内排名 <b class="num" id="stRank">第 50 名</b></p>
               <p style="margin:0 0 4px;font-size:14px" id="stCareerLine">当前阶段：—</p>
               <p style="margin:0;font-size:14px" id="stTitles"></p>
               <div class="stat-bars">
@@ -490,7 +497,7 @@
       </div>
 
       <!-- 战斗视图 -->
-      <div id="battleView">
+      <div id="battleView" style="display:none">
         <div class="round-banner">
           <div class="rb" id="roundLabel">ROUND 1</div>
           <div class="rt" id="roundTimer">45.0 秒</div>
@@ -518,7 +525,7 @@
         </div>
 
         <div class="ring" id="ring">
-          <img class="ring-bg" id="ringBg" src="assets/scenes/ring_side.webp" alt="" />
+          <img class="ring-bg" id="ringBg" data-src="assets/scenes/ring_side.webp" alt="" />
           <div class="canvas-floor"></div>
           <div class="ropes"></div><div class="ropes b2"></div><div class="ropes b3"></div>
           <div class="dist-bar" id="distBar" style="display:none">距离：中</div>
@@ -526,7 +533,7 @@
           <div class="fighter me" id="figMe" style="left:18%">
             <div class="dmg-pop" id="popMe"></div>
             <div class="speedline"></div>
-            <div class="fig"><img class="fig-img" id="figMeImg" src="assets/portrait.webp" alt="" /><div class="rig-host" id="meRig"></div></div>
+            <div class="fig"><img class="fig-img" id="figMeImg" alt="" /><div class="rig-host" id="meRig"></div></div>
           </div>
           <div class="fighter foe" id="figFoe" style="left:68%">
             <div class="dmg-pop" id="popFoe"></div>
@@ -560,6 +567,7 @@
             <div class="tb-row">
               <button class="tbtn small" id="btnDashT">垫步</button>
               <button class="tbtn small" id="btnDodgeT">闪避</button>
+              <button class="tbtn small" id="btnClinchT">搂抱</button>
               <button class="tbtn block" id="btnBlockT">格挡</button>
             </div>
             <div class="tb-row">
@@ -600,15 +608,15 @@
           <section class="card" id="autoPanel">
             <h2>战术倾向 <span class="tag">赛前布置 · 场上可切换，只能生效一种</span></h2>
             <div class="tactic-row" id="tacticRow">
-              <button class="tac-btn" data-tac="attack"><span class="t">强攻压制</span><span class="d">伤害 +30%，体力消耗 +50%，更容易被打中</span></button>
-              <button class="tac-btn" data-tac="counter"><span class="t">稳守反击</span><span class="d">闪避 +30%，出拳频率 −40%，对手打空时反击伤害 +40%</span></button>
-              <button class="tac-btn" data-tac="points"><span class="t">游走打点</span><span class="d">体力消耗 −30%，命中得分更高，适合拼点数</span></button>
+              <button class="tac-btn" data-tac="attack"><span class="t">强攻压制</span><span class="d">伤害 +30%，体力消耗 +50%，重拳更多，追打游走型更容易命中；怕稳守反击抓空档</span></button>
+              <button class="tac-btn" data-tac="counter"><span class="t">稳守反击</span><span class="d">闪避 +30%，出拳频率 −40%，对手打空时反击伤害 +40%；怕游走打点耗点数</span></button>
+              <button class="tac-btn" data-tac="points"><span class="t">游走打点</span><span class="d">体力消耗 −30%，受击 −10%，命中得分更高，出拳短促不易被反击；怕强攻压制追着打</span></button>
             </div>
             <h2 style="margin-top:16px">即时指令 <span class="tag">冷却制 · 看准时机</span></h2>
             <div class="cmd-row">
-              <button class="cmd-btn" id="cmdCombo"><span class="t">组合拳爆发 <span class="cd" data-cd></span></span><span class="d">10 秒内伤害 +50%（效果受「技术」影响）</span><span class="cdbar"></span></button>
-              <button class="cmd-btn" id="cmdWall"><span class="t">铁壁防守 <span class="cd" data-cd></span></span><span class="d">10 秒内受到的伤害 −70%</span><span class="cdbar"></span></button>
-              <button class="cmd-btn" id="cmdClinch"><span class="t">搂抱拖时间 <span class="cd" data-cd></span></span><span class="d">立刻回复 20 点战斗体力（同场第 4 次起每次被裁判判罚扣 10 点体力）</span><span class="cdbar"></span></button>
+              <button class="cmd-btn" id="cmdCombo"><span class="t">组合拳爆发 <span class="cd" data-cd></span></span><span class="d">10 秒内伤害 +50%（效果受「技术」影响），期间连击被格挡也不清零，但出拳更费体力——留给终结窗口；同场重复使用冷却递增</span><span class="cdbar"></span></button>
+              <button class="cmd-btn" id="cmdWall"><span class="t">铁壁防守 <span class="cd" data-cd></span></span><span class="d">10 秒内受到的伤害 −70%，且重创值不积累，但抱架期间自己出拳变慢——残血拖住重创时钟；同场重复使用冷却递增</span><span class="cdbar"></span></button>
+              <button class="cmd-btn" id="cmdClinch"><span class="t">搂抱拖时间 <span class="cd" data-cd></span></span><span class="d">贴身停战：自己体力 +20（体力过半时只 +8）、对手 +8，双方连击清零，1.2 秒内都不能出拳（同场第 4 次起每次判罚扣 10 点体力）——对手连击正盛时抱他最划算；同场重复使用冷却递增</span><span class="cdbar"></span></button>
             </div>
             <div class="speed-row">
               <span style="font-size:13px;color:var(--ink-2)">速度</span>
@@ -622,7 +630,10 @@
           <section class="card" id="manualPanel" style="display:none">
             <h2>手动操作 <span class="tag">你就是拳手本人</span></h2>
             <p style="font-size:14px;margin:0 0 8px">状态：<b id="manualStatus">—</b></p>
-            <p id="manualTouchNote" style="display:none;font-size:13px;margin:0 0 8px">触屏操作：擂台下方左手摇杆移动，右手大按钮出前手/后手拳，金边的上勾/击腹/摆拳按钮可直接出对应拳种；格挡按住生效（出现护盾弧即格挡中），闪避方向取摇杆方向。建议横屏握机。</p>
+            <div class="cmd-row" style="margin:0 0 8px">
+              <button class="cmd-btn" id="btnManualClinch"><span class="t">搂抱 <span class="cd" data-cd></span></span><span class="d">贴身停战：自己体力 +20（体力过半时只 +8）、对手 +8，双方连击清零，1.2 秒内都不能出拳（冷却 30 秒；同场第 4 次起判罚扣 10 体力）。键盘 <kbd>C</kbd> 或触屏「搂抱」按钮</span><span class="cdbar"></span></button>
+            </div>
+            <p id="manualTouchNote" style="display:none;font-size:13px;margin:0 0 8px">触屏操作：擂台下方左手摇杆移动，右手大按钮出前手/后手拳，金边的上勾/击腹/摆拳按钮可直接出对应拳种；格挡按住生效（出现护盾弧即格挡中），闪避方向取摇杆方向；「搂抱」按钮贴身停战回体力、打断对手连击。建议横屏握机。</p>
             <details class="manual-details">
               <summary>键位与规则详情</summary>
               <table class="keys-table" id="manualKeysTable">
@@ -631,6 +642,7 @@
                 <tr><td><kbd>U</kbd> 上勾 · <kbd>B</kbd> 击腹</td><td>不依赖方向键，直接出上勾拳 / 击腹拳（后手）</td></tr>
                 <tr><td><kbd>空格</kbd>（按住）</td><td>格挡：减伤 70%，不能移动和出拳</td></tr>
                 <tr><td><kbd>Shift</kbd>+方向</td><td>闪避（下潜/侧闪/后仰）：短暂无敌，耗体力 15，冷却 1.5 秒</td></tr>
+                <tr><td><kbd>C</kbd> 搂抱</td><td>贴身停战：自己体力 +20（体力过半时只 +8）、对手 +8，双方连击清零，1.2 秒内都不能出拳（冷却 30 秒，同场第 4 次起判罚扣 10 体力）；对手连击正盛或自己重创过高时抱他最划算</td></tr>
               </table>
               <p style="font-size:12.5px;color:var(--ink-2);margin:6px 0 0">距离决定哪种拳够得着：远距离只有刺拳/直拳；贴近了摆拳和上勾才好用。体力越低出拳越慢、伤害越低，耗尽时只能格挡和移动。连贯命中攒<b>连击</b>加伤害；闪避成功后 1 秒内出拳是<b>反击</b>（后闪接直拳 / 下闪接上勾 / 侧闪接摆拳 +40%，其余 +30%）；对手格挡时用<b>击腹拳破防</b>（70% 穿透＋1.5 秒破防），破防中接直拳 +20%。</p>
             </details>
@@ -655,7 +667,7 @@
         <ul>
           <li>每天有 <b>6 点行动点（AP）</b>：训练（2 AP）、外出（2 AP）、打工赚钱（3 AP）、休息恢复（1 AP）。所有耗 AP 的行动（以及睡觉、报名比赛）点下去都会先弹<b>确认框</b>，看清消耗和效果后点确认才真正结算，点错了可以取消，不扣任何东西。</li>
           <li><b>训练计划</b>：点开「训练」后有 5 个训练点数，13 种训练按重（3 点）/中（2 点）/轻（1 点）自由组合（可重复选），确认后一次结算。可以透支体力硬练，但透支每 10 点会 +5 伤病。</li>
-          <li><b>外出</b>：体育用品店可以买拳套/护齿/战靴/护头/战袍（同部位一件生效，买新自动换上，旧的留在背包）和消耗品；散心（¥300）心态 +20、体力 +10；<b>医院治疗</b>（¥500）伤病 −30。</li>
+          <li><b>外出</b>：体育用品店可以买拳套/护齿/战靴/护头/战袍（同部位一件生效，买新自动换上，旧的留在背包）和消耗品；散心（¥300）心态 +20、体力 +10；<b>医院治疗</b>（2 AP＋¥500）伤病 −30，同菜单还有不耗 AP 的<b>康复理疗</b>（¥1600 → −40，每周 2 次）。</li>
           <li><b>状态页</b>（顶部「状态」按钮，不耗 AP）：看立绘、改名、查属性/状态条、换装备、用背包里的消耗品（能量饮料/绷带/营养餐，都是下次生效型）。</li>
           <li>体力不够时训练和打工会被锁住，先休息或睡觉（睡觉体力 +40，进入下一天）。</li>
           <li><b>每周第 7 天是比赛日</b>：报名<b>免费（0 AP）</b>，每个比赛日限打一场；打完后当天剩余 AP 保留，可以继续训练、打工或休息。赢了有奖金和名声，输了也有出场费。奖金 = 基础（200 + 周数 × 100）× 排名加成 × 影响力加成，<b>排名越高、影响力档位越高，奖金越多</b>。</li>
@@ -663,9 +675,9 @@
         <h3>比赛怎么打</h3>
         <ul>
           <li>报名比赛后先选<b>战斗模式</b>：<b>手动操作</b>（亲自上场，键盘打拳）、<b>自动观看</b>（AI 代打，你布置战术+下即时指令干预）、<b>模拟跳过</b>（按实力直接判定）。</li>
-          <li>手动操作（键盘）：<b>A/D</b> 移动、<b>W/S</b> 调站位，<b>J</b>=前手、<b>K</b>=后手，方向+拳键组合出上勾/击腹/摆拳；也可以按 <b>U</b> 直接出上勾拳、<b>B</b> 直接出击腹拳；<b>空格</b>格挡，<b>Shift+方向</b>闪避，按 <b>H</b> 随时看键位。</li>
+          <li>手动操作（键盘）：<b>A/D</b> 移动、<b>W/S</b> 调站位，<b>J</b>=前手、<b>K</b>=后手，方向+拳键组合出上勾/击腹/摆拳；也可以按 <b>U</b> 直接出上勾拳、<b>B</b> 直接出击腹拳；<b>空格</b>格挡，<b>Shift+方向</b>闪避，<b>C</b> 搂抱（贴身停战回体力、打断对手连击），按 <b>H</b> 随时看键位。</li>
           <li>手动操作（触屏）：在安卓等触屏设备上会自动显示虚拟摇杆和按钮——左手摇杆移动，右手大按钮出前手/后手拳，金边的<b>上勾 / 击腹 / 摆拳</b>按钮可以不依赖摇杆方向直接出拳；也可以推住摇杆方向再点前手/后手（上=上勾、下=击腹、朝对手=摆拳、回中=刺拳/直拳）。格挡按住生效（身前出现护盾弧即为格挡中），另有闪避和垫步按钮。建议横屏打比赛。</li>
-          <li>自动观看：<b>战术倾向</b>随时可切换（强攻/稳守反击/游走打点）；<b>即时指令</b>有冷却（组合拳爆发/铁壁防守/搂抱回体力）。</li>
+          <li>自动观看：<b>战术倾向</b>随时可切换（强攻/稳守反击/游走打点，三者相克：强攻克游走、游走克稳守、稳守克强攻）；<b>即时指令</b>有冷却（组合拳爆发/铁壁防守/搂抱停战）。<b>对手有整场打法</b>（赛前对手卡可看：开局战术固定、按其性格临场调整），且<b>对手也会用指令</b>——残血开铁壁按住重创、搂抱打断你的连击，盯着实况日志读人。</li>
           <li>3 回合打完按总伤害 + 命中数判点数；把对方 HP 打空就是 KO。</li>
           <li>回合休息时可以处理伤口回血，或场边训话赌一把士气。</li>
         </ul>
@@ -682,10 +694,11 @@
         </ul>
         <h3>生涯目标、影响力与赞助（Phase 3）</h3>
         <ul>
-          <li><b>分阶段目标</b>：生涯分 6 个阶段依次解锁——①初出茅庐（赢 1 场）→ ②崭露头角（排名前 40 且影响力 Lv2）→ ③国内新星（排名前 25 且 3 连胜）→ ④国内顶尖（排名前 10 且影响力 Lv3）→ ⑤冲击世界（排名第 1 且影响力 Lv4，得「国内冠军」称号）→ ⑥传奇之路（影响力 Lv5 且登顶后再赢 3 场，得「传奇」称号）。完成阶段会弹祝贺窗并直接发奖金（¥500 ~ ¥20000），进度在状态页和日常页都能看。</li>
+          <li><b>分阶段目标</b>：生涯分 6 个阶段依次解锁——①初出茅庐（赢 1 场）→ ②崭露头角（排名前 40 或赢下 5 场，且影响力 Lv2）→ ③国内新星（排名前 25 或赢下 12 场，且 3 连胜）→ ④国内顶尖（排名前 10 或赢下 25 场，且影响力 Lv3）→ ⑤国内之巅（登上国内第 1 名，或在正式赛击败伊芙琳，且影响力 Lv4，得「国内冠军」称号）→ ⑥传奇之路（影响力 Lv5 且登顶后再赢 3 场，得「传奇」称号）。完成阶段会弹祝贺窗并直接发奖金（¥500 ~ ¥20000），进度在状态页和日常页都能看。</li>
           <li><b>影响力</b>：共 5 档——Lv1 无名之辈 → Lv2 崭露头角（首胜）→ Lv3 声名鹊起（10 胜或排名前 25）→ Lv4 家喻户晓（排名前 10 或 25 胜）→ Lv5 传奇（排名第 1 登顶）。按当前胜场/排名动态计算：每场比赛结算后重算，输比赛跌出排名门槛时会掉档（胜场不减少，靠胜场达成的档位不掉）。出场费加成按档：Lv1 +0%、Lv2 +10%、Lv3 +20%、Lv4 +35%、Lv5 +50%，和排名加成叠乘。</li>
           <li><b>连胜</b>：赢一场 +1，输一场清零。③阶段需要 3 连胜，中途别翻车。</li>
-          <li><b>剧情与关系（可选）</b>：生涯推进会触发剧情对白（阶段提升、首胜/首败、进前 25/前 10、登顶、首次 KO 等节点各一次），选项有小额后果。和前辈藤原梢、经纪人栗原真纪、宿敌沈墨凛、同期林小葵相处会积累好感，在状态页「关系」区查看；好感达 30/60/90 各解锁一段专属剧情。和沈墨凛比赛后还会有赛后对白。这条线纯属可选：不理会不影响训练、比赛与生涯推进，也没有任何惩罚。</li>
+          <li><b>剧情与关系（可选）</b>：生涯推进会触发剧情对白（阶段提升、首胜/首败、进前 25/前 10、登顶、首次 KO 等节点各一次；进前 25/前 10 的节点攒够胜场也能推进），选项有小额后果。和前辈藤原梢、经纪人栗原真纪、宿敌沈墨凛、同期林小葵相处会积累好感，在状态页「关系」区查看；好感达 30/60/90 各解锁一段专属剧情。和沈墨凛比赛后还会有赛后对白。这条线纯属可选：不理会不影响训练、比赛与生涯推进，也没有任何惩罚。</li>
+          <li><b>约战</b>：在比赛屏可指名挑战交过手的对手（2 AP/场，每周至多 2 场、同一对手每周 1 场）：不计战绩、不动排名、没有奖金，出拳经验半额，伤病风险减半；宿敌沈墨凛在打完第 1 场正式赛后解锁，好感结算与正式赛相同——排名赛遇不上她时，这是推进宿敌线的保底办法。</li>
           <li><b>赞助</b>：状态页「赞助」区有 4 档——街边拉面店（影响力 Lv1）、运动饮料「燃力」（Lv2）、拳套品牌「铁拳堂」（Lv3）、全国体育连锁「胜道」（Lv4）。同时只能签一家：签约立刻拿签约金，之后每周第 1 天自动到账周薪（日志播报）。想换更高的，先解约再签新的（解约不退签约金）。</li>
         </ul>
         <h3>战斗深化（Phase 4）</h3>
@@ -706,12 +719,27 @@
           <li><b>拆解</b>：背包里每件装备都有 [拆解] 按钮（已装备的要先换下），确认后装备消失，换回皮料与内衬材料各 1~3 个——档次越高，拆出的料越好（低档出人造革/乳胶，高档出袋鼠皮/马毛等）；定制/打造的拳套会拆回它自己的外皮与内衬料。图鉴登记不会因拆解消失。</li>
           <li><b>打造</b>：状态页「工坊」用材料打造拳套——选版型＋外皮＋内衬，需要对应外皮材料 ×2＋内衬材料 ×2，再加 ¥200 手工费（工坊标准规格：12oz · 魔术贴）；材料不够的组合会置灰并提示缺什么。材料库存背包和工坊里都能看。</li>
           <li><b>图鉴成就</b>：商店购买、定制、打造得到的每一款装备都会登记（全部部位，含护腕新槽位）。集齐 5 款奖励 ¥1000，集齐 10 款奖励 ¥3000＋「收藏家」称号，达成时弹祝贺窗，奖励立即到账。</li>
-          <li><b>装备强化</b>：所有装备（拳套/护头/战袍/战靴/护齿/护腕，含定制与打造的拳套）都能在背包里点 [强化] 升级，+0~+10，装备名后显示 +N。每升一级，该装备的每项<b>正向</b>属性 +1（负加成保持不变，保留装备取舍）、减伤类再 +1%，立即计入属性面板与战斗。费用 = ¥200×(当前等级+1) ＋材料 ×(当前等级+1)：拳套/护头/战袍/战靴消耗它对应的皮料，护齿/护腕消耗内衬材料（拆解装备获得）；成功率 100%，不会失败。确认框会列清费用、材料和强化前后效果，材料或金钱不足时确认按钮置灰、背包里也会红字提示缺什么。拆解装备后它的强化等级随之消失。</li>
+          <li><b>装备加成（百分比）</b>：装备的加成是属性「生效值」的百分比——实战生效值 = 本体属性 ×(1＋百分比合计)。本体练得越高，同一件装备带来的点数越多，全生涯不过时。训练本体的上限仍是 100，装备百分比作用在生效值上、可以让实战生效值超过 100。另外几类装备带机制效果：护齿/护头减少所受<b>重创积累</b>、战靴减少<b>出拳体力消耗</b>、护腕缩短<b>指令冷却</b>，都在商品卡与背包里明示。</li>
+          <li><b>装备强化</b>：所有装备（拳套/护头/战袍/战靴/护齿/护腕，含定制与打造的拳套）都能在背包里点 [强化] 升级，+0~+10，装备名后显示 +N。每升一级，该装备的每项<b>正向</b>百分比 +1 个百分点（负向保持不变，保留装备取舍）、减伤类再 +1%，机制效果同步小幅增强，立即计入属性面板与战斗。费用 = ¥300×(当前等级+1) ＋对应材料：材料按 [1,1,1,1,2,2,2,2,3,3] 逐级计、+10 全程共 18 个，从该装备对应的皮料＋内衬两类合计扣除（拆解装备获得）；成功率 100%，不会失败。确认框会列清费用、材料和强化前后效果，材料或金钱不足时确认按钮置灰、背包里也会红字提示缺什么。拆解装备后它的强化等级随之消失。</li>
+          <li><b>康复理疗</b>（外出 · 医院 / 康复中心）：不耗 AP，¥1600 → 伤病 −40，每周限 2 次。AP 紧、伤又重的时候，用钱换时间；医院治疗（2 AP＋¥500 → −30）仍在，两条路按手头资源选。</li>
+          <li><b>商店增值服务</b>（体育用品店 · 增值服务货架，每周各限购 1 次，价格随赛季周数上涨）：<b>特训营</b>买入 4 次充能，之后 4 次训练结算的收益额外 +50%（充能跨周保留）；<b>宣传造势</b>心态 +15，并使下一场正式赛获胜奖金 ×1.4（输了不触发、保留到获胜为止，约战不算）。</li>
           <li><b>更多装备</b>：新增护腕槽位（基础/专业/冠军护腕，主加精准与速度）与更多非拳套装备——冠军护头（减伤 15%）、轻盈训练服、冠军战袍、速度战靴、重型战靴、定制护齿（减伤 8%）、专业护齿（减伤 12%），都在体育用品店有售，减伤可与护齿叠加。</li>
           <li><b>装备图片</b>：商店、背包、图鉴、当前装备四处里的每件装备都配有单品图（定制拳套按版型显示守护系/斗牛系/经典系的图）。</li>
         </ul>
         <div class="modal-btns">
           <button class="primary-btn" id="btnCloseHelp">开始游戏</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 约战指名弹窗（修复批次 C：列表由 renderSparList 渲染，宿敌置顶） -->
+    <div class="modal-mask" id="sparModal">
+      <div class="modal">
+        <h2>约战 · 指名挑战</h2>
+        <p>点名一位交过手的对手打一场<b>不计名次</b>的比赛：不发奖金、不动排名，出拳经验半额；伤病风险减半，赛后体力 −25。每场 <b>2 AP</b>，每周至多 2 场、同一对手每周至多 1 场；取消选择不扣 AP。与宿敌沈墨凛约战，好感结算与正式赛相同，赛后还有她的专属对白。</p>
+        <div class="mode-list" id="sparList"></div>
+        <div class="modal-btns">
+          <button class="secondary-btn" id="btnCancelSpar">再想想</button>
         </div>
       </div>
     </div>
@@ -892,7 +920,7 @@
       <div class="br-card">
         <div class="br-vs">
           <div class="br-side">
-            <img id="brMeImg" src="assets/pose/guard.webp" alt="" />
+            <img id="brMeImg" alt="" />
             <div class="br-name">小拳（你）</div>
             <div class="br-meta" id="brMeMeta"></div>
           </div>
