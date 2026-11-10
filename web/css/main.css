@@ -971,6 +971,16 @@
       .danger-btn { border: 1.5px solid var(--red); background: var(--panel); color: var(--red); border-radius: 10px; padding: 10px 16px; font-weight: 900; font-size: 14px; }
       .danger-btn:hover { background: var(--red); color: #fff; }
       .save-slot-auto { font-size: 12.5px; color: var(--ink-2); padding: 4px 0; }
+      /* G4：异常锁定槽卡 + 导出/导入弹窗 */
+      .save-slot.locked { border-color: #c0392b; background: #fdf0ee; }
+      .save-slot-abnormal { font-size: 13.5px; color: #922b21; margin-top: 6px; line-height: 1.65; font-weight: 700; }
+      .modal.io-modal { max-width: 560px; width: 92vw; }
+      .io-slot-btns { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+      .io-slot-btn { border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 9px; padding: 7px 12px; font-weight: 700; font-size: 13px; }
+      .io-slot-btn.active { border-color: var(--red); color: var(--red); }
+      .io-text { width: 100%; box-sizing: border-box; border: 1.5px solid var(--line); border-radius: 10px; padding: 9px 11px; font-family: monospace; font-size: 11.5px; line-height: 1.5; resize: vertical; background: var(--panel-2); color: var(--ink); }
+      .io-msg { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 8px 0 2px; }
+      .io-file-btn { display: inline-flex; align-items: center; cursor: pointer; }
 
       /* 设置「减少动效」：手动版 prefers-reduced-motion——关掉过渡/动画（含残影/入场/视图过渡） */
       body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation: none !important; transition: none !important; }
@@ -1358,6 +1368,19 @@ body[data-view="match"] #matchView { display: flex !important; }
   border: 1px solid rgba(255, 209, 102, .55); border-radius: 99px; padding: 7px 14px;
 }
 .mv-scout.done { color: rgba(242, 237, 253, .75); border-color: rgba(255, 255, 255, .25); cursor: default; }
+/* 正式版批次 G9 短期：卫冕战挑战卡（比赛屏，金边冠军卡，配色沿用冠军金＋代表粉紫） */
+.defense-card {
+  max-width: 520px; margin: 0 auto 10px; text-align: left;
+  background: linear-gradient(160deg, rgba(58, 32, 102, .92), rgba(28, 14, 56, .94));
+  border: 1.5px solid #ffd970; border-radius: 14px; padding: 12px 14px;
+  box-shadow: 0 0 0 3px rgba(255, 217, 112, .18), 0 10px 26px rgba(0, 0, 0, .35);
+}
+.defense-title { margin: 0 0 6px; font-size: 16px; font-weight: 900; color: #ffd970; letter-spacing: .06em; }
+.defense-line { margin: 0 0 4px; font-size: 13.5px; color: rgba(242, 237, 253, .92); }
+.defense-quote { margin: 0 0 6px; font-size: 14px; font-weight: 700; color: #ffb9d9; }
+.defense-note { margin: 0 0 10px; font-size: 12.5px; line-height: 1.65; color: rgba(242, 237, 253, .75); }
+.defense-note b { color: #ffd970; }
+.defense-btn { width: 100%; }
 .match-cta { position: relative; z-index: 1; padding: 8px 14px 14px; text-align: center; }
 .match-note { margin: 0 auto 9px; max-width: 720px; color: rgba(242, 237, 253, .85); font-size: 12.5px; }
 .match-note b { color: #ffb9d9; }
@@ -2183,3 +2206,13 @@ body[data-view="settings"] #settingsView { display: flex !important; }
 #figMe.rig-on.stumbling .fig { animation: stumble .32s ease-out; }
 #figMe.rig-on.down .fig { transform: none; animation: none; } /* 倒地由纸偶 down 动作承担，关整图旋转 */
 #figMe.rig-on.hit .rig-host { filter: brightness(1.55) sepia(.55) hue-rotate(-35deg) saturate(2.6) drop-shadow(0 7px 7px rgba(8, 10, 18, .45)); } /* 受击红闪从姿势图转挂纸偶容器 */
+
+/* ===== 骨骼纸偶（对手扩围 G2）：与主角同构，对手侧多一层镜像（面向我方，与 .fig-img 的 scaleX 同口径） ===== */
+#figFoe .rig-host { transform: scaleX(-1); }
+#figFoe.rig-on .rig-host { display: block; }
+#figFoe.rig-on #figFoeImg { visibility: hidden; } /* 静态立绘仅作回退层（src 照常切换） */
+#figFoe.rig-on .fig { animation: none; } /* 呼吸由纸偶承担，关 CSS bob */
+#figFoe.rig-on.hit .fig { animation: shake .3s; }
+#figFoe.rig-on.stumbling .fig { animation: stumble .32s ease-out; }
+#figFoe.rig-on.down .fig { transform: none; animation: none; } /* 倒地由纸偶 down 动作承担，关整图旋转 */
+#figFoe.rig-on.hit .rig-host { filter: brightness(1.55) sepia(.55) hue-rotate(-35deg) saturate(2.6) drop-shadow(0 7px 7px rgba(8, 10, 18, .45)); }

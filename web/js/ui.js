@@ -74,6 +74,7 @@
         bsEl.textContent = sparUnlocked ? '🥊 约 战' : '🔒 约战（打完第 1 场正式赛后解锁）';
       }
       renderHubGoal();
+      renderDefenseCard(); // 正式版批次 G9 短期：卫冕战挑战卡随主渲染刷新（无挑战时自隐）
       $('btnTrain').disabled = S.ap < 2;
       $('btnOut').disabled = S.ap < 2;
       $('btnWork').disabled = S.ap < 3 || S.stamina < 15;
@@ -268,6 +269,35 @@
         });
       });
     }
+    /* 正式版批次 G9 短期：卫冕战挑战卡（比赛屏）——有待应战挑战且仍居第 1 名时呈现挑战者卡
+       （具名/名次/风格/打法/挑战宣言＋正式赛奖金口径＋冠军期 sink 推荐一句），点「应战」走
+       startDefense 的模式弹窗流程。挑战数据来自 S.defenseChallenge（生成/作废在 battle.js 收口），
+       这里只读呈现；签名串防重复渲染（与 renderMatchStage 同法）。【新增文案·待用户审】 */
+    var defenseCardSig = '';
+    function renderDefenseCard() {
+      var el = $('defenseCard'); if (!el) return;
+      if (typeof defenseState === 'function') defenseState();
+      var ch = (S.rank === 1) ? S.defenseChallenge : null;
+      var sig = ch ? ch.key + '|' + ch.rank + '|' + S.rank + '|' + (S.defenses || 0) : 'none';
+      if (sig === defenseCardSig) return;
+      defenseCardSig = sig;
+      if (!ch) { el.style.display = 'none'; el.innerHTML = ''; return; }
+      var member = null;
+      ensureRoster();
+      S.roster.forEach(function (m) { if (m.key === ch.key) member = m; });
+      var rankNow = member ? member.rank : ch.rank;
+      var persona = member ? foePersonaFor(member.style, member.key) : null;
+      var prize = prizeForRank(weekOf(S.day));
+      el.style.display = '';
+      el.innerHTML =
+        '<p class="defense-title">👑 卫冕战挑战</p>' +
+        '<p class="defense-line"><b>' + ch.name + '</b>（第 ' + rankNow + ' 名' + (member ? ' · ' + FOE_STYLES[member.style].name : '') + (persona ? ' · ' + personaDesc(persona) : '') + '）向你的冠军王座下战书：</p>' +
+        '<p class="defense-quote">「' + defenseLine(ch.key) + '」</p>' +
+        '<p class="defense-note">正式规格：计战绩、动排名与影响力；获胜奖金 ¥' + prize + '（出场费口径），赢下计 1 次卫冕成功（已卫冕 ' + (S.defenses || 0) + ' 次）。备战推荐：开战前做一次<b>宣传造势</b>，获胜奖金 ×' + PROMO_PRIZE_MUL + '。挑战会留到你应战为止——但跌下第 1 名就会作废。</p>' +
+        '<button class="act-btn defense-btn" id="btnDefense" type="button"><span class="t"><span>应 战 · 卫冕战</span> <span class="cost">免费 · 0 AP</span></span><span class="d">选模式开打（手动 / 自动 / 模拟），不占本周正式赛位</span></button>';
+      var btn = $('btnDefense');
+      if (btn) btn.addEventListener('click', function () { startDefense(); });
+    }
     function doPlanTrain() {
       if (!planSel.length || S.ap < 2) return;
       var stamBefore = S.stamina;
@@ -386,6 +416,64 @@
       var cfg = pendingConfirm;
       closeConfirm();
       if (cfg && cfg.onOk) cfg.onOk();
+    });
+
+    /* 批次 G6：Esc 关弹窗——MutationObserver 维护弹窗打开顺序栈，Escape 只关最上层一个。
+       关闭一律走各弹窗既有的取消/主按钮语义，不新增关闭路径：确认框=取消（closeConfirm）、
+       模式窗=「再想想」（含约战 AP 退回等既有复位）、键位窗=cancelKeysModal（战中查看=关窗续战）、
+       结算/阶段/成就=主按钮（推进待弹队列）、帮助/存档 IO/重置/约战/灯箱=各自的关闭/取消按钮。
+       storyModal 不入栈：剧情由选项推进、无取消语义，强关会卡死剧情队列，故 Esc 不关它。
+       战斗本体不是弹窗：战斗中 Esc 只关浮层，永不触及 B、不中断比赛。 */
+    var modalStack = [];
+    var MODAL_ESC_CLOSER = {
+      confirmModal: function () { closeConfirm(); },
+      helpModal: function () { $('btnCloseHelp').click(); },
+      modeModal: function () { $('btnCancelMode').click(); },
+      sparModal: function () { $('btnCancelSpar').click(); },
+      keysModal: function () { cancelKeysModal(); },
+      settleModal: function () { $('btnSettleOk').click(); },
+      stageModal: function () { $('btnStageOk').click(); },
+      achModal: function () { $('btnAchOk').click(); },
+      resetModal: function () { $('btnCancelReset').click(); },
+      saveExportModal: function () { $('btnExportClose').click(); },
+      saveImportModal: function () { $('btnImportClose').click(); },
+      imgModal: function () { $('btnImgClose').click(); }
+    };
+    (function watchModals() {
+      function install() {
+        if (typeof MutationObserver !== 'function') return;
+        Array.prototype.forEach.call(document.querySelectorAll('.modal-mask'), function (el) {
+          new MutationObserver(function () {
+            var open = el.classList.contains('open');
+            var i = modalStack.indexOf(el.id);
+            if (open && i < 0) modalStack.push(el.id);
+            if (!open && i >= 0) modalStack.splice(i, 1);
+            if (el.id === 'storyModal' && typeof BGM !== 'undefined') { // 批次 G6：剧情 BGM 变体——打开切 story，关闭按当前场景/战斗恢复（未起播过则不抢先起播）
+              if (open) BGM.start('story');
+              else if (BGM.track) {
+                if (typeof B !== 'undefined' && B) BGM.start('battle');
+                else BGM.start(typeof currentSceneView !== 'undefined' && currentSceneView === 'title' ? 'title' : (typeof currentSceneView !== 'undefined' && currentSceneView === 'shop' ? 'shop' : 'daily'));
+              }
+            }
+          }).observe(el, { attributes: true, attributeFilter: ['class'] });
+        });
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+      else install();
+    })();
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      var shopSheet = $('shopSheet'); // 商店购买确认 sheet（非 modal-mask）：Esc=取消购买
+      if (shopSheet && !shopSheet.hidden) { $('btnShopCfCancel').click(); return; }
+      while (modalStack.length) {
+        var topId = modalStack[modalStack.length - 1];
+        var topEl = $(topId);
+        if (!topEl || !topEl.classList.contains('open')) { modalStack.pop(); continue; }
+        var closer = MODAL_ESC_CLOSER[topId];
+        if (!closer) { modalStack.pop(); continue; }
+        closer();
+        return;
+      }
     });
     /* 框架重构三期：商店舞台内购买确认——底部 sheet（行式清单＋商品图，不再是整页文字表格弹窗）。
        仅商店三路购买（装备/消耗品/定制）走这里；cfg 形态与 askConfirm 一致，结算逻辑仍在各购买函数的 onOk 里。 */
@@ -528,6 +616,7 @@
       // 角色池：每周第 1 天（与赞助周薪同点）池内成长 + 名次重排 + 候补轮换
       if (S.day % 7 === 1) { weeklyRosterGrowth(weekOf(S.day)); checkAchievements(); } // Phase 9：每周重排后排名类成就判定
       checkStoryMilestones(); // 修复批次 C：跨日兜底补检剧情双通道节点（胜场路/排名路任一达标即排队）
+      if (typeof maybeDefenseChallenge === 'function') maybeDefenseChallenge(); // 正式版批次 G9 短期：跨日补检卫冕挑战（周重排可能把名次顶下第 1 名→挑战作废；新一周且仍居首→新挑战者上门）
       planSel = [];
       closeSubLists(null);
       ['trainList', 'outList', 'shopList', 'relaxList', 'hospitalList'].forEach(function (id) { $(id).classList.remove('open'); });

@@ -87,6 +87,18 @@
         legFarShin: { box: [362, 702, 245, 237], pivot: [38, 28], axisDeg: 37.48, len: 151.2 },
       },
     },
+    // ---- G2 扩围（2026-11-10）：8 名重点角色装配表。head/torso＝本人定稿图原像素切件＋程序补绘；
+    // 其余 6 件结构件＝主角母版（assets/rig_master/）按本人配色选择性换色。管线 assets/rig_expand_src/work/build_parts.py，
+    // 逐人标定与身份自审记录见 CHARACTER_RIG.md 第八节。origin.head＝正面立绘颈点覆写（模板骨架/姿势/动作未动）。
+    opp_rookie: {"dir": "assets/rig/opp_rookie/", "origin": {"head": [330, 270]}, "meta": {"head": {"box": [0, 0, 338, 308], "pivot": [163.8, 256.2]}, "torso": {"box": [0, 0, 325, 464], "pivot": [157.5, 235]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
+    // opp_counter（沈墨凛）G2 返工延后：长发帘＋百褶裙＋远腿在 guard/hit 围出封闭背景袋（空洞率 3.86%/3.38%），
+    // 躯干底层法无法消除（部件间拓扑），保持静态立绘回退；部件与 meta 保留在 assets/rig/opp_counter/ 待后续处理。
+    opp_world_champion: {"dir": "assets/rig/opp_world_champion/", "origin": {"head": [330, 270]}, "meta": {"head": {"box": [0, 0, 180, 290], "pivot": [85, 262]}, "torso": {"box": [0, 0, 465, 390], "pivot": [227, 257]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
+    opp_champion_domestic: {"dir": "assets/rig/opp_champion_domestic/", "origin": {"head": [330, 270]}, "meta": {"head": {"box": [0, 0, 329, 357], "pivot": [152.3, 327.9]}, "torso": {"box": [0, 0, 660, 358], "pivot": [330.5, 249.7]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
+    opp_brick: {"dir": "assets/rig/opp_brick/", "origin": {"head": [344, 270]}, "meta": {"head": {"box": [0, 0, 252, 262], "pivot": [125.9, 235.3]}, "torso": {"box": [0, 0, 318, 406], "pivot": [154.8, 240.7]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
+    opp_pocket: {"dir": "assets/rig/opp_pocket/", "origin": {"head": [330, 270]}, "meta": {"head": {"box": [0, 0, 334, 300], "pivot": [168.2, 265.5]}, "torso": {"box": [0, 0, 320, 429], "pivot": [135, 242.3]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
+    opp_shy: {"dir": "assets/rig/opp_shy/", "origin": {"head": [330, 270]}, "meta": {"head": {"box": [0, 0, 350, 317], "pivot": [170.5, 271]}, "torso": {"box": [0, 0, 314, 484], "pivot": [157.8, 239.7]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
+    opp_braid: {"dir": "assets/rig/opp_braid/", "origin": {"head": [334, 270]}, "meta": {"head": {"box": [0, 0, 262, 280], "pivot": [132.3, 228.5]}, "torso": {"box": [0, 0, 230, 289], "pivot": [102.3, 250]}, "armNearUpper": {"box": [248, 222, 214, 110], "pivot": [10, 54], "axisDeg": 4.4, "len": 182.5}, "armNearFore": {"box": [424, 221, 239, 107], "pivot": [18, 67], "axisDeg": -4.3, "len": 213.6}, "legNearThigh": {"box": [286, 530, 190, 162], "pivot": [46, 40], "axisDeg": 38.42, "len": 148.1}, "legNearShin": {"box": [405, 640, 184, 347], "pivot": [45, 24], "axisDeg": 76.94, "len": 185.8}, "legFarThigh": {"box": [192, 562, 140, 186], "pivot": [95, 38], "axisDeg": 120.32, "len": 136.7}, "legFarShin": {"box": [362, 702, 245, 237], "pivot": [38, 28], "axisDeg": 37.48, "len": 151.2}}},
   };
 
   function createRig(stageEl, opts) {
@@ -100,7 +112,10 @@
     var ORDER = [], PARENT = {}, PART = {}, PIVOT = {}, AXIS = {}, DARK = {};
     RIG_TEMPLATE.bones.forEach(function (d) {
       ORDER.push(d[0]);
-      PARENT[d[0]] = d[1]; PART[d[0]] = d[2]; PIVOT[d[0]] = d[3]; DARK[d[0]] = d[4];
+      PARENT[d[0]] = d[1]; PART[d[0]] = d[2];
+      // G2 装配表：单角色标定可覆写骨骼原点（体型差吸收，如正面立绘的颈点居中）；无覆写时用模板原点（主角行为不变）
+      PIVOT[d[0]] = (chr.origin && chr.origin[d[0]]) || d[3];
+      DARK[d[0]] = d[4];
       var m = partsMeta[d[2]];
       AXIS[d[0]] = (m && typeof m.axisDeg === 'number') ? m.axisDeg : null;
     });
@@ -163,6 +178,7 @@
 
     var state = { stance: 'guard', anim: ANIMS.guard, keys: ANIMS.guard.keys, t0: 0 };
     var clock = 0, lastNow = performance.now(), raf = 0;
+    var tickEvery = Math.max(1, opts.tickEvery || 1), tickN = 0; // G2：隔帧采样（时钟照常累计、动作时间轴不变，只降姿势写入频率；对手纸偶用 2）
 
     function apply(locals) {
       root.style.transform = 'translate(' + (locals.root.x / 7) + '%,' + (locals.root.y / 10.04) + '%) rotate(' + locals.root.r + 'deg)';
@@ -185,9 +201,12 @@
       var dt = now - lastNow; lastNow = now;
       var sc = timeScale();
       if (sc > 0) clock += dt * sc;
-      var a = state.anim, dur = a.loop || a.dur || 0, elapsed = clock - state.t0;
-      apply(sampleKeys(state.keys, elapsed, dur, !!a.loop));
-      if (!a.loop && !a.hold && elapsed > dur) play(state.stance);
+      tickN++;
+      if (tickN % tickEvery === 0) {
+        var a = state.anim, dur = a.loop || a.dur || 0, elapsed = clock - state.t0;
+        apply(sampleKeys(state.keys, elapsed, dur, !!a.loop));
+        if (!a.loop && !a.hold && elapsed > dur) play(state.stance);
+      }
       raf = requestAnimationFrame(tick);
     }
     if (!reduced) raf = requestAnimationFrame(tick);

@@ -310,8 +310,8 @@ async function suite(label, dir) {
       w.eval("foePersonaFor('power','smokeA').base") === w.eval("foePersonaFor('power','smokeA').base") &&
       w.eval("foePersonaFor('guardcounter','smokeB').base") === 'counter');
     w.eval("B.me.stam = 40; B.comboMe = 3; B.comboFoe = 2; useClinch();");
-    ok('批次B 手动搂抱（体力 40→60 / 冷却中 / 缠抱停战 holdUntil>time / 双方连击清零 / 手动+触屏按钮齐全）',
-      w.eval('B.me.stam') === 60 && w.eval('B.cd.clinch > 0') === true && w.eval('B.holdUntil > B.time') === true &&
+    ok('批次B 手动搂抱（体力 40→46 / 冷却中 / 缠抱停战 holdUntil>time / 双方连击清零 / 手动+触屏按钮齐全）', // 回体期望随批次 G3-b 代价组调整更新：stam 40 落 [35,60) 档 +6（旧口径 <50 一律 +20→60）；机制断言（回体/冷却/停战/清连击）不变
+      w.eval('B.me.stam') === 46 && w.eval('B.cd.clinch > 0') === true && w.eval('B.holdUntil > B.time') === true &&
       w.eval('B.comboMe') === 0 && w.eval('B.comboFoe') === 0 &&
       !!w.document.getElementById('btnManualClinch') && !!w.document.getElementById('btnClinchT'));
     w.eval("pendingFoe = B.foe; openModeModal(); openBattleReady('manual');"); // 走真实赛前路径填充两处对手卡（直接 startBattle 时 pendingFoe 为空、填充层会提前返回）
@@ -319,6 +319,14 @@ async function suite(label, dir) {
       (w.document.getElementById('modeFoeInfo').textContent || '').indexOf('打法：') >= 0 &&
       (w.document.getElementById('brFoeMeta').innerHTML || '').indexOf('打法：') >= 0);
     w.eval("pendingFoe = null; document.getElementById('modeModal').classList.remove('open'); document.getElementById('battleReady').hidden = true;");
+
+    // 批次 G7（T9）：人格变招门槛 ±30→±20——点数差 25（旧门槛下不触发）应触发 comeback 转强攻；差 15 不应触发
+    w.eval("B.foe.persona = { base: 'points', adjust: 'comeback', comboWhen: 'press', wallHp: 0.35, clinchFan: true, name: '游击型' }; B.foe.tactic = 'points'; B.me.dmg = 125; B.me.hits = 0; B.foe.dmg = 100; B.foe.hits = 0; B.phase = 'break'; endBreak();");
+    ok('G7 人格变招门槛 ±20（点数差 25 时 comeback 人格回合间转强攻）',
+      w.eval('B.foe.tactic') === 'attack', w.eval('B.foe.tactic'));
+    w.eval("B.foe.tactic = 'points'; B.me.dmg = 115; B.phase = 'break'; endBreak();");
+    ok('G7 人格变招门槛下限（点数差 15 时不切换、保持 base 战术）',
+      w.eval('B.foe.tactic') === 'points', w.eval('B.foe.tactic'));
 
     w.eval("clearInterval(battleTimer); B = null; document.getElementById('dailyView').style.display = ''; document.getElementById('battleView').style.display = '';");
 
@@ -573,6 +581,145 @@ async function suite(label, dir) {
       tutLoad.w.S.tutorial && JSON.stringify(tutLoad.w.S.tutorial));
     tutLoad.w.close();
 
+    // 【G5 教程关卡化】教学窗文案瘦身（准备层只给「先会两样」/ 开场日志一句）＋战斗内即时教学触发与只教一次＋自动模式回合间指令教学＋窗外原文案不变＋老档 taught 兼容
+    {
+      const g5 = await loadPage(origin, null);
+      const gw = g5.w;
+      gw.document.getElementById('btnTitleNew').click();
+      await sleep(30);
+      if (gw.document.getElementById('storyModal').classList.contains('open')) gw.document.getElementById('btnStorySkip').click();
+      await sleep(30);
+      ok('G5 新档 taught 初始化（空数组 / teachWindow 开启：序章已完、正式赛 0 场）',
+        Array.isArray(gw.S.tutorial.taught) && gw.S.tutorial.taught.length === 0 && gw.eval('teachWindow()') === true,
+        JSON.stringify(gw.S.tutorial));
+      const g5go = [...gw.document.querySelectorAll('#storyChoices button')].find((b) => (b.textContent || '').indexOf('上台') >= 0);
+      if (g5go) g5go.click();
+      await sleep(30);
+      const g5man = gw.document.querySelector('#modeModal [data-mode="manual"]');
+      if (g5man) g5man.click();
+      await sleep(30);
+      const brc = gw.document.getElementById('brControls').textContent || '';
+      ok('G5 教学窗准备层只给「先会两样」（含即时教学预告 / 不含全量键位串）',
+        brc.indexOf('先会两样') >= 0 && brc.indexOf('第一次用到时') >= 0 && brc.indexOf('U 上勾') < 0, brc);
+      gw.document.getElementById('btnBattleStart').click();
+      await sleep(30);
+      gw.eval('clearInterval(battleTimer)'); // 冻结实时推进，后续触发全走手动 eval 的既有判定点
+      const logTxt0 = gw.document.getElementById('battleLog').textContent || '';
+      ok('G5 教学窗开场日志瘦身（一句教学 / 无规则全文段）',
+        gw.eval('B && B.mode') === 'manual' && logTxt0.indexOf('教学：贴近对手出拳打人') >= 0 && logTxt0.indexOf('连贯命中攒连击加伤害') < 0,
+        logTxt0.slice(0, 120));
+      gw.eval('B.meBlocking = false; dealDamage(B.foe, B.me, "straight", 1, false, false);');
+      ok('G5 即时教学·格挡（第一次硬吃对手的拳触发 / taught 记 guard / 日志有【教学】)',
+        gw.S.tutorial.taught.indexOf('guard') >= 0 && (gw.document.getElementById('battleLog').textContent || '').indexOf('【教学】这拳你硬吃了') >= 0,
+        JSON.stringify(gw.S.tutorial.taught));
+      gw.eval('B.foeBlocking = true; dealDamage(B.me, B.foe, "straight", 1, true, false);');
+      ok('G5 即时教学·击腹破防（自己的拳第一次被格挡触发）',
+        gw.S.tutorial.taught.indexOf('body') >= 0, JSON.stringify(gw.S.tutorial.taught));
+      gw.eval('B.foeBlocking = false; B.foeTrauma = 29.9; dealDamage(B.me, B.foe, "straight", 1, true, false); dealDamage(B.me, B.foe, "straight", 1, true, false); dealDamage(B.me, B.foe, "straight", 1, true, false);');
+      ok('G5 即时教学·连击＋重创（第一次 3 连触发 combo / 重创第一次过 30 触发 trauma）',
+        gw.S.tutorial.taught.indexOf('combo') >= 0 && gw.S.tutorial.taught.indexOf('trauma') >= 0,
+        JSON.stringify(gw.S.tutorial.taught));
+      gw.eval('openCounterWindow(true, "side");');
+      ok('G5 即时教学·反击（闪避第一次开反击窗触发 counter）',
+        gw.S.tutorial.taught.indexOf('counter') >= 0, JSON.stringify(gw.S.tutorial.taught));
+      gw.eval('B.meBlocking = false; dealDamage(B.foe, B.me, "straight", 1, false, false);');
+      ok('G5 即时教学只教一次（再次硬吃拳不再重复播报格挡教学）',
+        (gw.document.getElementById('battleLog').textContent.match(/【教学】这拳你硬吃了/g) || []).length === 1,
+        (gw.document.getElementById('battleLog').textContent.match(/【教学】/g) || []).length);
+      gw.close();
+      // 自动模式：指令教学在首个回合间休息出现
+      const g5b = await loadPage(origin, null);
+      g5b.w.eval('S.story.prologueDone = true;');
+      g5b.w.eval('pendingFoe = makePracticeFoe(); nextBattlePractice = true; startBattle("auto"); clearInterval(battleTimer); B.phase = "break"; startBreak();');
+      ok('G5 即时教学·指令（自动模式首个回合间触发 cmd / 休息面板含教学条）',
+        g5b.w.S.tutorial.taught.indexOf('cmd') >= 0 && (g5b.w.document.getElementById('breakTips').innerHTML || '').indexOf('教学：') >= 0,
+        JSON.stringify(g5b.w.S.tutorial.taught));
+      g5b.w.close();
+      // 教学窗外：文案与行为保持原样
+      const g5c = await loadPage(origin, null);
+      g5c.w.eval('S.story.prologueDone = true; S.wins = 3;');
+      ok('G5 教学窗外（已打过正式赛）teachWindow 关闭', g5c.w.eval('teachWindow()') === false);
+      g5c.w.eval('pendingFoe = makeFoe(); openBattleReady("manual");');
+      const vrc = g5c.w.document.getElementById('brControls').textContent || '';
+      ok('G5 窗外准备层保持全量键位表（原文案不变；jsdom 为触屏口径，判据取双版通用的「上勾」全量词）',
+        vrc.indexOf('上勾') >= 0 && vrc.indexOf('格挡') >= 0 && vrc.indexOf('搂抱') >= 0 && vrc.indexOf('先会两样') < 0, vrc);
+      g5c.w.eval('startBattle("manual"); clearInterval(battleTimer);');
+      ok('G5 窗外开场日志保持规则全文（原文案不变）',
+        (g5c.w.document.getElementById('battleLog').textContent || '').indexOf('连贯命中攒连击加伤害') >= 0);
+      g5c.w.close();
+      // 老档兼容：tutorial 存在但无 taught 字段（G4 期存档形态）→ 清洗补空数组
+      const g5SeedObj = JSON.parse(saved);
+      g5SeedObj.tutorial = { practiceDone: true, tips: [], goalDone: true, trainings: 0 };
+      const g5d = await loadPage(origin, JSON.stringify(g5SeedObj));
+      ok('G5 老档兼容（tutorial 无 taught 字段 → 清洗补空数组、不报错）',
+        Array.isArray(g5d.w.S.tutorial.taught) && g5d.w.S.tutorial.taught.length === 0,
+        JSON.stringify(g5d.w.S.tutorial));
+      g5d.w.close();
+    }
+
+    // 【G6 平台小件】BGM 参数化扩容（title 新曲＋story/shop 变体＋场景切曲）＋全屏按钮＋Esc 关最上层弹窗（不误关比赛）＋TKO 直述文案＋名次归因
+    {
+      const g6 = await loadPage(origin, saved);
+      const gw6 = g6.w;
+      ok('G6 BGM 参数化曲目表（title 96BPM 大调新曲 / daily 76 / story 64 正弦变体 / shop 88 方波变体 / battle kit 含底鼓步位）',
+        gw6.eval('BGM_TRACKS.title.bpm') === 96 && gw6.eval('BGM_TRACKS.daily.bpm') === 76 &&
+        gw6.eval('BGM_TRACKS.story.bpm') === 64 && gw6.eval('BGM_TRACKS.shop.bpm') === 88 &&
+        gw6.eval('BGM_TRACKS.story.kit.melWave') === 'sine' && gw6.eval('BGM_TRACKS.daily.kit.melWave') === 'triangle' &&
+        gw6.eval('BGM_TRACKS.shop.kit.melWave') === 'square' &&
+        gw6.eval('JSON.stringify(BGM_TRACKS.battle.kit.kickSteps)') === '[0,4]' &&
+        gw6.eval('BGM_TRACKS.title.bars[0].mel[0]') !== gw6.eval('BGM_TRACKS.daily.bars[0].mel[0]'),
+        gw6.eval('Object.keys(BGM_TRACKS).join(",")'));
+      gw6.eval('bgmUnlocked = true; BGM.start("daily"); showScene("title");');
+      const g6t1 = gw6.eval('BGM.track');
+      gw6.eval('showScene("shop");');
+      const g6t2 = gw6.eval('BGM.track');
+      gw6.eval('showScene("daily");');
+      ok('G6 场景切曲（标题→title / 商店→shop / 据点→daily）', g6t1 === 'title' && g6t2 === 'shop' && gw6.eval('BGM.track') === 'daily', `${g6t1}/${g6t2}/${gw6.eval('BGM.track')}`);
+      ok('G6 全屏按钮（标题屏＋设置屏各一 / toggleFullscreen 存在 / jsdom 无 API 时点击静默不报错）',
+        !!gw6.document.getElementById('btnTitleFullscreen') && !!gw6.document.getElementById('btnSettingsFullscreen') &&
+        gw6.eval('typeof toggleFullscreen') === 'function' && (gw6.document.getElementById('btnSettingsFullscreen').click(), true));
+      // Esc：两层弹窗只关最上层（confirm 走取消语义），再按关下一层；storyModal 不在 Esc 表内
+      gw6.eval('$("helpModal").classList.add("open");');
+      gw6.eval('askConfirm({ title: "G6测试", lines: [["a", "b"]] });');
+      await sleep(40); // 等 MutationObserver 把打开顺序入栈
+      gw6.document.dispatchEvent(new gw6.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(10);
+      const g6esc1 = !gw6.document.getElementById('confirmModal').classList.contains('open') && gw6.document.getElementById('helpModal').classList.contains('open') && gw6.eval('pendingConfirm') === null;
+      gw6.document.dispatchEvent(new gw6.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(10);
+      ok('G6 Esc 关最上层弹窗（confirm 先关且 pendingConfirm 清空 / help 仍在 / 第二次 Esc 关 help / storyModal 不入 Esc 表）',
+        g6esc1 && !gw6.document.getElementById('helpModal').classList.contains('open') && gw6.eval('!("storyModal" in MODAL_ESC_CLOSER)'),
+        `${g6esc1}`);
+      gw6.close();
+      // Esc 不误关比赛：战斗中开帮助浮层，Esc 只关浮层、B 仍在
+      const g6b = await loadPage(origin, null);
+      g6b.w.eval('S.story.prologueDone = true; pendingFoe = makePracticeFoe(); nextBattlePractice = true; startBattle("auto"); clearInterval(battleTimer); $("helpModal").classList.add("open");');
+      await sleep(40);
+      g6b.w.document.dispatchEvent(new g6b.w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(10);
+      ok('G6 战斗中 Esc 只关浮层不中断比赛（help 关 / B 仍在 / battleView 仍显示）',
+        !g6b.w.document.getElementById('helpModal').classList.contains('open') && g6b.w.eval('!!B') && g6b.w.document.getElementById('battleView').style.display === 'block',
+        `${g6b.w.eval('!!B')}/${g6b.w.document.getElementById('battleView').style.display}`);
+      g6b.w.close();
+      // 名次归因：当周获胜（胜场水位涨）＋重排后名次倒退 → 日志带「名次说明」；无胜场水位变化时不带
+      const g6r = await loadPage(origin, saved);
+      g6r.w.eval('S.rank = 20; S.wins = 5; S.rankMarkWins = 4; S.roster.forEach(function (m) { m.rating = 28; }); S.logs = []; weeklyRosterGrowth(10);');
+      const g6attr = g6r.w.S.logs.some((l) => l.msg.indexOf('名次说明') >= 0 && l.msg.indexOf('其他选手') >= 0);
+      const g6rankWorse = g6r.w.S.rank > 20 && g6r.w.S.rankMarkWins === 5;
+      g6r.w.eval('S.rank = 20; S.rankMarkWins = S.wins; S.roster.forEach(function (m) { m.rating = 28; }); S.logs = []; weeklyRosterGrowth(10);');
+      const g6noAttr = !g6r.w.S.logs.some((l) => l.msg.indexOf('名次说明') >= 0);
+      ok('G6 名次归因（获胜周名次倒退→归因行出现且水位更新 / 未获胜→无归因行）', g6attr && g6rankWorse && g6noAttr,
+        `${g6attr}/${g6rankWorse}/${g6noAttr}/rank=${g6r.w.S.rank}`);
+      g6r.w.close();
+      // 文案：源码层断言（两套件同源）——「死战设置」归零、TKO 直述句在位
+      const g6battleSrc = fs.readFileSync(path.join(root, 'js/battle.js'), 'utf8');
+      const g6gameSrc = fs.readFileSync(path.join(root, 'js/game.js'), 'utf8');
+      const g6htmlSrc = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+      ok('G6 文案（「死战设置」全仓归零 / TKO 直述「本回合第 3 次击倒——TKO 判负」与「直接判负（TKO）」在位）',
+        !g6battleSrc.includes('死战设置') && !g6gameSrc.includes('死战设置') && !g6htmlSrc.includes('死战设置') &&
+        g6battleSrc.includes('本回合第 3 次击倒——TKO 判负') && g6battleSrc.includes('直接判负（TKO）'));
+    }
+
     // Phase 9 多存档槽：老档自动成槽 1 → 切空槽 2 得新档 → 切回槽 1 无损 → 复制到槽 3 并切过去 → meta 重读保持
     const META_KEY = 'boxing-phase1-save-v1-meta';
     const SLOT2_KEY = 'boxing-phase1-save-v1-slot2';
@@ -629,6 +776,82 @@ async function suite(label, dir) {
       testSlot.w.S.money === 4321 && testSlot.w.eval('currentSlot()') === 2 && !testSlot.w.localStorage.getItem('boxing-phase1-save-backup-v1'),
       `${testLocked}/${stillTest}/${testSlot.w.S.money}/${testSlot.w.eval('currentSlot()')}`);
     testSlot.w.close();
+
+    // 【G4 存档安全四件套】迁移链（ver0→ver1 字段逐值不变）/ 损坏与过高版本档锁定不回写 / 导出导入往返与校验
+    const G4_SLOT2 = 'boxing-phase1-save-v1-slot2';
+    const G4_SLOT3 = 'boxing-phase1-save-v1-slot3';
+    const ver0Obj = JSON.parse(saved); delete ver0Obj.ver; // 构造 ver0 老档：与现行档同构、只是没有 ver 字段
+    const ver0Page = await loadPage(origin, JSON.stringify(ver0Obj));
+    ver0Page.w.eval('window.__v0 = ' + JSON.stringify(ver0Obj));
+    ok('G4 迁移链函数：ver0 对象逐级迁移到 ver1，除 ver 外字段逐值不变（day/money/wins/attrs）',
+      ver0Page.w.eval('(function(){ var m = migrateSaveData(window.__v0); return m.ok && m.data.ver === 1 && m.data.day === window.__v0.day && m.data.money === window.__v0.money && m.data.wins === window.__v0.wins && JSON.stringify(m.data.attrs) === JSON.stringify(window.__v0.attrs); })()') === true);
+    ok('G4 迁移链读档：ver0 老档读入成功且关键字段一致（day/wins/losses/rank/attrs.pow）',
+      ver0Page.w.S.day === ver0Obj.day && ver0Page.w.S.wins === ver0Obj.wins && ver0Page.w.S.losses === ver0Obj.losses &&
+      ver0Page.w.S.rank === ver0Obj.rank && ver0Page.w.S.attrs.pow === ver0Obj.attrs.pow,
+      `${ver0Page.w.S.day}/${ver0Page.w.S.wins}/${ver0Page.w.S.rank}`);
+    ver0Page.w.eval('save()');
+    ok('G4 版本号落盘：迁移后的存档再保存时必带 ver=1',
+      JSON.parse(ver0Page.w.localStorage.getItem(SAVE_KEY)).ver === 1);
+    ver0Page.w.close();
+
+    const corruptRaw = saved.slice(0, Math.floor(saved.length / 2)); // 截断 JSON = 损坏档
+    const corPage = await loadPage(origin, corruptRaw);
+    corPage.w.eval('save()'); // 模拟启动后日常自动存档的回写尝试：必须被锁定守卫挡下
+    ok('G4 损坏档锁定：截断 JSON 启动后 save() 不回写、原文逐字保留、状态判定 locked/corrupt',
+      corPage.w.localStorage.getItem(SAVE_KEY) === corruptRaw &&
+      corPage.w.eval('slotStatus(1).state + "/" + slotStatus(1).reason') === 'locked/corrupt');
+    ok('G4 损坏档可导出原文（锁定不妨碍导出留档）',
+      corPage.w.eval('exportSaveText(1)') === corruptRaw);
+    corPage.w.close();
+
+    const newerObj = JSON.parse(saved); newerObj.ver = 99;
+    const newerRaw = JSON.stringify(newerObj);
+    const newPage = await loadPage(origin, newerRaw);
+    newPage.w.eval('save()');
+    ok('G4 版本过高档锁定：ver=99 启动后不回写、原文逐字保留、状态判定 locked/newer',
+      newPage.w.localStorage.getItem(SAVE_KEY) === newerRaw &&
+      newPage.w.eval('slotStatus(1).state + "/" + slotStatus(1).reason') === 'locked/newer');
+    newPage.w.close();
+
+    const ioPage = await loadPage(origin, saved);
+    const expText = ioPage.w.eval('exportSaveText(1)');
+    ioPage.w.eval('window.__exp = ' + JSON.stringify(expText));
+    ioPage.w.eval('window.__newer = ' + JSON.stringify(newerRaw));
+    ok('G4 导出：当前槽导出文本可解析且带 ver=1',
+      (() => { try { return JSON.parse(expText).ver === 1; } catch { return false; } })());
+    const impRes = ioPage.w.eval('importSaveToSlot(2, window.__exp)');
+    const slot2Imported = JSON.parse(ioPage.w.localStorage.getItem(G4_SLOT2) || 'null');
+    ok('G4 导入：合法存档导入空槽成功（ok / 内容与导出一致 / 落盘带 ver=1）',
+      impRes.ok === true && !!slot2Imported && slot2Imported.money === JSON.parse(expText).money && slot2Imported.ver === 1,
+      impRes && impRes.reason);
+    const slot2Before = ioPage.w.localStorage.getItem(G4_SLOT2);
+    const badImp = ioPage.w.eval("importSaveToSlot(2, '{broken json')");
+    const newerImp = ioPage.w.eval('importSaveToSlot(3, window.__newer)');
+    ok('G4 导入校验：损坏文本被拒（corrupt）、过高版本被拒（newer），已有存档逐字无损',
+      badImp.ok === false && badImp.reason === 'corrupt' && newerImp.ok === false && newerImp.reason === 'newer' &&
+      ioPage.w.localStorage.getItem(G4_SLOT2) === slot2Before && ioPage.w.localStorage.getItem(G4_SLOT3) === null,
+      `${badImp.reason}/${newerImp.reason}`);
+    ioPage.w.localStorage.setItem(G4_SLOT3, '{"day":1,'); // 槽 3 放一份损坏原文 → 锁定
+    const lockImp = ioPage.w.eval('importSaveToSlot(3, window.__exp)');
+    ok('G4 导入：目标槽为异常锁定档时被拒（locked）且异常原文保留',
+      lockImp.ok === false && lockImp.reason === 'locked' && ioPage.w.localStorage.getItem(G4_SLOT3) === '{"day":1,',
+      lockImp && lockImp.reason);
+    ioPage.w.eval('openSaveSlots();');
+    const lockedCards = ioPage.w.document.querySelectorAll('#saveSlotList .save-slot.locked');
+    ok('G4 界面：存档屏异常槽渲染锁定卡（原因文案＋导出/清除按钮）；设置屏导出/导入入口就位',
+      lockedCards.length === 1 && lockedCards[0].textContent.includes('存档异常') &&
+      !!lockedCards[0].querySelector('[data-slot-export="3"]') && !!lockedCards[0].querySelector('[data-slot-clear="3"]') &&
+      !!ioPage.w.document.getElementById('btnExportSave') && !!ioPage.w.document.getElementById('btnImportSave'));
+    const exp2 = ioPage.w.eval('exportSaveText(2)');
+    ioPage.w.eval('window.__exp2 = ' + JSON.stringify(exp2));
+    ioPage.w.localStorage.removeItem(G4_SLOT2);
+    const rtRes = ioPage.w.eval('importSaveToSlot(2, window.__exp2)');
+    const rtObj = JSON.parse(ioPage.w.localStorage.getItem(G4_SLOT2) || 'null');
+    const exp2Obj = JSON.parse(exp2);
+    ok('G4 往返：导出→清空→导入后关键字段深等价（day/money/wins/rank/attrs/story）',
+      rtRes.ok === true && !!rtObj && rtObj.day === exp2Obj.day && rtObj.money === exp2Obj.money && rtObj.wins === exp2Obj.wins &&
+      rtObj.rank === exp2Obj.rank && JSON.stringify(rtObj.attrs) === JSON.stringify(exp2Obj.attrs) && JSON.stringify(rtObj.story) === JSON.stringify(exp2Obj.story));
+    ioPage.w.close();
 
     // 【架构批新增】画廊五页签 / 存档屏三槽与删除 / 设置持久化（独立 key，刷新保留）
     const SETTINGS_KEY = 'boxing-settings-v1';
@@ -744,8 +967,8 @@ async function suite(label, dir) {
     ok('批次C：日常池规模（日常共 19 段 / 可重复 10 段且微变版本齐备）',
       bc.w.eval('DAILY_EVENT_IDS.length') === 19 && bc.w.eval('DAILY_REPEATABLE.length') === 10 &&
       bc.w.eval(`DAILY_REPEATABLE.every(function (id) { return !!DAILY_ALTS[id]; })`) === true);
-    ok('批次C：成就共 29 个且 6 个新锚点判定正确（custom_first 与 craft 严格区分）',
-      bc.w.eval('ACHIEVEMENTS.length') === 29 &&
+    ok('批次C：成就共 31 个（批次 C 时 29 个＋批次 G9 卫冕成就 2 个）且 6 个新锚点判定正确（custom_first 与 craft 严格区分）',
+      bc.w.eval('ACHIEVEMENTS.length') === 31 &&
       bc.w.eval(`(function () { var by = {}; ACHIEVEMENTS.forEach(function (a) { by[a.id] = a; });
         return by.streak_10.check({ winStreak: 10 }) && by.money_10k.check({ money: 10000 }) &&
           by.custom_first.check({ customGear: [{ source: 'custom' }] }) && !by.custom_first.check({ customGear: [{ source: 'craft' }] }) &&
@@ -825,6 +1048,69 @@ async function suite(label, dir) {
         return S.buffs.promo === true && Math.round(S.mind) === 65 && S.money === 10000 - 680 &&
           promoLeftThisWeek() === 0 && S.sinkStats.promo.n === 1;
       })()`) === true);
+    // 【正式版批次 G9 短期】卫冕循环：挑战生成门槛/周限/作废 / 应战弹窗口径 / stage 6 卫冕呈现与 sink 推荐 / 新成就 / 老档兼容
+    ok('G9：挑战生成门槛（未登顶不生成；登顶后生成且挑战者为第 2~6 名具名角色、宣言非空）',
+      bc.w.eval(`(function () {
+        S = defaultState(); S.wins = 20; S.losses = 2; S.day = 35; S.rank = 2; ensureRoster();
+        var a = maybeDefenseChallenge();
+        S.rank = 1;
+        var b = maybeDefenseChallenge();
+        return a === null && !!b && !!ROSTER_BY_KEY[b.key] && b.rank >= 2 && b.rank <= 6 &&
+          defenseLine(b.key).length > 0 && !!S.defenseChallenge && S.defenseChallenge.key === b.key;
+      })()`) === true);
+    ok('G9：每周至多 1 场卫冕战（defenseWeek 为本周时不再生成新挑战）',
+      bc.w.eval(`(function () {
+        S.defenseChallenge = null; S.defenseWeek = weekOf(S.day);
+        return maybeDefenseChallenge() === null && S.defenseChallenge === null;
+      })()`) === true);
+    ok('G9：跌下第 1 名挑战作废（待应战挑战被清空）',
+      bc.w.eval(`(function () {
+        S.defenseWeek = 0; S.defenseChallenge = { key: 'opp_crimson', name: '薇拉', rank: 2, week: weekOf(S.day) };
+        S.rank = 3;
+        return maybeDefenseChallenge() === null && S.defenseChallenge === null;
+      })()`) === true);
+    ok('G9：应战弹窗口径（startDefense 打开模式弹窗、标题=卫冕战、sim 可见、不扣 AP、宣言上弹窗）',
+      bc.w.eval(`(function () {
+        S.rank = 1; S.ap = 6; S.defenseWeek = 0;
+        S.defenseChallenge = { key: 'opp_crimson', name: '薇拉', rank: 2, week: weekOf(S.day) };
+        var okStart = startDefense();
+        return okStart === true && S.ap === 6 && nextBattleDefense === true &&
+          document.getElementById('modeModal').classList.contains('open') &&
+          document.getElementById('modeTitle').textContent.includes('卫冕战') &&
+          document.querySelector('#modeModal [data-mode="sim"]').style.display === '' &&
+          document.getElementById('modeFoeLine').textContent.includes('薇拉');
+      })()`) === true);
+    bc.w.eval(`document.getElementById('btnCancelMode').click()`);
+    ok('G9：取消应战只清标记、挑战保留可再应战',
+      bc.w.eval('nextBattleDefense') === false && bc.w.eval('!!S.defenseChallenge') === true);
+    ok('G9：stage 6 呈现卫冕目标与冠军期 sink 推荐（卫冕战行 + 宣传造势/特训营/康复理疗三推荐）',
+      bc.w.eval(`(function () {
+        S.stage = 6; S.defenses = 1; S.defenseChallenge = null;
+        var items = stageProgressItems(6);
+        var html = stageProgressHTML();
+        return items.some(function (it) { return it.label === '卫冕战' && it.text.includes('1 / 3'); }) &&
+          html.includes('冠军期备战推荐') && html.includes('宣传造势') && html.includes('特训营') && html.includes('康复理疗');
+      })()`) === true);
+    ok('G9：新成就与卫冕计数对齐（defend_1/defend_3 与 stage 6 共用 defenses 计数）',
+      bc.w.eval(`(function () { var by = {}; ACHIEVEMENTS.forEach(function (a) { by[a.id] = a; });
+        return by.defend_1.check({ defenses: 1 }) && !by.defend_1.check({ defenses: 0 }) &&
+          by.defend_3.check({ defenses: 3 }) && !by.defend_3.check({ defenses: 2 }); })()`) === true);
+    // G9 老档兼容：删掉卫冕三字段的已登顶存档 → 读档补齐默认值、进游戏后挑战正常生成、零报错
+    const g9SeedObj = JSON.parse(saved);
+    delete g9SeedObj.defenses; delete g9SeedObj.defenseChallenge; delete g9SeedObj.defenseWeek;
+    g9SeedObj.rank = 1; g9SeedObj.wins = 30;
+    if (g9SeedObj.story) g9SeedObj.story.prologueDone = true; // 确保 enterGame 不被序章早退挡住卫冕补检钩子
+    const g9Load = await loadPage(origin, JSON.stringify(g9SeedObj));
+    const g9Diag = JSON.parse(g9Load.w.eval(`(function () {
+      var before = { d: S.defenses, c: S.defenseChallenge, w: S.defenseWeek };
+      enterGame();
+      return JSON.stringify({ before: before, afterChallenge: !!S.defenseChallenge, errs: window.__errs.length });
+    })()`));
+    ok('G9 老档兼容（无卫冕字段的登顶档读入后补齐 defenses=0 / defenseChallenge=null / defenseWeek=0，进游戏即生成挑战、零脚本错误）',
+      g9Diag.before.d === 0 && g9Diag.before.c === null && g9Diag.before.w === 0 &&
+      g9Diag.afterChallenge === true && g9Diag.errs === 0,
+      JSON.stringify(g9Diag));
+    g9Load.w.close();
     bc.w.close();
   } finally {
     srv.close();

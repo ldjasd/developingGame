@@ -2,7 +2,10 @@
 // jsdom 加载真实工程（不改源码）：多环境跑真实 tick 引擎，采集
 //   胜率 / 终局构成（koKind）/ 终结回合分布 / 平均回合 / 玩家命中恒1点占比 / score 差均值，
 // 并同环境跑现行 simulateBattle 采集胜率与 KO 率，供标定拟合与落地后对照。
-// 用法：node tests/ko-impl-verify.mjs [--n 300] [--envs br1,br10,br20,t1,t6,t12,match12,pow,spd,tec,weak,practice] [--simonly]
+// 用法：node tests/ko-impl-verify.mjs [--n 100] [--envs br1,br10,br20,t1,t6,t12,match12,pow,spd,tec,weak,practice] [--simonly]
+//       node tests/ko-impl-verify.mjs --fast   快速档：关键环境（br1,br10,t6,match12,spd,practice）× n=60（--n/--envs 可覆盖）
+// G0（2026-11-10）：默认 n 300→100；每环境开始/完成都用 writeSync 立即落盘打印，
+// 不再出现「全部跑完才有输出、超时零结果」（复测 S8）。
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -21,8 +24,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf('--' + name); return i >= 0 && args[i + 1] ? args[i + 1] : dflt; };
-const N = parseInt(opt('n', '300'), 10);
-const ENVS = opt('envs', 'br1,br10,br20,t6,t12,match12,pow,spd,tec,weak,practice').split(',');
+const FAST = args.includes('--fast');
+const N = parseInt(opt('n', FAST ? '60' : '100'), 10);
+const ENVS = opt('envs', FAST ? 'br1,br10,t6,match12,spd,practice' : 'br1,br10,br20,t6,t12,match12,pow,spd,tec,weak,practice').split(',');
+const say = (s) => { fs.writeSync(1, s + '\n'); }; // 同步写 stdout：被超时杀掉时已完成环境的数字也留得下来
 const WITH_SIM = !args.includes('--nosim');
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
@@ -201,6 +206,7 @@ try {
   const pct = (x, n) => (n ? Math.round(x / n * 1000) / 10 : 0);
   const out = {};
   for (const env of ENVS) {
+    say(`\n>>> 环境 ${env} 开始（n=${N}${FAST ? '，快速档' : ''}）…`);
     const t0 = Date.now();
     const e = w.eval(`__verify.runEngine(${JSON.stringify(env)}, ${N})`);
     const row = {
@@ -224,12 +230,12 @@ try {
       };
     }
     out[env] = row;
-    console.log(`\n### ${env}（引擎 n=${row.n} 未完=${row.unfinished}，${row.secs}s）胜率=${row.winPct}% 平均回合=${row.avgRound} R1终结=${row.r1EndPct}% 终结回合分布=${JSON.stringify(row.endRound)}`);
-    console.log(`    终局构成: ${Object.entries(row.kinds).map(([k, v]) => `${k}=${v}(${pct(v, row.n)}%)`).join('  ')}`);
-    console.log(`    有击倒对局=${row.downsFightsPct}% 玩家恒≤1点命中=${row.meOnesPct}% score差均值=${row.meanDiff}`);
-    if (row.sim) console.log(`    模拟: 胜率=${row.sim.winPct}%（差 ${row.sim.winDiff}pp） KO=${row.sim.koPct}% TKO=${row.sim.tkoPct}% 点数=${row.sim.ptsPct}%`);
+    say(`### ${env}（引擎 n=${row.n} 未完=${row.unfinished}，${row.secs}s）胜率=${row.winPct}% 平均回合=${row.avgRound} R1终结=${row.r1EndPct}% 终结回合分布=${JSON.stringify(row.endRound)}`);
+    say(`    终局构成: ${Object.entries(row.kinds).map(([k, v]) => `${k}=${v}(${pct(v, row.n)}%)`).join('  ')}`);
+    say(`    有击倒对局=${row.downsFightsPct}% 玩家恒≤1点命中=${row.meOnesPct}% score差均值=${row.meanDiff}`);
+    if (row.sim) say(`    模拟: 胜率=${row.sim.winPct}%（差 ${row.sim.winDiff}pp） KO=${row.sim.koPct}% TKO=${row.sim.tkoPct}% 点数=${row.sim.ptsPct}%`);
   }
-  console.log('\nJSON:' + JSON.stringify(out));
+  say('\nJSON:' + JSON.stringify(out));
   w.close();
 } finally {
   srv.close();

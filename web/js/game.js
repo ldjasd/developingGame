@@ -258,7 +258,13 @@
       var ri = 1;
       ranked.forEach(function (m) { if (ri === newRank) ri++; m.rank = ri; ri++; });
       S.rank = newRank;
-      if (newRank !== oldRank) dailyLog('本周排名重排：第 ' + oldRank + ' 名 → 第 ' + newRank + ' 名（池内选手一周成长后重排）。', newRank < oldRank ? 'good' : 'bad');
+      // 批次 G6（T10）：名次归因水位——记下本次重排时的胜场数，下次重排时胜场涨了即「当周获胜」
+      var wonSinceMark = (typeof S.rankMarkWins === 'number' && S.rankMarkWins >= 0) ? (S.wins > S.rankMarkWins) : false;
+      S.rankMarkWins = S.wins;
+      if (newRank !== oldRank) {
+        dailyLog('本周排名重排：第 ' + oldRank + ' 名 → 第 ' + newRank + ' 名（池内选手一周成长后重排）。', newRank < oldRank ? 'good' : 'bad');
+        if (newRank > oldRank && wonSinceMark) dailyLog('名次说明：这周你赢了比赛，名次却退了——不是你的战绩有问题：名次每周按全池选手的最新战绩与实力重算，其他选手这周赢球涨分时，名次会暂时被挤退。', 'dim');
+      }
     }
     /* Phase 4：反击方向 → 加成拳种（后闪→直拳 / 下闪→上勾 / 侧闪→摆拳） */
     var COUNTER_PREF = { back: 'straight', down: 'upper', side: 'hook' };
@@ -298,7 +304,14 @@
        60 后收益已降到 1/4 以下，实际可达区间约 80~100）。第 1 周属性都在 30 以下，早期数值一字未动。
        结算演出/预览试算都走 applyTrainingApply，保证「预览 = 实结」；心态效率修正仍在 doPlanTrain 后段按总增量另行应用。 */
     var ATTR_HARD_CAP = 100;
-    function trainGainFactor(v) { return v < 30 ? 1 : v < 60 ? 0.5 : v < 80 ? 0.25 : 0.125; }
+    /* 正式版批次 G1 后备杠杆（plan/02_METHODS G1 第 3 步授权：两层对手标定经两轮迭代仍不达标
+       时才可动训练）：迭代 1/2 的生涯复跑仍是 12 战全胜、R1 率 58~100%、点数 0（证据
+       research/g1_logs/iter1_career.log、iter2_career.log）。定因探针（probe_career.log）：
+       投入型打法第 1 周就把力量练到 38.5、W9 破 100（gear 生效值），每回合伤害 ≈ 21×力量，
+       对手标定的追赶速度结构性落后于训练复合增速。故递减曲线整体加深一档：
+       <20 全额（新手期不变）/ 20~39 ×0.45 / 40~59 ×0.22 / 60~79 ×0.12 / 80+ ×0.06，硬顶 100 不变。
+       旧曲线（批次 A）：<30 全额 / 30~59 ×0.5 / 60~79 ×0.25 / 80+ ×0.125。 */
+    function trainGainFactor(v) { return v < 20 ? 1 : v < 40 ? 0.45 : v < 60 ? 0.22 : v < 80 ? 0.12 : 0.06; }
     function applyTrainingApply(s, t) {
       var before = {};
       ATTRS.forEach(function (a) { before[a.key] = s.attrs[a.key]; });
@@ -325,6 +338,13 @@
     var SLOT_COUNT = 3;
     var SLOT_META_KEY = 'boxing-phase1-save-v1-meta';
     var SLOT_KEY_PREFIX = 'boxing-phase1-save-v1-slot';
+    /* 正式版批次 G4（存档安全四件套，方案来源 PortalReady 版本化存档，见 plan/02_METHODS.md G4 节）：
+       SAVE_VER = 当前存档结构版本。所有槽写入时必带 ver 字段；无 ver 字段的历史存档视为 ver 0。
+       读档/导入统一先跑 migrateSaveData() 逐级迁移到 SAVE_VER，再走原有结构校验与兼容补齐。
+       异常三态——JSON 损坏（corrupt）/ 结构无效（invalid）/ 版本高于当前（newer）——该槽进入
+       「锁定」：游戏自身绝不回写、不覆盖、不删除它（save()/切槽/复制/删除全部守卫），UI 明示异常
+       与原因，玩家只能导出原文，或经二次确认亲手清除后才能重新使用该槽。 */
+    var SAVE_VER = 1;
     var TEST_MONEY = 100000; // 测试档开局资金
     var ROUND_SECONDS = 45, ROUNDS = 3, TICK_MS = 500;
 
@@ -334,7 +354,7 @@
         day: 1, ap: 6, money: 100, stamina: 100, injury: 0, fame: 0, rank: 50,
         roster: buildRoster(50, 1), // 角色池：新档按名册顺序建池（玩家第 50 名，胡小桃候补）
         influence: 1, stage: 1, completedStages: [], winStreak: 0, champWinBase: null, titles: [], sponsor: null,
-        wins: 0, losses: 0, koWins: 0, lastBeaten: 0, achievements: {}, facedFoes: [], lastMatchDay: 0, deathFight: false, testMode: false,
+        wins: 0, losses: 0, koWins: 0, lastBeaten: 0, achievements: {}, facedFoes: [], lastMatchDay: 0, deathFight: false, testMode: false, rankMarkWins: -1,
         name: '小拳', mind: 60, scoutedForDay: 0,
         gear: { gloves: null, guard: null, boots: null, head: null, robe: null, wrist: null },
         owned: [], enh: {},
@@ -347,7 +367,8 @@
         appearance: { hair: 'ponytail', face: 'default', body: 'standard', outfit: 'default', lastDim: 'hair' },
         story: { prologueDone: false, seenEvents: [], affinity: { senior: 0, manager: 0, rival: 0, teammate: 0 }, dailyCd: {} }, // dailyCd＝修复批次 C 可重复日常冷却记录（老档由 storyState 兜底补）
         sparFights: 0, sparRival: 0, sparWeek: 0, sparCount: 0, sparByKey: {}, beatChamp: false, // 修复批次 C：约战计数与「正式赛击败伊芙琳」落盘（老档靠 load 默认合并兜底）
-        tutorial: { practiceDone: false, tips: [], goalDone: false, trainings: 0 }, // 新手期重构：练习赛/情境提示/首周目标（老存档读档时一律毕业，见 load 兼容段）
+        defenses: 0, defenseChallenge: null, defenseWeek: 0, // 正式版批次 G9 短期：卫冕循环（累计卫冕成功场次 / 待应战的挑战 {key,name,rank,week} / 上次卫冕战结算周——每周至多 1 场卫冕战；老档靠 load 默认合并＋清洗兜底）
+        tutorial: { practiceDone: false, tips: [], goalDone: false, trainings: 0, taught: [] }, // 新手期重构：练习赛/情境提示/首周目标（老存档读档时一律毕业，见 load 兼容段）；G5：taught＝战斗内即时教学已教过的概念 key
         attrs: { power: 10, endurance: 10, will: 10, speed: 10, accuracy: 10, footwork: 10, defense: 10, technique: 10 },
         punchExp: { jab: 0, straight: 0, hook: 0, upper: 0, body: 0 },
         logs: []
@@ -359,9 +380,17 @@
        老存档（无 tutorial 字段）读档时一律置为「已毕业」（见 load 兼容段），绝不触发任何新手流程；
        tutorialState() 的兜底同样按毕业处理——只有 defaultState() 的新档才带未完成的新手状态。 */
     function tutorialState() {
-      if (!S.tutorial || typeof S.tutorial !== 'object') S.tutorial = { practiceDone: true, tips: ['train', 'shop', 'match', 'status'], goalDone: true, trainings: 0 };
+      if (!S.tutorial || typeof S.tutorial !== 'object') S.tutorial = { practiceDone: true, tips: ['train', 'shop', 'match', 'status'], goalDone: true, trainings: 0, taught: ['guard', 'body', 'combo', 'trauma', 'counter', 'cmd'] };
       if (!Array.isArray(S.tutorial.tips)) S.tutorial.tips = [];
+      if (!Array.isArray(S.tutorial.taught)) S.tutorial.taught = [];
       return S.tutorial;
+    }
+    /* G5 教程关卡化：教学窗＝序章已走完、还没打过任何正式比赛（练习赛期间与首场正式赛都在窗内）。
+       战斗内即时教学（battle.js 的 jitTeach）只在此窗出现；打过首场正式赛后自动关闭，老玩家永不触发。 */
+    function teachWindow() {
+      if (S.testMode) return false;
+      if (!S.story || !S.story.prologueDone) return false;
+      return (S.wins + S.losses) === 0;
     }
     /* 练习赛待打判定：序章已走完、练习赛未打、且还没打过任何正式比赛（打过正式赛练习赛自动作废）。测试档不触发。 */
     function practicePending() {
@@ -741,7 +770,9 @@
       ];
       if (stageId === 6) return [
         influenceProgItem(5),
-        { label: '登顶后获胜', text: winsAfterChamp(S) + ' / 3' + (S.champWinBase === null || S.champWinBase === undefined ? '（尚未登顶）' : ''), pct: clamp(winsAfterChamp(S) / 3 * 100, 0, 100), done: winsAfterChamp(S) >= 3 }
+        { label: '登顶后获胜', text: winsAfterChamp(S) + ' / 3' + (S.champWinBase === null || S.champWinBase === undefined ? '（尚未登顶）' : ''), pct: clamp(winsAfterChamp(S) / 3 * 100, 0, 100), done: winsAfterChamp(S) >= 3 },
+        /* 正式版批次 G9 短期：卫冕场次目标与阶段 6 同屏呈现——计数与成就 defend_1/defend_3 共用 S.defenses；卫冕战胜利同为正式赛胜利、计入上方「登顶后获胜」，不另起一套计数 */
+        { label: '卫冕战', text: '卫冕成功 ' + (S.defenses || 0) + ' / 3 场' + (S.defenseChallenge ? '（挑战待应战：' + S.defenseChallenge.name + '）' : (S.rank === 1 ? '' : '（登顶后挑战者会上门）')), pct: clamp((S.defenses || 0) / 3 * 100, 0, 100), done: (S.defenses || 0) >= 3 }
       ];
       return [];
     }
@@ -754,6 +785,9 @@
           '<span class="pg-v' + (it.done ? ' done' : '') + '">' + it.text + (it.done ? ' ✓' : '') + '</span></div>' +
           '<div class="progbar"><i class="' + (it.done ? 'done' : '') + '" style="width:' + it.pct + '%"></i></div></div>';
       }).join('');
+      /* 正式版批次 G9 短期（plan T8）：冠军期 sink 与 stage 6 绑定呈现——康复理疗/特训营/宣传造势
+         以「阶段目标推荐」形式给出，只推荐、不强制消费，价格与数值一律不动。【新增文案·待用户审】 */
+      if (def.id === 6) html += '<p class="career-line">👑 <b>冠军期备战推荐</b>：卫冕战前去商店做一次<b>宣传造势</b>——下一场正式赛（含卫冕战）获胜奖金 ×' + PROMO_PRIZE_MUL + '；备战周买<b>特训营</b>充能，训练收益 +50% 把状态拉满；带伤别硬撑，去外出·医院做<b>康复理疗</b>（不耗 AP）先把伤压下去。花不花、花多少，都由你定。</p>';
       return html;
     }
     /* 检查并结算阶段完成：可连环完成多个；奖金立即到账，祝贺窗排队等空闲时弹 */
@@ -806,15 +840,70 @@
     function weekOf(day) { return Math.ceil(day / 7); }
     function isMatchDay(day) { return day % 7 === 0; }
 
+    /* ================= G4：版本迁移链 + 异常档状态判定 =================
+       MIGRATIONS[v] = 把 ver=v 的存档对象升到 v+1 的纯函数。后续结构变更只许在链尾追加
+       一级并把 SAVE_VER +1，禁止改动已有一级（老档会逐级穿过全部历史迁移）。 */
+    var MIGRATIONS = {
+      0: function (d) { // ver0（无 ver 字段）→ ver1：v1 与 v0 结构同构，本级只补版本号，字段与值一律原样保留
+        var out = {}; for (var k in d) out[k] = d[k]; out.ver = 1; return out;
+      }
+    };
+    function saveVerOf(d) { // 存档对象自报版本：ver 缺失/非法一律视为 0（历史存档口径）
+      return (d && typeof d.ver === 'number' && isFinite(d.ver) && d.ver >= 0) ? Math.floor(d.ver) : 0;
+    }
+    function migrateSaveData(d) { // 逐级迁移到 SAVE_VER；返回 { ok:true, data } 或 { ok:false, reason:'newer'|'invalid' }
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return { ok: false, reason: 'invalid' };
+      var v = saveVerOf(d);
+      if (v > SAVE_VER) return { ok: false, reason: 'newer' };
+      var out = d;
+      while (v < SAVE_VER) {
+        var step = MIGRATIONS[v];
+        if (!step) return { ok: false, reason: 'invalid' };
+        out = step(out); v++;
+      }
+      return { ok: true, data: out };
+    }
+    function saveRawStatus(raw) { // 存档原文状态：empty / ok / locked（reason: corrupt|newer|invalid）——全部锁定与守卫判定的唯一出处
+      if (!raw) return { state: 'empty' };
+      var d;
+      try { d = JSON.parse(raw); } catch (e) { return { state: 'locked', reason: 'corrupt' }; }
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return { state: 'locked', reason: 'invalid' };
+      if (saveVerOf(d) > SAVE_VER) return { state: 'locked', reason: 'newer' }; // 版本比当前游戏还新：旧构建绝不解释、绝不覆盖
+      if (typeof d.day !== 'number' || !d.attrs || typeof d.attrs !== 'object') return { state: 'locked', reason: 'invalid' }; // 与 load() 同一校验口径
+      return { state: 'ok', data: d };
+    }
+    function slotStatus(n) { // 某槽（1~3）的状态：当前槽读 SAVE_KEY、非当前槽读暂存位（原始存储位置见多存档槽区段不变量）
+      return saveRawStatus(slotRaw(n));
+    }
+    function lockReasonText(reason) {
+      return reason === 'corrupt' ? '数据损坏，无法读取'
+        : reason === 'newer' ? '版本比当前游戏更新，旧版本无法读取'
+        : '数据结构无效';
+    }
+    function currentSaveLocked() { // 当前槽（SAVE_KEY）的已存原文是否处于异常锁定（save() 的回写守卫）
+      var raw = null;
+      try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return false; }
+      return saveRawStatus(raw).state === 'locked';
+    }
+    var saveSessionLocked = false; // 会话兜底：切槽时目标原文通过状态判定但 load() 深层校验仍失败 → 本会话内同样禁止回写（load() 成功/重置当前槽时解除）
+
     function save() {
-      try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* 存储不可用时静默降级 */ }
+      try {
+        if (saveSessionLocked || currentSaveLocked()) return; // G4 守卫：当前槽原文异常锁定时绝不回写（防默认新档/日常自动存档把坏档原文冲掉，原文保留待玩家导出/亲手清除）
+        var out = {}; for (var k in S) out[k] = S[k]; out.ver = SAVE_VER; // 写入必带当前版本号
+        localStorage.setItem(SAVE_KEY, JSON.stringify(out));
+      } catch (e) { /* 存储不可用时静默降级 */ }
     }
     function load() {
       try {
         var raw = localStorage.getItem(SAVE_KEY);
         if (!raw) return false;
         var data = JSON.parse(raw);
-        if (!data || typeof data.day !== 'number' || !data.attrs) return false;
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        var mig = migrateSaveData(data); // G4：先逐级迁移（版本过高在此被拒，坏档原文不受影响）
+        if (!mig.ok) return false;
+        data = mig.data;
+        if (typeof data.day !== 'number' || !data.attrs) return false;
         S = Object.assign(defaultState(), data);
         S.attrs = Object.assign(defaultState().attrs, data.attrs);
         S.punchExp = Object.assign(defaultState().punchExp, data.punchExp);
@@ -878,7 +967,8 @@
         if (!(typeof S.lastBeaten === 'number' && S.lastBeaten > 0)) S.lastBeaten = (typeof S.bestBeaten === 'number' && S.bestBeaten > 0) ? S.bestBeaten : ((S.wins > 0) ? rosterRatingFor(clamp(S.rank + 3, 1, 50), weekOf(S.day)) : 0);
         if (S.champWinBase !== null && typeof S.champWinBase !== 'number') S.champWinBase = null;
         if (S.sponsor && !sponsorById(S.sponsor)) S.sponsor = null;
-        if (typeof S.deathFight !== 'boolean') S.deathFight = false; // TKO 死战设置：老存档默认关
+        if (typeof S.deathFight !== 'boolean') S.deathFight = false; // TKO 死战开关：老存档默认关
+        if (typeof S.rankMarkWins !== 'number' || isNaN(S.rankMarkWins) || S.rankMarkWins < -1) S.rankMarkWins = -1; // 批次 G6：名次归因的胜场水位（-1=未建立水位，老存档默认）
         if (typeof S.testMode !== 'boolean') S.testMode = false; // 测试档标识：老存档默认非测试档
         // Phase 6 老存档兼容：缺外观字段时回落到 v8 默认外观（高马尾 / 默认脸 / 标准体型 / 默认服装），非法值同样回落
         S.appearance = normalizeAppearance(data.appearance);
@@ -898,13 +988,14 @@
         }
         // 新手期重构·老存档兼容：无 tutorial 字段的旧档一律视为已「毕业」——不弹练习赛邀请、不出情境提示、不显示首周目标，老存档完全不受影响
         if (!data.tutorial || typeof data.tutorial !== 'object') {
-          S.tutorial = { practiceDone: true, tips: ['train', 'shop', 'match', 'status'], goalDone: true, trainings: 0 };
+          S.tutorial = { practiceDone: true, tips: ['train', 'shop', 'match', 'status'], goalDone: true, trainings: 0, taught: ['guard', 'body', 'combo', 'trauma', 'counter', 'cmd'] };
         } else {
           S.tutorial = {
             practiceDone: data.tutorial.practiceDone === true,
             tips: Array.isArray(data.tutorial.tips) ? data.tutorial.tips.filter(function (x) { return typeof x === 'string'; }) : [],
             goalDone: data.tutorial.goalDone === true,
-            trainings: (typeof data.tutorial.trainings === 'number' && data.tutorial.trainings > 0) ? Math.floor(data.tutorial.trainings) : 0
+            trainings: (typeof data.tutorial.trainings === 'number' && data.tutorial.trainings > 0) ? Math.floor(data.tutorial.trainings) : 0,
+            taught: Array.isArray(data.tutorial.taught) ? data.tutorial.taught.filter(function (x) { return typeof x === 'string'; }) : [] // G5：旧档无 taught 字段时从空起（仍在教学窗内的半新档会在首场正式赛补上即时教学，已打过的档由 teachWindow 的战绩条件关窗）
           };
         }
         // Phase 9 老存档兼容：成就表缺失/非法时补 {}（只保留已知成就 id 的对象条目）；累计 KO 胜场计数器缺失时从 0 起算（历史 KO 数无从追溯）
@@ -916,6 +1007,12 @@
         });
         if (typeof S.koWins !== 'number' || isNaN(S.koWins) || S.koWins < 0) S.koWins = 0;
         S.koWins = Math.floor(S.koWins);
+        // 正式版批次 G9 短期兼容：卫冕循环字段缺失/非法时补齐（老档从未卫冕过＝计数 0、无待应战挑战，历史无从追溯；挑战对象必须是名册内具名角色，否则作废）
+        if (typeof S.defenses !== 'number' || isNaN(S.defenses) || S.defenses < 0) S.defenses = 0;
+        S.defenses = Math.floor(S.defenses);
+        if (typeof S.defenseWeek !== 'number' || isNaN(S.defenseWeek) || S.defenseWeek < 0) S.defenseWeek = 0;
+        S.defenseWeek = Math.floor(S.defenseWeek);
+        if (!S.defenseChallenge || typeof S.defenseChallenge !== 'object' || Array.isArray(S.defenseChallenge) || !ROSTER_BY_KEY[S.defenseChallenge.key]) S.defenseChallenge = null;
         // D3 老存档兼容：对手名鉴「已交手」记录缺失/非法时补 []（仅展示用，历史交手无从追溯，从读档后开始记录）
         if (!Array.isArray(S.facedFoes)) S.facedFoes = [];
         S.facedFoes = S.facedFoes.filter(function (x) { return typeof x === 'string'; });
@@ -923,6 +1020,7 @@
         if (!Array.isArray(data.roster) || !rosterValid(S.roster)) S.roster = buildRoster(S.rank, weekOf(S.day));
         // Phase 5 深化：已拥有的全部装备款式补登记进图鉴（此前图鉴只登记拳套；强化等级与图鉴互不影响）
         S.owned.forEach(function (id) { var g1 = gearById(id); if (g1) registerDex(g1); });
+        saveSessionLocked = false; // G4：读档成功即解除会话兜底锁
         return true;
       } catch (e) { return false; }
     }
@@ -971,6 +1069,8 @@
       return def ? def.name : '初出茅庐';
     }
     function slotSummaryText(n) {
+      var st = slotStatus(n);
+      if (st.state === 'locked') return '⚠ 存档异常（' + lockReasonText(st.reason) + '），已锁定保护'; // G4：异常槽在任何摘要里都不许伪装成空槽
       var d = slotData(n);
       if (!d) return '空';
       return '第 ' + weekOf(d.day) + ' 周 · Day ' + d.day + ' · 排名第 ' + (d.rank || 50) + ' 名 · 战绩 ' + (d.wins || 0) + ' 胜-' + (d.losses || 0) + ' 负 · 金钱 ¥' + (d.money || 0) + ' · 阶段：' + slotStageName(d) + (d.testMode ? ' · 测试档' : '');
@@ -982,7 +1082,9 @@
       n = Math.floor(n);
       if (!(n >= 1 && n <= SLOT_COUNT) || n === currentSlot()) return;
       if (slotsLocked()) { toast('测试档进行中，不能切换存档槽（先恢复主存档）'); return; }
-      save(); // 先把内存里的最新进度落进 SAVE_KEY，再交换
+      var tgtSt = slotStatus(n); // G4 守卫：异常锁定槽不能切入（切入必然要在其原文之上开始新档＝变相覆盖）
+      if (tgtSt.state === 'locked') { toast('存档槽 ' + n + ' 的存档异常（' + lockReasonText(tgtSt.reason) + '），已锁定：请先在存档屏导出原文或清除该槽'); return; }
+      save(); // 先把内存里的最新进度落进 SAVE_KEY，再交换（当前槽若本身异常锁定，save() 自动跳过、原文随交换原样进暂存位保留）
       var cur = currentSlot(), tgtRaw = null;
       try {
         var curRaw = localStorage.getItem(SAVE_KEY);
@@ -1002,7 +1104,10 @@
         checkAchievements(true); // 切到的若是老存档，成就追溯补登记（与恢复主存档同口径）
       } else {
         S = defaultState();
-        if (tgtRaw) dailyLog('存档槽 ' + n + ' 的存档读取失败，已在该槽开启一个正常新档（其他槽不受影响）。', 'bad');
+        if (tgtRaw) { // G4：状态判定通过但深层校验失败的原文同样按异常锁定处理——不覆盖、提示导出/清除（saveSessionLocked 已封住本会话回写）
+          saveSessionLocked = true;
+          dailyLog('存档槽 ' + n + ' 的存档读取失败，该档已按异常存档锁定保护：不会被新进度覆盖，请到存档屏导出原文或清除该槽后再使用（其他槽不受影响）。', 'bad');
+        }
         else dailyLog('已切换到存档槽 ' + n + '（空槽）：新的生涯开始了。从地区新人赛打起，一步步往上走。', 'dim');
       }
       renderDailyLog();
@@ -1029,6 +1134,8 @@
       n = Math.floor(n);
       if (!(n >= 1 && n <= SLOT_COUNT) || n === currentSlot()) return;
       if (slotsLocked()) { toast('测试档进行中，不能复制存档槽（先恢复主存档）'); return; }
+      var tgtSt = slotStatus(n); // G4 守卫：异常锁定槽不许被复制覆盖（先导出/清除再用）
+      if (tgtSt.state === 'locked') { toast('存档槽 ' + n + ' 的存档异常（' + lockReasonText(tgtSt.reason) + '），已锁定，不能覆盖保存'); return; }
       save();
       try {
         var raw = localStorage.getItem(SAVE_KEY);
@@ -1058,6 +1165,7 @@
       n = Math.floor(n);
       if (!(n >= 1 && n <= SLOT_COUNT) || n === currentSlot()) return;
       if (slotsLocked()) { toast('测试档进行中，不能删除存档槽（先恢复主存档）'); return; }
+      if (slotStatus(n).state === 'locked') { toast('存档槽 ' + n + ' 是异常锁定存档，请用异常卡上的「清除异常存档」处理'); return; } // G4：异常档只许走显式清除流程
       try { localStorage.removeItem(slotKey(n)); } catch (e) { toast('删除失败：存储不可用'); return; }
       dailyLog('已删除存档槽 ' + n + ' 的存档。', 'dim');
       renderSaveSlots();
@@ -1077,12 +1185,158 @@
         onOk: function () { deleteSlot(n); }
       });
     }
+    /* ================= G4：异常档清除 + 导出/导入（设置屏与存档屏共用） =================
+       清除是异常原文唯一允许被删除的路径：必须玩家在异常卡上点「清除异常存档」并二次确认，
+       游戏自身（自动存档/切槽/复制/普通删除）永不触碰锁定槽。导出对任何槽可用（锁定槽导出的
+       正是异常原文，供留档/报障）；导入走与读档同一条迁移＋校验链，被拒时给出原因类别且绝不
+       动目标槽现有内容。 */
+    function clearLockedSlot(n) { // 实际清除（确认框在 confirmClearLockedSlot）
+      n = Math.floor(n);
+      if (!(n >= 1 && n <= SLOT_COUNT)) return;
+      if (slotStatus(n).state !== 'locked') return; // 只处理异常锁定槽，正常槽不走这里
+      try {
+        if (n === currentSlot()) { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(slotKey(n)); saveSessionLocked = false; }
+        else localStorage.removeItem(slotKey(n));
+      } catch (e) { toast('清除失败：存储不可用'); return; }
+      dailyLog('已清除存档槽 ' + n + ' 的异常存档（经你确认后删除），该槽可以重新使用了。', 'dim');
+      renderSaveSlots();
+      render();
+      toast('存档槽 ' + n + ' 的异常存档已清除');
+    }
+    function confirmClearLockedSlot(n) {
+      var st = slotStatus(n);
+      if (st.state !== 'locked') return;
+      askConfirm({
+        title: '清除存档槽 ' + n + ' 的异常存档？',
+        lines: [
+          ['异常原因', lockReasonText(st.reason)],
+          ['当前状态', '原文被锁定保护中：游戏不会自动覆盖或删除它']
+        ],
+        note: '清除后该槽变为空槽、可以重新使用，被清除的原文无法恢复。建议先点「导出原文」留一份备份再清除。',
+        okText: '确认清除',
+        onOk: function () { clearLockedSlot(n); }
+      });
+    }
+    function exportSaveText(n) { // 某槽可导出的存档文本：当前槽先落盘（锁定中则 save() 自动跳过，导出的就是异常原文）；空槽返回 null
+      n = Math.floor(n);
+      if (!(n >= 1 && n <= SLOT_COUNT)) return null;
+      if (n === currentSlot()) save();
+      return slotRaw(n);
+    }
+    function importSaveToSlot(n, text) { // 导入核心（UI 与冒烟共用）：全程先校验后写入；返回 { ok:true, current } 或 { ok:false, reason }
+      n = Math.floor(n);
+      if (!(n >= 1 && n <= SLOT_COUNT)) return { ok: false, reason: 'badslot' };
+      if (slotsLocked()) return { ok: false, reason: 'testlock' }; // 测试档期间与切槽同口径锁定
+      if (slotStatus(n).state === 'locked') return { ok: false, reason: 'locked' }; // 异常槽先导出/清除，不许导入覆盖
+      if (typeof text !== 'string' || !text.trim()) return { ok: false, reason: 'empty' };
+      var d;
+      try { d = JSON.parse(text); } catch (e) { return { ok: false, reason: 'corrupt' }; }
+      var mig = migrateSaveData(d); // 与读档同一条迁移链：旧版本自动逐级升到当前版本
+      if (!mig.ok) return { ok: false, reason: mig.reason }; // 'newer' | 'invalid'
+      d = mig.data;
+      if (typeof d.day !== 'number' || !d.attrs || typeof d.attrs !== 'object') return { ok: false, reason: 'invalid' };
+      var raw = JSON.stringify(d); // 落盘的是迁移后的当前版本文本
+      try {
+        if (n === currentSlot()) localStorage.setItem(SAVE_KEY, raw);
+        else localStorage.setItem(slotKey(n), raw);
+      } catch (e) { return { ok: false, reason: 'storage' }; }
+      return { ok: true, current: n === currentSlot() };
+    }
+    function importReasonText(reason) {
+      return {
+        empty: '没有可导入的内容（文本为空）', corrupt: '文本不是有效的存档（JSON 损坏）',
+        newer: '这个存档的版本比当前游戏更新，无法导入', invalid: '这个存档的数据结构无效',
+        locked: '目标槽是异常锁定存档，请先导出原文并清除后再导入', badslot: '目标槽无效',
+        testlock: '测试档进行中，不能导入存档（先恢复主存档）', storage: '写入失败：浏览器存储不可用'
+      }[reason] || '导入失败';
+    }
+    /* ---- 导出/导入弹窗（设置屏入口；异常卡的「导出原文」也走导出弹窗） ---- */
+    var ioSlot = 1; // 导出/导入弹窗当前选中的槽
+    function ioSlotBtnsHtml() {
+      return [1, 2, 3].map(function (n) {
+        var st = slotStatus(n);
+        var label = st.state === 'locked' ? '异常锁定' : (st.state === 'empty' ? '空' : 'Day ' + st.data.day);
+        return '<button type="button" class="io-slot-btn' + (n === ioSlot ? ' active' : '') + '" data-io-slot="' + n + '">槽 ' + n + ' · ' + label + '</button>';
+      }).join('');
+    }
+    function bindIoSlotBtns(boxId, onPick) {
+      var box = $(boxId); if (!box) return;
+      box.innerHTML = ioSlotBtnsHtml();
+      Array.prototype.forEach.call(box.querySelectorAll('[data-io-slot]'), function (b) {
+        b.addEventListener('click', function () { ioSlot = parseInt(b.getAttribute('data-io-slot'), 10); onPick(); });
+      });
+    }
+    function openExportModal(n) {
+      ioSlot = (n >= 1 && n <= SLOT_COUNT) ? Math.floor(n) : currentSlot();
+      refreshExportModal();
+      $('saveExportModal').classList.add('open');
+    }
+    function refreshExportModal() {
+      bindIoSlotBtns('exportSlotBtns', refreshExportModal);
+      var t = exportSaveText(ioSlot);
+      $('exportText').value = t || '';
+      $('exportMsg').textContent = t
+        ? '槽 ' + ioSlot + ' 的存档文本（' + t.length + ' 字符）。复制保存到安全的地方，或下载为文件；换浏览器/设备时用「导入存档」贴回即可。'
+        : '槽 ' + ioSlot + ' 目前没有存档可导出。';
+    }
+    function refreshImportSlotBtns() { bindIoSlotBtns('importSlotBtns', refreshImportSlotBtns); }
+    function openImportModal() {
+      ioSlot = currentSlot();
+      $('importText').value = '';
+      $('importMsg').textContent = '选择目标槽，粘贴存档文本或选文件读入，再点「导入到该槽」。导入前会走与读档相同的版本迁移与校验，校验不过会说明原因且不改动现有存档。';
+      refreshImportSlotBtns();
+      $('saveImportModal').classList.add('open');
+    }
+    function runImportFromModal() {
+      var text = $('importText').value;
+      var st = slotStatus(ioSlot);
+      if (st.state === 'ok') { // 目标槽已有正常存档：覆盖必须经玩家确认（导入核心本身只负责校验与写入）
+        askConfirm({
+          title: '导入并覆盖存档槽 ' + ioSlot + '？',
+          lines: [['目标槽现状', slotSummaryText(ioSlot)], ['导入后', '被导入的存档将成为该槽的进度']],
+          note: '被覆盖的进度无法恢复。只想留备份的话，先把目标槽导出一份。',
+          okText: '覆盖导入',
+          onOk: function () { finishImport(text); }
+        });
+        return;
+      }
+      finishImport(text); // 空槽直接导入；异常锁定槽由导入核心拒绝并给出原因
+    }
+    function finishImport(text) {
+      var target = ioSlot;
+      var res = importSaveToSlot(target, text);
+      if (!res.ok) { $('importMsg').textContent = '✕ 导入失败：' + importReasonText(res.reason) + '（现有存档未受影响）'; return; }
+      $('saveImportModal').classList.remove('open');
+      if (res.current) { // 导入到当前槽：走既有读档路径立即生效（迁移＋兼容补齐都在 load() 内）
+        leaveBattleToDaily();
+        storyQueue = []; curStory = null; proState = null;
+        if (load()) { dailyLog('已导入存档到当前槽 ' + target + '：回到 Day ' + S.day + '，排名第 ' + S.rank + ' 名，战绩 ' + S.wins + ' 胜 · ' + S.losses + ' 负。', 'good'); checkAchievements(true); }
+        renderDailyLog(); render();
+        toast('导入成功，已切换到导入的存档');
+      } else {
+        dailyLog('已导入存档到存档槽 ' + target + '（' + slotSummaryText(target) + '）。', 'good');
+        renderDailyLog();
+        toast('导入成功：存档槽 ' + target);
+      }
+      renderSaveSlots();
+    }
+
     function renderSaveSlots() { // 渲染存档屏的 3 张槽卡（当前槽摘要读内存 S，保证与界面一致）
       var box = $('saveSlotList'); if (!box) return;
       var cur = currentSlot(), locked = slotsLocked();
       var note = $('saveTestNote'); if (note) note.style.display = locked ? '' : 'none';
       box.innerHTML = [1, 2, 3].map(function (n) {
         var isCur = n === cur;
+        var st = slotStatus(n); // G4：异常锁定槽优先渲染异常卡（不伪装成空槽/正常档）
+        if (st.state === 'locked') {
+          return '<div class="save-slot locked' + (isCur ? ' current' : '') + '">' +
+            '<div class="save-slot-head"><span class="save-slot-name"><span class="save-slot-no">SLOT ' + n + '</span>存档槽 ' + n + '</span>' + (isCur ? '<span class="save-slot-cur">当前槽</span>' : '') + '</div>' +
+            '<div class="save-slot-abnormal">⚠ 存档异常：' + lockReasonText(st.reason) + '<br />原文已被锁定保护——游戏不会自动覆盖或删除它。可以导出原文留档；确认不再需要后，可清除该槽再重新使用。</div>' +
+            '<div class="save-slot-btns">' +
+            '<button class="sv-btn-load" data-slot-export="' + n + '">导出原文</button>' +
+            '<button class="sv-btn-del" data-slot-clear="' + n + '"' + (locked ? ' disabled' : '') + '>清除异常存档</button>' +
+            '</div></div>';
+        }
         var d = isCur ? S : slotData(n); // 当前槽读内存 S、其余槽读暂存解析（与旧摘要同一数据源）
         var has = isCur || !!d;
         var body = d
@@ -1115,6 +1369,12 @@
       });
       Array.prototype.forEach.call(box.querySelectorAll('[data-slot-delete]'), function (b) {
         b.addEventListener('click', function () { confirmDeleteSlot(parseInt(b.getAttribute('data-slot-delete'), 10)); });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-slot-export]'), function (b) {
+        b.addEventListener('click', function () { openExportModal(parseInt(b.getAttribute('data-slot-export'), 10)); });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-slot-clear]'), function (b) {
+        b.addEventListener('click', function () { confirmClearLockedSlot(parseInt(b.getAttribute('data-slot-clear'), 10)); });
       });
     }
     function openSaveSlots() { renderSaveSlots(); showScene('saves'); } // 界面架构批：存档由弹窗正式化为独立屏
@@ -1158,9 +1418,14 @@
       var btn = $('btnTitleContinue'); if (btn) btn.disabled = !hadSave;
       // 批次 E：titlePortrait 是常隐元素（无任何样式/脚本会显示它），不再在标题屏给它塞立绘 src（省 302KB 首访流量）；立绘本体由状态屏 portraitImg 懒加载
       var info = $('titleSlotInfo');
-      if (info) info.textContent = hadSave
-        ? '存档槽 ' + currentSlot() + '：' + slotSummaryText(currentSlot())
-        : '暂无存档——点「新的开始」，从街机厅的测力机开始你的生涯。';
+      if (info) {
+        var curSt = slotStatus(currentSlot()); // G4：当前槽异常锁定时，标题屏如实告知而不是伪装成「暂无存档」
+        info.textContent = hadSave
+          ? '存档槽 ' + currentSlot() + '：' + slotSummaryText(currentSlot())
+          : (curSt.state === 'locked'
+            ? '存档槽 ' + currentSlot() + ' 的存档异常（' + lockReasonText(curSt.reason) + '），原文已锁定保护、不会被覆盖。可在「读取存档」里导出原文；确认不要了，点「新的开始」清除它并重开。'
+            : '暂无存档——点「新的开始」，从街机厅的测力机开始你的生涯。');
+      }
     }
     function enterGame() {
       gameEntered = true;
@@ -1168,9 +1433,25 @@
       showScene('daily');
       if (S.story && !S.story.prologueDone) { startPrologue(); return; }
       checkStoryMilestones(); // 修复批次 C：门槛放宽后老档被卡住的剧情节点（前 25/前 10）在进游戏时兜底补排队（与读档追溯 flush 同点位）
+      if (typeof maybeDefenseChallenge === 'function') maybeDefenseChallenge(); // 正式版批次 G9 短期：已登顶的老档进游戏即补检卫冕挑战（生成/作废判定收口在 battle.js）
       showNextPendingModal(); // 读档追溯的阶段/图鉴祝贺窗，进游戏后再弹（不在标题屏上叠罗汉）
     }
     function startNewGame() {
+      // G4：当前槽是异常锁定档（启动时 load() 失败、titleHadSave=false）——开始新生涯必须先经玩家确认清除异常原文（这是显式清除入口之一）
+      var curSt = slotStatus(currentSlot());
+      if (!titleHadSave && curSt.state === 'locked') {
+        askConfirm({
+          title: '存档槽 ' + currentSlot() + ' 的存档异常，清除并开始新生涯？',
+          lines: [
+            ['异常原因', lockReasonText(curSt.reason)],
+            ['当前状态', '原文被锁定保护中，游戏没有动过它']
+          ],
+          note: '开始新生涯会把这份异常原文清除，无法恢复。想保留的话，先取消，去「读取存档」对该槽点「导出原文」。',
+          okText: '清除并开始新生涯',
+          onOk: function () { doResetCurrentSlot(); }
+        });
+        return;
+      }
       // 只认启动时捕获的 titleHadSave：init 的 render() 已把默认档写进 SAVE_KEY，slotData 区分不了「真旧档」
       if (titleHadSave) {
         askConfirm({
@@ -1189,6 +1470,7 @@
     }
     function doResetCurrentSlot() { // 「重新开始」的实际执行（顶部按钮经 resetModal 确认、标题屏经确认框、设置危险区经双重确认共用）
       try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(slotKey(currentSlot())); } catch (e) {}
+      saveSessionLocked = false; // G4：显式重置即解除会话兜底锁（原文已经玩家确认删除，不再需要保护）
       clearInterval(battleTimer); B = null;
       S = defaultState();
       pendingStageNotice = []; pendingStageReward = 0;
@@ -1313,13 +1595,14 @@
     if (btnSparEl) btnSparEl.addEventListener('click', function () { renderSparList(); var m = $('sparModal'); if (m) m.classList.add('open'); });
     var btnCancelSparEl = $('btnCancelSpar');
     if (btnCancelSparEl) btnCancelSparEl.addEventListener('click', function () { var m = $('sparModal'); if (m) m.classList.remove('open'); });
-    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); if (nextBattleSpar) { S.ap = Math.min(6, S.ap + SPAR_AP_COST); save(); render(); } nextBattlePractice = false; nextBattleSpar = false; var sb = document.querySelector('#modeModal [data-mode="sim"]'); if (sb) sb.style.display = ''; var mt2 = $('modeTitle'); if (mt2) mt2.textContent = '选择战斗模式'; setScene('gym'); }); // A1：取消赛前弹窗复位拳馆；新手期重构：取消练习赛模式选择须清练习标记，防误标下一场正式赛；修复批次 C：约战取消＝全额退回 2 AP（未开打不算发起，与全工程确认框「取消不结算」口径一致），同时复原借用弹窗时改掉的标题/sim 按钮
+    $('btnCancelMode').addEventListener('click', function () { $('modeModal').classList.remove('open'); if (nextBattleSpar) { S.ap = Math.min(6, S.ap + SPAR_AP_COST); save(); render(); } nextBattlePractice = false; nextBattleSpar = false; nextBattleDefense = false; /* 正式版批次 G9 短期：卫冕战取消只清标记（不扣 AP、无退款项），挑战本身保留、可再应战 */ var sb = document.querySelector('#modeModal [data-mode="sim"]'); if (sb) sb.style.display = ''; var mt2 = $('modeTitle'); if (mt2) mt2.textContent = '选择战斗模式'; setScene('gym'); }); // A1：取消赛前弹窗复位拳馆；新手期重构：取消练习赛模式选择须清练习标记，防误标下一场正式赛；修复批次 C：约战取消＝全额退回 2 AP（未开打不算发起，与全工程确认框「取消不结算」口径一致），同时复原借用弹窗时改掉的标题/sim 按钮
     /* 新手期重构：据点练习赛入口（startPractice 在 battle.js）/ 情境提示条关闭 / 设置·帮助区 */
     $('btnPractice').addEventListener('click', function () { startPractice(); });
     $('btnTipOk').addEventListener('click', hideTip);
     $('btnSettingsHelp').addEventListener('click', function () { $('helpModal').classList.add('open'); });
     $('btnResetTips').addEventListener('click', function () {
       tutorialState().tips = [];
+      tutorialState().taught = []; // G5：战斗内即时教学一并重置（仍须在教学窗内才会重新触发）
       save();
       toast('新手提示已重置：下次进入训练 / 商店 / 比赛 / 状态时会重新提示');
     });
@@ -1528,6 +1811,8 @@
       var raw = null;
       try { raw = localStorage.getItem(BACKUP_KEY); } catch (e) {}
       if (!raw) { toast('没有可恢复的主存档备份'); render(); return; }
+      var bkSt = saveRawStatus(raw); // G4 守卫：备份原文若异常锁定（损坏/版本过新），不许写入当前槽更不许删备份——保留原文待处理
+      if (bkSt.state === 'locked') { toast('主存档备份异常（' + lockReasonText(bkSt.reason) + '），已保留备份原文，未做任何改动'); render(); return; }
       leaveBattleToDaily();
       try {
         localStorage.setItem(SAVE_KEY, raw);
@@ -1556,6 +1841,8 @@
     $('btnTitleSaves').addEventListener('click', openSaveSlots);
     $('btnTitleGallery').addEventListener('click', function () { openGallery(); });
     $('btnTitleSettings').addEventListener('click', function () { gotoScene('settings'); });
+    $('btnTitleFullscreen').addEventListener('click', toggleFullscreen); // 批次 G6：标题屏全屏
+    $('btnSettingsFullscreen').addEventListener('click', toggleFullscreen); // 批次 G6：设置屏全屏
     Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (b) {
       b.addEventListener('click', function () { gotoScene(b.getAttribute('data-nav')); });
     });
@@ -1583,6 +1870,43 @@
     $('setReduceMotion').addEventListener('click', function () { setSetting('reduceMotion', !SETTINGS.reduceMotion); toast(SETTINGS.reduceMotion ? '已减少动效：过渡与残影动画关闭' : '动效已恢复'); });
     $('setMusicVol').addEventListener('input', function () { setSetting('musicVol', parseInt($('setMusicVol').value, 10) || 0); });
     $('setSfxVol').addEventListener('input', function () { setSetting('sfxVol', parseInt($('setSfxVol').value, 10) || 0); });
+    // G4：设置屏「存档备份」——导出/导入弹窗接线
+    $('btnExportSave').addEventListener('click', function () { openExportModal(currentSlot()); });
+    $('btnImportSave').addEventListener('click', function () { openImportModal(); });
+    $('btnExportClose').addEventListener('click', function () { $('saveExportModal').classList.remove('open'); });
+    $('btnImportClose').addEventListener('click', function () { $('saveImportModal').classList.remove('open'); });
+    $('btnExportCopy').addEventListener('click', function () {
+      var ta = $('exportText');
+      if (!ta.value) { toast('该槽没有存档可复制'); return; }
+      var done = function () { toast('存档文本已复制，去安全的地方粘贴保存'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value).then(done, function () { ta.select(); toast('已选中文本，请手动复制'); });
+      else { ta.select(); toast('已选中文本，请手动复制'); }
+    });
+    $('btnExportDownload').addEventListener('click', function () {
+      var t = $('exportText').value;
+      if (!t) { toast('该槽没有存档可下载'); return; }
+      try {
+        var blob = new Blob([t], { type: 'application/json' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'heart-left-fist-right-save-slot' + ioSlot + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+        toast('存档文件已下载');
+      } catch (e) { toast('下载不可用，请改用复制文本'); }
+    });
+    $('importFile').addEventListener('change', function () {
+      var f = $('importFile').files && $('importFile').files[0];
+      if (!f) return;
+      try {
+        var rd = new FileReader();
+        rd.onload = function () { $('importText').value = String(rd.result || ''); $('importMsg').textContent = '已读入文件「' + f.name + '」，确认目标槽无误后点「导入到该槽」。'; };
+        rd.onerror = function () { $('importMsg').textContent = '✕ 文件读取失败，请改用粘贴文本。'; };
+        rd.readAsText(f);
+      } catch (e) { $('importMsg').textContent = '✕ 文件读取不可用，请改用粘贴文本。'; }
+      $('importFile').value = '';
+    });
+    $('btnImportRun').addEventListener('click', runImportFromModal);
     $('btnSettingsReset').addEventListener('click', function () { // 危险区双重确认：先 askConfirm，再走既有 resetModal 二次确认
       askConfirm({
         title: '重置当前存档槽 ' + currentSlot() + '？',

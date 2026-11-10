@@ -1,11 +1,13 @@
 // 修复批次 B（战斗决策层 M1/M2/M5）实验室：
 //  1) matrix：拉平属性实验室（审查 audit2_battle 同法）——玩家 W10 属性 20 + PRO 装备 + 熟练经验 300，
 //     对手风格强制 + 属性拉平 21（hpMax 同步），玩家战术整场固定，输出 战术 × 风格 胜率表。
-//     foeTac=asis：对手战术完全交给游戏自身逻辑（改前＝随机+回合重掷；改后＝人格）。
-//     foeTac=persona：强制风格后把对手人格换成该风格的人格（需 foePersonaFor 存在，改后用）。
+//     foeTac=persona（默认，G0 起）：强制风格后把对手人格换成该风格的人格——这才是真实对局口径
+//       （真实比赛里人格由成员 style 派生，与风格同源；批次 B 的克制环结论只认 persona 口径）。
+//     foeTac=asis：对手战术完全交给游戏自身逻辑——但实验室强制改了 foe.style 而人格仍按原成员派生，
+//       风格与人格会错位，【仅作消融对照，严禁用 asis 结果下结论】（复测 N9：asis 复跑会导出假结论）。
 //  2) cmdab：同环境指令 A/B——policy=smart（合理时机调真实 useCombo/useWall/useClinch）/ off（全程不用）/ spam（一好就乱按）。
 //  3) foeai：对手行为采样——每回合战术分布（人格一致性）、对手指令使用次数与博客日志计数（需 B.cmdUse，改后用）。
-// 用法：node tests/batchB_lab.mjs matrix  [--n 100] [--foeTac asis|persona]
+// 用法：node tests/batchB_lab.mjs matrix  [--n 100] [--foeTac persona|asis]   （默认 persona=真实对局口径，见上注）
 //       node tests/batchB_lab.mjs cmdab   [--n 200]
 //       node tests/batchB_lab.mjs foeai   [--n 60]
 import fs from 'node:fs';
@@ -27,7 +29,7 @@ const args = process.argv.slice(2);
 const MODE = args[0] || 'matrix';
 const opt = (name, dflt) => { const i = args.indexOf('--' + name); return i >= 0 && args[i + 1] ? args[i + 1] : dflt; };
 const N = parseInt(opt('n', MODE === 'matrix' ? '100' : MODE === 'cmdab' ? '200' : '60'), 10);
-const FOETAC = opt('foeTac', 'asis');
+const FOETAC = opt('foeTac', 'persona'); // G0：默认改 persona（真实对局口径）；asis 仅消融对照、不得作结论
 const NOFOECMD = args.includes('--noFoeCmd'); // 消融：关掉对手指令 AI，分离人格战术与指令的影响
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };

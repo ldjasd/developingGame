@@ -4,6 +4,31 @@
     var B = null; // 战斗状态
     var battleTimer = null;
 
+    /* 正式版批次 G1（plan/01_TODO T1/T2）：战绩动态难度——运行时战绩日志（不落存档）。
+       settleNow 在每场正式赛结算时追加一条 {t=赛后累计正式赛场次, win, round, meHpPct}；
+       makeFoe 生成正式赛对手时取近 4 场算碾压度 → 追赶系数倍率（钳制 0.9~1.35）。
+       不落存档的校验：日志尾条 t 必须恰等于当前 S.wins+S.losses，否则视为存档读入/快照恢复/
+       实验室重置——整表作废回到中性。由此实验室口径（每场快照恢复）恒为中性、与历史基线可比，
+       只有真实连续生涯会累积形态；页面重载后日志清空、新对局起重新累积（设计内）。 */
+    var formLog = [];
+    function formInfo() {
+      var total = (S.wins || 0) + (S.losses || 0);
+      if (!formLog.length || formLog[formLog.length - 1].t !== total) { formLog = []; return { mul: 1, avg: null, n: 0 }; }
+      var last = formLog.slice(-4), sum = 0;
+      last.forEach(function (e) {
+        if (e.win) {
+          // 迭代 5 评分修正（探针 probe_career_iter4.log）：R2 胜利仍是强势胜利（对手 HP 已被
+          // 加成抬高，打满 2 回合不等于接近），0.55 低估；输一场的 −0.45 则把 avg 两场内砸穿
+          // 加成门槛、难度蒸发后 R1 碾压回归。故 R2 0.55→0.7、R3 0.2→0.35、负场 −0.45→−0.25。
+          var roundScore = e.round <= 1 ? 1 : e.round === 2 ? 0.7 : 0.35; // 越快终结越碾压
+          sum += roundScore * 0.6 + clamp(e.meHpPct, 0, 1) * 0.4; // 余 HP 越高越碾压
+        } else sum += -0.25; // 输一场回落，但不一笔抹掉此前的碾压信号
+      });
+      var avg = sum / last.length;
+      var confidence = Math.min(1, last.length / 3); // 样本 <3 场时向中性收缩，避免首胜即拉满
+      return { mul: clamp(1 + (avg - 0.30) * 0.6 * confidence, 0.9, 1.35), avg: avg, n: last.length };
+    }
+
     function makeFoe(forceKey) {
       var w = weekOf(S.day);
       ensureRoster();
@@ -35,10 +60,13 @@
       var pAvg = ATTRS.reduce(function (sum, a) { return sum + pea[a.key]; }, 0) / ATTRS.length;
       var durTgt = pea.power * 0.6 + pAvg * 0.4;
       var powTgt = pea.defense * 0.6 + pAvg * 0.4; // 对手力量挂玩家防守侧（与耐久侧对称）：否则均衡成长的玩家会被自己抬高的 pAvg 反噬成互秒
+      // 批次 G1 第一层：战绩动态难度——追赶系数按近 4 场碾压度浮动（仅正式赛；约战 forceKey 走批次 A 原口径）
+      var form = forceKey ? { mul: 1, avg: null, n: 0 } : formInfo();
+      var chaseMul = form.mul;
       ATTRS.forEach(function (a) {
         var tgt = (a.key === 'endurance' || a.key === 'defense') ? durTgt : (a.key === 'power' ? powTgt : pAvg);
         var cur = attrs[a.key];
-        if (cur < tgt - 3) attrs[a.key] = Math.round(cur + Math.min(34, (tgt - 3 - cur) * 0.55));
+        if (cur < tgt - 3) attrs[a.key] = Math.round(cur + Math.min(34, (tgt - 3 - cur) * 0.55 * chaseMul));
       });
       /* 修复批次 A 追加硬指标（用户亲玩指出）：第 1~3 周正式赛反秒杀下限保护。通用挂钩对新手太温和
          （目标线 D7 实测对手耐久仅 9~11、HP 约 240，平均 1.39 回合、61% 是 R1 单发 KO 收尾），故早期
@@ -48,6 +76,57 @@
       if (w <= 3) {
         attrs.endurance = Math.max(attrs.endurance, Math.round(pea.power * 1.0 + 6));
         attrs.defense = Math.max(attrs.defense, Math.round(pea.power * 0.6 + 5));
+      }
+      /* 批次 G1 第二层：中段窗口标定（W4~W12，仅正式赛）。复测实证：投入型生涯 W2 起不再遇到
+         抵抗——12 战全胜、R1 终结 91.7%、平均 1.08 回合、中盘点数终局 0 场。通用挂钩的追赶量
+         （封顶 +34、系数 0.55）追不上训练＋装备＋熟练度的复合增长，故中段另设与玩家力量挂钩的
+         耐久/防守下限。只抬耐久系、不抬进攻系——拉长对局、让点数终局回流，不制造互秒。
+         W13 起静态下限退出（动态层不限周、继续工作）。
+         定标历程（证据在 research/g1_logs/）：静态地板 1.05×（迭代 1）只够扛约 0.7 回合输出、
+         无效；1.7×（迭代 2）回合 1.25/1.42、仍全胜；2.3×（迭代 3）生涯核心指标达标（胜率
+         58/67%、R1 率 17/25%、回合 2.00/1.75）但点数仍 0，且探针（probe_envs）显示它把 t6
+         实验室对手 HP 从约 325 抬到 842。迭代 4/5 改走纯形态驱动：t6 保住大半（回合 1.97
+         在带内），但生涯回合只到 1.42~1.58、R1 率 42~58%、点数仍 0——形态 avg 对 R2 型胜利
+         饱和在约 0.6，加成量级结构性不足。迭代 6（静态 1.55×＋形态）：生涯回合 1.67/1.83、
+         R1 率 33%、胜率 67%，但点数仍 0，且 balance W10 预设玩家胜率崩到 8%——定因至此完整：
+         预设实验室玩家 HP 只有 324~380，对手耐久一抬，玩家的胜场先变成玩家被 KO，点数被
+         「玩家自身脆弱」锁死，不是对手标定能解的（详见 plan/04_CHANGELOG G1 条的定因记录）。
+         迭代 7（静态 1.9×力量）：生涯核心四项达标（4 跑合并胜率 68.8%/回合 1.83/R1 率
+         21%/未登顶），但终验实测 t6 与 match12 胜率 0%——按力量定标的静态地板对弱构筑是
+         绝杀（t6 预设玩家 W6 仅属性 16，与生涯投入型构筑不在一个量级，同一地板两种命运）。
+         迭代 8：地板改挂「战绩」——t6 立即回到基线带（胜率 55%/回合 1.83，n=60），但系数
+         0.17 在 W4~W8 窗口只给 +0.5~1.2×力量，生涯四跑合并回合 1.69 仍差一档。迭代 9 定稿：
+         系数 0.17→0.26、封顶 1.6→2.2×力量（生涯 W8 约 +1.8×力量、W12 封顶 +2.2×力量，叠
+         形态加成后碾压者面对约 3×力量耐久）；实验室预设（ko/balance 的 wins=0 快照）完全
+         不触发、t6 精确回到基线口径；真实弱构筑玩家胜场少、地板也低，不再被一刀切绝杀。
+         防守地板同门（F2 封顶后近饱和）。点数终局的剩余差距定因见 plan/04_CHANGELOG G1 条。 */
+      if (!forceKey && w >= 4 && w <= 12 && S.wins >= 3) {
+        attrs.endurance += Math.round(Math.min(S.wins * pea.power * 0.26, pea.power * 2.2));
+        attrs.defense = Math.max(attrs.defense, Math.round(pea.power * 1.0 + 6));
+      }
+      /* 批次 G1b 中盘点数回流（2026-11-10）：G1 定因——中盘是双向约 2 回合击杀竞赛、双方到不了 R3，
+         点数终局结构性为 0；且实证只抬对手耐久会把玩家胜场换成玩家被 KO（玩家中盘 HP 仅 324~380）。
+         本批改动另一侧：正式赛 W4~W12（约战 forceKey 除外、练习赛不走 makeFoe）对手输出下调＋耐久上抬并行，
+         双方 TTK 同时变长，让一部分对局活着走进 R3 点数判定。玩家 HP 曲线侧杠杆未启用（备选，见 plan/02_METHODS G1b）。
+         迭代1（力量 ×0.85＋耐久 +0.45×玩家耐久）：回合 1.83→2.04、进 R3 2%→17%，但点数仍 0——
+         进 R3 的都是残血局、撑不到铃响，需要更厚的双方血量尾部。迭代2 加码：力量 −22%、耐久 +0.70×玩家耐久；
+         W4~W6 用 0.6 斜坡减量，护住 t6 教学基线（W6 环境同在此窗口内）。
+         迭代3~5（加玩家侧 HP ×1.35 于 W7~W12、W4~W6 斜坡两度调整）：balance 点数 0→4%，但生涯胜率冲到 83.3%
+         贴 85 上限、t6 在斜坡 0.6 时仍出带（70%/2.28 回合）。迭代6 改走胜率中性的对称加厚：对手力量 −27%、
+         耐久 +0.85×玩家耐久，玩家侧力量同步 ×0.88（myFighter 同窗口），双方 TTK 同比拉长、胜负比不动；
+         W4~W6 斜坡降到 0.3 让 t6 回带。 */
+      if (!forceKey && w >= 4 && w <= 12) {
+        var midRamp = w <= 6 ? 0.3 : 1;
+        attrs.power = Math.max(4, Math.round(attrs.power * (1 - 0.27 * midRamp)));
+        attrs.endurance += Math.round(pea.endurance * 0.85 * midRamp);
+      }
+      /* 批次 G1 第一层（续）：碾压耐久加成——近 4 场碾压度 avg 超过 0.15 的部分，按玩家力量
+         追加对手耐久（迭代 5 曲线：门槛 0.30→0.15、系数 2.6→2.2、样本门槛 2 场→1 场但按
+         min(1, n/2) 收缩——迭代 4 实测旧曲线在首场 R1 后不触发、且输 2 场即归零，两头都太脆。
+         连碾压者 avg≈0.8 时约 +1.4×力量，与静态地板合计约 2.5×力量，等效迭代 3 的总耐久
+         但只对碾压者生效、且随形态平滑增减）。只加耐久、不动进攻系。 */
+      if (!forceKey && form.n >= 1 && form.avg !== null && form.avg > 0.15) {
+        attrs.endurance += Math.round((form.avg - 0.15) * pea.power * 2.2 * Math.min(1, form.n / 2));
       }
       var prof = {}; PUNCH_KEYS.forEach(function (k) { prof[k] = Math.max(0, Math.min(5, Math.floor(w / 3) + Math.floor(rnd(-1, 2)))); }); // P0-2 联调：熟练度成长由 w/2 放缓到 w/3，避免高周对手伤害乘数失控
       // 风格取角色固有风格；排名越高（名次数字越小）风格越鲜明（intensity 0.55~1.3，与旧版同公式）
@@ -125,6 +204,14 @@
     function myFighter() {
       var ea = battleBaseAttrs(); // 含伤病 debuff
       var hpMax = Math.max(50, Math.round(100 + ea.endurance * 14 - S.injury * 0.5)); // P0 联调：HP 系数 5→14，压平高周伤害/HP 比，战斗能打满 2~3 回合
+      /* 批次 G1b 玩家侧杠杆（2026-11-10）：中盘 W7~W12 玩家 HP 曲线标定 ×1.35。
+         定因（research/g3_logs/probe_r3.mjs）：对手侧耐久上抬后，进 R3 时对手平均还剩 60% HP、玩家只剩 28%——
+         点数终局的绑定约束是玩家撑不完 R3 而非对手太脆；探针里玩家以 ≥110 HP 进 R3 的对局全部打满点数。
+         只抬玩家中盘 HP 池（不动每点耐久的换算系数本身、不动新手期与 W13+）。
+         窗口不含 W4~W6：首版含 W4~W6 ×1.15 斜坡时 t6 教学基线被带出带（胜率 55→75%、回合 1.80→2.45），
+         故玩家侧只进 W7~W12 中盘核心段，W4~W6 仅保留对手侧 0.6 斜坡标定。 */
+      var wkMe = weekOf(S.day);
+      if (wkMe >= 7 && wkMe <= 12) { hpMax = Math.round(hpMax * 1.35); ea.power = Math.max(4, Math.round(ea.power * 0.88)); } // G1b 迭代6：玩家输出同步 −12%（对称加厚、胜率中性），与 HP ×1.35 同窗口
       var prof = {}; PUNCH_KEYS.forEach(function (k) { prof[k] = punchLevel(S.punchExp[k]); });
       return {
         name: S.name, attrs: ea, prof: prof,
@@ -330,9 +417,93 @@
       save();
     }
 
+    /* ================= 正式版批次 G9 短期（plan T8）：卫冕循环（挑战者事件 · 约战升级版） =================
+       定位：登顶（国内第 1 名）后的持续目标——具名强者主动下战书，玩家应战打一场「卫冕战」。
+       与约战的异同：入口同在比赛屏、同样指名具名人选、同样不占每周正式赛位（不写 lastMatchDay）；
+       但卫冕战是正式规格——计战绩/连胜、动排名与对手 rating、刷新影响力与阶段、奖金按正式赛
+       出场费口径（prizeForRank，获胜全额/落败一半），结算全程走 settleNow，只在其内多一段卫冕记账
+       （胜 → S.defenses +1 并清挑战；无论胜负都记 S.defenseWeek，每周至多 1 场卫冕战）。
+       输掉卫冕战的后果不另发明：走正式赛的排名升降（输给低名次 −3~5 名）与影响力重算，可再打回来。
+       挑战生命周期：maybeDefenseChallenge() 在「进游戏 / 睡觉跨日 / 正式赛结算后」三处补检——
+       无待应战挑战、玩家第 1 名、本周未打过卫冕战时生成一位；玩家跌下第 1 名则挑战作废（记日志）。
+       挑战者选取：当前第 2~6 名的在榜具名角色，按 rating（战绩水位）＋人格侵略性（压迫型 base /
+       desperate / comeback 调整）打分取最高——越强越好战的越先打上门。 */
+    var nextBattleDefense = false; // 下一场是否为卫冕战：startDefense 置位，startBattle/simulateBattle 消费，openModeModal/btnCancelMode 清除防误标
+    function defenseState() {
+      if (typeof S.defenses !== 'number' || isNaN(S.defenses) || S.defenses < 0) S.defenses = 0;
+      if (typeof S.defenseWeek !== 'number' || isNaN(S.defenseWeek)) S.defenseWeek = 0;
+      if (!S.defenseChallenge || typeof S.defenseChallenge !== 'object' || Array.isArray(S.defenseChallenge) || !ROSTER_BY_KEY[S.defenseChallenge.key]) S.defenseChallenge = null;
+      return S;
+    }
+    function pickChallenger() {
+      ensureRoster();
+      var cands = S.roster.filter(function (m) { return m.rank >= 2 && m.rank <= 6; });
+      if (!cands.length) return null;
+      var best = null, bestScore = -Infinity;
+      cands.forEach(function (m) {
+        var p = foePersonaFor(m.style, m.key);
+        var score = m.rating + (p.base === 'attack' ? 0.6 : 0) + (p.adjust === 'desperate' ? 0.4 : p.adjust === 'comeback' ? 0.3 : 0) + Math.random() * 0.5;
+        if (score > bestScore) { bestScore = score; best = m; }
+      });
+      return { key: best.key, name: best.name, rank: best.rank, week: weekOf(S.day) };
+    }
+    function maybeDefenseChallenge() {
+      defenseState();
+      var w = weekOf(S.day);
+      if (S.defenseChallenge) {
+        if (S.rank !== 1) { // 王座已失：挑战作废（输卫冕战的结算已先行清场，这里兜的是输普通正式赛/周重排跌落）
+          var nm = S.defenseChallenge.name;
+          S.defenseChallenge = null;
+          dailyLog('你已跌下第 1 名，' + nm + ' 的卫冕战挑战随之作废——先把王座抢回来再说。', 'dim');
+          if (typeof renderDefenseCard === 'function') renderDefenseCard(); // 挑战状态变化即刷新比赛屏卡片（不依赖下一次 render 时机）
+          save();
+        }
+        return S.defenseChallenge;
+      }
+      if (S.rank !== 1) return null;
+      if ((S.wins || 0) + (S.losses || 0) < 1) return null; // 兜底：没打过正式赛不可能在第 1 名，双保险防异常档误触
+      if (w <= (S.defenseWeek || 0)) return null; // 本周已打过卫冕战：下周再来（每周至多 1 场）
+      var pick = pickChallenger();
+      if (!pick) return null;
+      S.defenseChallenge = pick;
+      /* 【新增文案·待用户审】挑战生成播报（日志＋toast 各一，宣言走 DEFENSE_LINES） */
+      dailyLog('👑 卫冕战挑战！' + pick.name + '（第 ' + pick.rank + ' 名）向国内冠军发起正式挑战：「' + defenseLine(pick.key) + '」——去比赛屏应战，赢下它才算坐稳王座。', 'good');
+      toast('👑 卫冕战挑战：' + pick.name + ' 打上门了！去比赛屏应战');
+      if (typeof renderDefenseCard === 'function') renderDefenseCard(); // 同上：生成即刷新卡片
+      save();
+      return pick;
+    }
+    function startDefense() {
+      if (B) return false;
+      defenseState();
+      var ch = S.defenseChallenge;
+      if (!ch) { toast('现在没有待应战的卫冕挑战'); return false; }
+      if (S.rank !== 1) { maybeDefenseChallenge(); toast('你已经不是第 1 名了，这份挑战已经作废'); return false; }
+      pendingFoe = makeFoe(ch.key);
+      nextBattleDefense = true;
+      nextBattleSpar = false;
+      nextBattlePractice = false;
+      var a = pendingFoe.attrs;
+      var mt = $('modeTitle'); if (mt) mt.textContent = '卫冕战 · 冠军挑战';
+      /* 【新增文案·待用户审】卫冕战赛前说明（梢姐一句，语气对齐约战弹窗） */
+      var mn = $('modeNote'); if (mn) mn.innerHTML = '挑战者：<b id="modeFoeInfo">—</b><br />卫冕战是<b>正式比赛</b>：计战绩、动排名与影响力，奖金按正式赛出场费口径（获胜 ¥' + prizeForRank(weekOf(S.day)) + ' / 落败出场费一半）；赢下计 <b>1 次卫冕成功</b>，输了冠军易主、按正式赛口径掉名次。备战建议：先做一次<b>宣传造势</b>，获胜奖金还能 ×' + PROMO_PRIZE_MUL + '。梢姐把挑战书拍在你面前：「人家都打上门了——接。」';
+      $('modeFoeInfo').textContent = pendingFoe.name + '（国内排名第 ' + pendingFoe.rank + ' 名｜力量 ' + a.power + ' · 速度 ' + a.speed + ' · 耐久 ' + a.endurance + ' · 技术 ' + a.technique + '）' +
+        ' 风格：' + FOE_STYLES[pendingFoe.style].name + '。' +
+        (pendingFoe.persona ? ' 打法：' + personaDesc(pendingFoe.persona) + '。' : '') +
+        ' 【卫冕战】她是冲着你的冠军来的。';
+      var mfi = $('modeFoeImg'); if (mfi) { mfi.src = pendingFoe.img; mfi.alt = pendingFoe.name + ' 的立绘'; }
+      var mfl = $('modeFoeLine'); if (mfl) mfl.textContent = pendingFoe.name + '：「' + defenseLine(pendingFoe.key) + '」';
+      var simBtn = document.querySelector('#modeModal [data-mode="sim"]'); if (simBtn) simBtn.style.display = ''; // 卫冕战是正式赛：模拟跳过照常可用（与约战/练习赛的隐藏口径不同）
+      $('modeModal').classList.add('open');
+      setScene('ring_wide');
+      save();
+      return true;
+    }
+
     function openModeModal() {
       nextBattlePractice = false; // 正式报名路径永不带练习标记（防练习模式弹窗取消后误标）
       nextBattleSpar = false; // 同上：约战标记只由 startSpar 置位
+      nextBattleDefense = false; // 正式版批次 G9 短期：卫冕标记只由 startDefense 置位
       var mt0 = $('modeTitle'); if (mt0) mt0.textContent = '选择战斗模式';
       var mn0 = $('modeNote'); if (mn0) mn0.innerHTML = '本场对手：<b id="modeFoeInfo">—</b><br />重要比赛推荐<b>手动操作</b>，亲自上场把握胜负。';
       var simBtn0 = document.querySelector('#modeModal [data-mode="sim"]'); if (simBtn0) simBtn0.style.display = '';
@@ -358,6 +529,21 @@
       return src ? src.replace('assets/opponents/', 'assets/opponents_alpha/') : src;
     }
 
+    /* G5 教程关卡化：即时教学——概念不在开局灌输，挪到第一次真正用到的那一刻才出现。
+       触发点全部挂在既有判定点上（dealDamage 的格挡/被格挡/连击/重创、openCounterWindow 的闪避反击、
+       startBreak 的自动模式指令），每条只教一次（记 S.tutorial.taught 落盘），且只在教学窗
+       （teachWindow：首场正式赛之前）＋对应模式内出现；窗外玩家与老档走原有全量文案，行为零变化。 */
+    function jitTeach(key, text) {
+      if (!B || B.mode !== 'manual') return false;
+      if (!teachWindow()) return false;
+      var t = tutorialState();
+      if (t.taught.indexOf(key) >= 0) return false;
+      t.taught.push(key);
+      save();
+      blog('【教学】' + text, 'good');
+      return true;
+    }
+
     /* 框架重构一期：开战准备态（选完模式先到准备层：双方对位卡＋规则一句话，点「开始战斗」才调 startBattle；
        准备层不建战斗状态、不起计时器，冒烟/平衡脚本直调 startBattle 的路径不受影响） */
     var readyMode = 'manual';
@@ -375,6 +561,7 @@
       // 批次 E：准备层预热本场双方资源（姿势帧全套＋纸偶部件＋对手原图），点「开始战斗」不再等图
       preloadPoses();
       preloadRigParts();
+      preloadFoeRigParts(foe.key); // G2：对手纸偶部件（名单内角色）一并预热
       if (foe.img) { var pf = new Image(); pf.src = foe.img; }
       var a = foe.attrs;
       var fi = $('brFoeImg'); if (fi) { fi.src = foeAlphaSrc(foe.img) || ''; fi.alt = foe.name + ' 的立绘'; }
@@ -386,10 +573,17 @@
       $('brMeMeta').innerHTML = '国内排名第 ' + S.rank + ' 名<br>力量 ' + effAttrs().power + ' · 速度 ' + effAttrs().speed + ' · 耐久 ' + effAttrs().endurance + ' · 技术 ' + effAttrs().technique;
       if (foe.practice) $('brFoeMeta').innerHTML += '<br>【练习赛】不计战绩 · 不动排名 · 不会受伤，只有经验照常涨';
       if (nextBattleSpar || (B && B.spar)) $('brFoeMeta').innerHTML += '<br>【约战】指名挑战 · 不计战绩 · 不动排名 · 无奖金，出拳经验半额'; // 修复批次 C（准备层在 B 创建前打开，用待消费标记判读）
+      if (nextBattleDefense || (B && B.defense)) $('brFoeMeta').innerHTML += '<br>【卫冕战】冠军挑战 · 计战绩 · 动排名与影响力 · 奖金按正式赛出场费口径，赢下计 1 次卫冕成功'; // 正式版批次 G9 短期（同上，用待消费标记判读）
       $('brFoeLine').textContent = foe.name + '：「' + foeLine(foe.key, 'pre') + '」';
+      /* G5：教学窗内准备层只给「先会两样」（新概念 ≤2），其余操作改由战斗内即时教学在第一次用到时教；
+         窗外（打过正式赛的玩家）保持原全量键位表不变。 */
       $('brControls').textContent = mode === 'manual'
-        ? (isTouch ? '操作：左侧摇杆移动，右侧按钮出拳（前手/后手/上勾/击腹/摆拳），按住格挡，闪避取摇杆方向，「搂抱」按钮贴身停战回体力。' : '操作：A/D 移动、W/S 站位、J 前手、K 后手、U 上勾、B 击腹、空格格挡、Shift+方向闪避、C 搂抱停战回体力；开打后 H 键可再看键位。')
-        : '自动观看：战斗自动进行，你可以在下方切换战术倾向、用即时指令（组合拳/铁壁/搂抱）左右战局，也可调速。对手有整场打法、也会用指令。';
+        ? (teachWindow()
+          ? (isTouch ? '操作先会两样就行：左侧摇杆移动贴近对手，右侧按钮出前手/后手拳。格挡、闪避、搂抱这些，开打后第一次用到时会在场边提醒你；全部键位点「操作说明」可查。' : '操作先会两样就行：A/D 移动贴近对手，J/K 出前手/后手拳。格挡、闪避、搂抱这些，开打后第一次用到时会在场边提醒你；全部键位点「操作说明」可查（开打后按 H 也行）。')
+          : (isTouch ? '操作：左侧摇杆移动，右侧按钮出拳（前手/后手/上勾/击腹/摆拳），按住格挡，闪避取摇杆方向，「搂抱」按钮贴身停战回体力。' : '操作：A/D 移动、W/S 站位、J 前手、K 后手、U 上勾、B 击腹、空格格挡、Shift+方向闪避、C 搂抱停战回体力；开打后 H 键可再看键位。'))
+        : (teachWindow()
+          ? '自动观看：战斗自动进行，这一场你先专心看双方怎么出招——回合间休息时，会教你怎么用战术和指令干预战局。'
+          : '自动观看：战斗自动进行，你可以在下方切换战术倾向、用即时指令（组合拳/铁壁/搂抱）左右战局，也可调速。对手有整场打法、也会用指令。');
       $('btnReadyKeys').style.display = mode === 'manual' ? '' : 'none';
       $('battleReady').hidden = false;
     }
@@ -399,6 +593,7 @@
         mode: mode,
         practice: nextBattlePractice, // 新手期重构：练习赛标记（结算走 settlePractice 轻量路径，见 settleNow 分流）
         spar: nextBattleSpar, // 修复批次 C：约战标记（结算走 settleSpar，见 settleNow 分流）
+        defense: nextBattleDefense, // 正式版批次 G9 短期：卫冕战标记（结算仍走 settleNow 正式赛全程口径，仅多卫冕记账）
         me: myFighter(), foe: pendingFoe || makeFoe(),
         round: 1, timeLeft: ROUND_SECONDS, phase: 'fight', // fight | break | over
         breakLeft: 0, treated: false, spoke: false,
@@ -432,13 +627,14 @@
       pendingFoe = null;
       nextBattlePractice = false; // 练习标记已被本场消费
       nextBattleSpar = false; // 修复批次 C：约战标记已被本场消费
+      nextBattleDefense = false; // 正式版批次 G9 短期：卫冕战标记已被本场消费
       keysDown = {};
       touchBlock = false;
       $('meNameLabel').textContent = S.name + '（你 · 第 ' + S.rank + ' 名）';
       // 绷带：本场生效，赛后伤病概率减半（练习赛不消耗绷带——它本来就不会产生伤病；约战伤病公式自带减半，同样不消耗）
       B.bandage = !B.practice && !B.spar && !!S.buffs.bandage; if (!B.practice && !B.spar) S.buffs.bandage = false;
-      // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留（练习赛/约战不是正式比赛，不写 lastMatchDay）
-      if (!B.practice && !B.spar) S.lastMatchDay = S.day;
+      // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留（练习赛/约战/卫冕战不占每周正式赛位，不写 lastMatchDay——卫冕战是事件赛，结算口径仍是正式赛）
+      if (!B.practice && !B.spar && !B.defense) S.lastMatchDay = S.day;
       // 心态对比赛的影响（框架）：紧张（20~39）前两回合全属性 −5%；疲劳（0~19）体力消耗 +10%
       B.mindTense = S.mind >= 20 && S.mind < 40;
       B.mindStamMul = S.mind < 20 ? 1.1 : 1;
@@ -473,6 +669,7 @@
       $('ring').classList.remove('slowmo', 'frozen', 'shake-sm', 'shake-lg');
       $('figMe').classList.remove('down'); $('figFoe').classList.remove('down');
       _meRigDown = false; if (_meRig) _meRig.toStance('guard'); // 纸偶复位（新一场从抱架起手）
+      resetFoeRig(); if (ensureFoeRig()) driveFoeRig('guard'); // G2：对手纸偶按本场对手重建（不在名单则保持静态立绘回退）
       $('figMe').style.transform = ''; $('figFoe').style.transform = '';
       $('figMe').style.left = B.man.mX + '%'; $('figFoe').style.left = B.man.fX + '%';
       $('figMe').querySelector('.fig').style.top = '0px'; $('figFoe').querySelector('.fig').style.top = '0px';
@@ -481,15 +678,25 @@
       var foeStyleTxt = B.foe.style ? FOE_STYLES[B.foe.style].name : '';
       if (mode === 'manual') {
         blog('比赛开始！第 1 回合。对手「' + B.foe.name + '」是' + foeStyleTxt + '（战术：' + TACTICS[B.foe.tactic].name + '）。', 'dim');
-        blog('连贯命中攒连击加伤害；闪避后 1 秒内出拳是反击；对手格挡时击腹可破防，破防接直拳。KO 看重创槽：有效命中按伤害积累重创（按对方当前 HP 折算，血量低于 40% 后不再加速；上勾/摆拳权重最高，被格挡只积一半，每秒衰减' + KO_DECAY + '），重创跨过 25/50/75 会把人打倒读秒（同一回合每个刻度只倒一次）、满 100 直接 KO；把对方 HP 打空也是 KO；本回合 3 次击倒触发 TKO 判定（' + (S.deathFight ? '死战：自动死战到底' : '直接判负') + '）。', 'dim');
-        blog(isTouch
-          ? '手动操作：左手摇杆移动，右手大按钮出前手/后手拳，金边按钮可直接出摆拳/上勾/击腹；格挡按住生效（出现护盾弧），闪避/垫步点按触发。'
-          : '手动操作：A/D 移动贴近对手，J/K 出拳，U 直接上勾、B 直接击腹，空格格挡，Shift+方向闪避。按 H 看键位。', 'dim');
+        if (teachWindow()) {
+          // G5：教学窗内开场只给一句（贴近出拳＋格挡），连击/破防/重创/反击改由 jitTeach 在第一次发生时教
+          blog('教学：贴近对手出拳打人；挨打时' + (isTouch ? '按住格挡键' : '按住空格') + '抱架能大幅减伤。其余规则等你第一次碰上时，我再在场边提醒——先打起来。', 'dim');
+        } else {
+          blog('连贯命中攒连击加伤害；闪避后 1 秒内出拳是反击；对手格挡时击腹可破防，破防接直拳。KO 看重创槽：有效命中按伤害积累重创（按对方当前 HP 折算，血量低于 40% 后不再加速；上勾/摆拳权重最高，被格挡只积一半，每秒衰减' + KO_DECAY + '），重创跨过 25/50/75 会把人打倒读秒（同一回合每个刻度只倒一次）、满 100 直接 KO；把对方 HP 打空也是 KO；本回合第 3 次击倒' + (S.deathFight ? '触发死战到底：读秒起身继续打，再被击倒直接判负' : '直接判负（TKO）') + '。', 'dim');
+          blog(isTouch
+            ? '手动操作：左手摇杆移动，右手大按钮出前手/后手拳，金边按钮可直接出摆拳/上勾/击腹；格挡按住生效（出现护盾弧），闪避/垫步点按触发。'
+            : '手动操作：A/D 移动贴近对手，J/K 出拳，U 直接上勾、B 直接击腹，空格格挡，Shift+方向闪避。按 H 看键位。', 'dim');
+        }
         $('meTacticName').textContent = '手动操作';
       } else {
         blog('比赛开始！第 1 回合。对手「' + B.foe.name + '」是' + foeStyleTxt + '（战术：' + TACTICS[B.foe.tactic].name + '）。', 'dim');
-        blog('双方都会攒连击、抓闪避反击、用击腹破防——盯着擂台下方的状态条。', 'dim');
-        blog('自动观看模式：你的 HP 上限 ' + B.me.hpMax + '（伤病影响 −' + Math.round(S.injury * 0.5) + '），用战术和指令干预比赛！', 'dim');
+        if (teachWindow()) {
+          // G5：教学窗内自动模式先看打，指令/战术留到首个回合间休息时教（startBreak 的 cmd 教学）
+          blog('教学：这场先看双方怎么出招——回合间休息时教你下指令干预。你的 HP 上限 ' + B.me.hpMax + '（伤病影响 −' + Math.round(S.injury * 0.5) + '）。', 'dim');
+        } else {
+          blog('双方都会攒连击、抓闪避反击、用击腹破防——盯着擂台下方的状态条。', 'dim');
+          blog('自动观看模式：你的 HP 上限 ' + B.me.hpMax + '（伤病影响 −' + Math.round(S.injury * 0.5) + '），用战术和指令干预比赛！', 'dim');
+        }
         setTactic('attack');
       }
       if (B.foe.persona && !B.practice) blog('对手打法：' + personaDesc(B.foe.persona) + '。整场盯住他的节奏，也防着他用指令（残血铁壁、搂抱断连击）。', 'dim'); // 修复批次 B：人格在开场即可读
@@ -610,6 +817,56 @@
         B._poseTimer = tid;
       }
     }
+    /* ================= 骨骼纸偶驱动（对手扩围 G2，js/rig.js） =================
+       FOE_RIG=true 且本场对手在 RIG_CHARS 名单（8 名重点角色）时，对手改由纸偶渲染
+       （figFoeImg 仍照常切 src 作回退层＋冒烟锚点，CSS 将其隐藏；镜像由 CSS 挂 .rig-host）。
+       回退：FOE_RIG 改为 false、或对手不在名单 → 静态立绘（原行为，逐像素不变）。
+       「减少动效」与主角同口径（createRig reducedMotion 定格抱架）。 */
+    var FOE_RIG = false; // 2026-11-10 用户裁定回退：用户亲看伊芙琳纸偶实战图判定「人完全碎了」，明确指示表层修不好要从根上重做、对手纸偶模块化装配方案被否决——7 名对手纸偶全部停用、回退静态立绘；部件/RIG_CHARS 保留在库但不启用，不再迭代修补。主角 ME_RIG 不受影响。（历史：G2 返工验收后曾开启，量化空洞率 <0.5%，见 plan/04_CHANGELOG G2 返工记录与 G3 条回退记录）
+    var _foeRig = null, _foeRigKey = null, _foeRigDown = false;
+    function foeRigCharKey() {
+      if (!B || !B.foe || !B.foe.key) return null;
+      return (typeof RigEngine !== 'undefined' && RigEngine.CHARS[B.foe.key]) ? B.foe.key : null;
+    }
+    function resetFoeRig() {
+      if (_foeRig) { _foeRig.destroy(); _foeRig = null; }
+      _foeRigKey = null; _foeRigDown = false;
+      var ff = $('figFoe'); if (ff) ff.classList.remove('rig-on');
+      var host = $('foeRig'); if (host) host.innerHTML = '';
+    }
+    function ensureFoeRig() {
+      if (!FOE_RIG || typeof RigEngine === 'undefined') return null;
+      var key = foeRigCharKey(); if (!key) return null;
+      if (_foeRig && _foeRigKey === key) return _foeRig;
+      resetFoeRig();
+      var host = $('foeRig'); if (!host) return null;
+      _foeRig = RigEngine.createRig(host, { char: key, reducedMotion: (typeof SETTINGS !== 'undefined' && !!SETTINGS.reduceMotion), timeScale: rigTimeScale, tickEvery: 2 }); // G2：对手纸偶隔帧采样（30Hz 姿势写入，页面 FPS 保 50+；动作时间轴不变）
+      _foeRigKey = key;
+      if (_foeRig) { var ff = $('figFoe'); if (ff) ff.classList.add('rig-on'); }
+      return _foeRig;
+    }
+    function driveFoeRig(name, holdMs) {
+      var rig = ensureFoeRig(); if (!rig) return;
+      if (name === 'guard') {
+        if (_foeRigDown) { _foeRigDown = false; rig.play('getup'); }
+        else rig.toStance('guard');
+      } else if (name === 'block') {
+        if (holdMs > 0) rig.play('blockHit'); else rig.toStance('block');
+      } else if (name === 'hit') {
+        var ff = $('figFoe');
+        if (ff && ff.classList.contains('down')) { _foeRigDown = true; rig.play('down'); }
+        else rig.play('hit');
+      } else {
+        rig.play(name); // jab/straight/hook/upper/body/dodge/victory 与纸偶动作同名
+      }
+    }
+    function preloadFoeRigParts(key) { // 准备层预热本场对手纸偶部件（仅名单内角色）
+      if (!FOE_RIG || !key || typeof RigEngine === 'undefined' || !RigEngine.CHARS[key]) return;
+      var dir = RigEngine.CHARS[key].dir;
+      ['head', 'torso', 'armNearUpper', 'armNearFore', 'legNearThigh', 'legNearShin', 'legFarThigh', 'legFarShin'].forEach(function (p) {
+        var im = new Image(); im.src = dir + p + '.webp';
+      });
+    }
     // B2：出拳残影——克隆出拳方当前姿势图生成 1~2 帧半透明残影，滞后于本体朝出拳反方向错开，动画结束自回收
     function spawnAfterimage(figEl) {
       var ring = $('ring'); if (!ring || !figEl) return;
@@ -625,6 +882,22 @@
           g2.style.height = figEl.offsetHeight + 'px';
           ring.appendChild(g2);
           setTimeout(function () { g2.remove(); }, 190);
+          return;
+        }
+      }
+      if (FOE_RIG && figEl.id === 'figFoe') {
+        // G2：对手纸偶残影（同主角口径；残影克隆需补回对手镜像——克隆体脱离了 .rig-host 的 scaleX）
+        var fhost = $('foeRig'); var frr = fhost ? fhost.querySelector('.rig-root') : null;
+        if (frr) {
+          var g3 = frr.cloneNode(true);
+          g3.classList.add('fig-ghost');
+          g3.style.left = figEl.offsetLeft + 'px';
+          g3.style.top = figEl.offsetTop + 'px';
+          g3.style.width = figEl.offsetWidth + 'px';
+          g3.style.height = figEl.offsetHeight + 'px';
+          g3.style.transform = (g3.style.transform ? g3.style.transform + ' ' : '') + 'scaleX(-1)';
+          ring.appendChild(g3);
+          setTimeout(function () { g3.remove(); }, 190);
           return;
         }
       }
@@ -746,7 +1019,7 @@
       if (!B) return;
       var dirs = ['back', 'down', 'side'];
       var c = cat && COUNTER_PREF[cat] ? cat : dirs[Math.floor(Math.random() * 3)];
-      if (isMeDefender) { B.meCounterUntil = B.time + 1; B.meCounterDir = c; }
+      if (isMeDefender) { B.meCounterUntil = B.time + 1; B.meCounterDir = c; jitTeach('counter', '闪开了！闪避后 1 秒内立刻出拳就是反击：伤害 +30%，用对方向的拳种（侧闪接摆拳 / 后闪接直拳 / 下潜接上勾）是 +40%——别让窗口溜走。'); }
       else { B.foeCounterUntil = B.time + 1; B.foeCounterDir = c; }
     }
     function resetCombo(isMeAttacker) { if (!B) return; if (isMeAttacker) B.comboMe = 0; else B.comboFoe = 0; }
@@ -770,8 +1043,9 @@
       var fig = $(defIsMe ? 'figMe' : 'figFoe');
       fig.classList.add('down');
       if (defIsMe) setMePose('hit', 0); // 击倒读秒期间定格受击姿势，配合 .down 旋转倒地
+      else driveFoeRig('hit'); // G2：对手被击倒——figFoe 已挂 .down，纸偶走 down 倒地动作
       $('downWho').textContent = (defIsMe ? '你被击倒了！' : '对手被击倒！') + '（本回合第 ' + downs + ' 次）';
-      $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——TKO 判定（' + (S.deathFight ? '死战：继续打到底' : '直接判负') + '）' : '读秒中…站起来就能继续，HP 回到至少 20%';
+      $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——' + (S.deathFight ? '死战到底：读秒起身继续，再被击倒直接判负' : '直接判负（TKO）') : '读秒中…站起来就能继续，HP 回到至少 20%';
       $('downCount').textContent = '3';
       $('downOverlay').classList.add('go');
       SFX.heavy(); shakeRing(true);
@@ -794,22 +1068,22 @@
         SFX.countSuccess(); // Phase 9：读秒后起身继续（死战）
         if (defIsMe) B.meDeathFight = true; else B.foeDeathFight = true;
         applyDeathFightRecovery(defIsMe);
-        blog((defIsMe ? '你按设置死战到底！' : '对手按设置死战到底！') + '伤害 +10%，但再被击倒一次就直接判负' + (defIsMe ? '，赛后伤病 +10' : '') + '。HP 回到 ' + Math.round(def.hp) + '，比赛继续！', defIsMe ? 'good' : 'bad');
+        blog((defIsMe ? '你死战到底！' : '对手死战到底！') + '伤害 +10%，但再被击倒一次就直接判负' + (defIsMe ? '，赛后伤病 +10' : '') + '。HP 回到 ' + Math.round(def.hp) + '，比赛继续！', defIsMe ? 'good' : 'bad');
         toast(defIsMe ? '死战到底！再倒一次就判负' : '对手死战到底！');
       } else {
         SFX.countFail(); // Phase 9：读秒失败（TKO 判负）
         def.hp = 0; B.koKind = 'tko-giveup'; B.phase = 'fight';
-        blog((defIsMe ? '死战设置关——TKO 判负。' : '死战设置关——对手 TKO，你判胜！'), defIsMe ? 'bad' : 'good');
+        blog((defIsMe ? '本回合第 3 次击倒——TKO 判负。' : '本回合第 3 次击倒——对手 TKO 判负，你判胜！'), defIsMe ? 'bad' : 'good');
         finishBattle();
       }
       renderBattle();
     }
     function decideTKO(defIsMe) {
       if (!B) return;
-      // 死战改为预设开关（顶部「TKO死战」）：开=自动死战到底，关=直接判负。手动/自动统一，双方同规则，不弹窗、不看意志
+      // 死战为存档预设开关（出货界面无切换入口，默认关）：开=自动死战到底，关=本回合第 3 次击倒直接判负。手动/自动统一，双方同规则，不弹窗、不看意志
       var on = !!S.deathFight;
-      blog('TKO 判定：死战设置「' + (on ? '开' : '关') + '」——' + (on ? (defIsMe ? '你' : '对手') + '自动死战到底！' : (defIsMe ? '你' : '对手') + '直接判负。'), on ? (defIsMe ? 'good' : 'bad') : (defIsMe ? 'bad' : 'good'));
-      if (defIsMe) toast(on ? 'TKO死战开：自动死战到底！' : 'TKO死战关：直接判负');
+      blog(on ? ('TKO 判定：' + (defIsMe ? '你' : '对手') + '死战到底——读秒起身继续比赛！') : ('TKO 判定：本回合第 3 次击倒——' + (defIsMe ? '你' : '对手') + '直接判负。'), on ? (defIsMe ? 'good' : 'bad') : (defIsMe ? 'bad' : 'good'));
+      if (defIsMe) toast(on ? '死战到底！再倒一次就判负' : 'TKO：第 3 次击倒，直接判负');
       resolveTKOChoice(defIsMe, on);
     }
     function resolveKnockdown() {
@@ -820,6 +1094,7 @@
       $('downOverlay').classList.remove('go');
       fig.classList.remove('down');
       if (defIsMe) setMePose('guard', 0); // 起身回抱架（若随后 TKO 判负，finishBattle 会再定格受击姿势）
+      else driveFoeRig('guard'); // G2：对手起身——纸偶走 getup 回抱架
       if (B.downIsTKO) {
         B.phase = 'fight';
         decideTKO(defIsMe);
@@ -873,7 +1148,7 @@
       var freq = 0.24 + att.attrs.speed * 0.012; // P0 联调：自动模式基础出拳频率 0.30→0.24，拉长回合内交锋节奏
       if (!isMeAttacking) freq *= 1.15 * styleVal(att, 'freqMul', 1); // 对手风格：速度型出拳快 / 力量型略慢
       if (att.tactic === 'counter') freq *= 0.6;
-      if (isMeAttacking ? (B.buff && B.buff.wall > 0) : (B.foeBuff && B.foeBuff.wall > 0)) freq *= 0.55; // 修复批次 B 三调：铁壁抱架期间自己出拳频率 ×0.55——抱死了就抡不开拳，铁壁的代价（双方同规则；也治对手铁壁期满频输出）
+      if (isMeAttacking ? (B.buff && B.buff.wall > 0) : (B.foeBuff && B.foeBuff.wall > 0)) freq *= 0.40; // 修复批次 B 三调：铁壁抱架期间自己出拳频率 ×0.55——抱死了就抡不开拳，铁壁的代价（双方同规则；也治对手铁壁期满频输出）；批次 G3-b 迭代2：×0.55→×0.40——铁壁在短局的生存收益（必抱架＋重创免疫）太大、原频率代价抵不掉，属代价组加深
       if (att.practice) freq *= (B.round === 1 ? 0.45 : 0.65); // 修复批次 A：陪练少进攻（R1 尤其收着），把回合让给新手练手
       if (!isMeAttacking && att.style === 'guardcounter') freq *= 1.25; // 防守反击型平时收着，抓反击时不降频
       if (att.stam < 30) freq *= 0.7;
@@ -883,7 +1158,7 @@
       var p = PUNCHES[key];
       att.used[key] = (att.used[key] || 0) + 1;
       var stamCost = p.stam * (att.tactic === 'attack' ? 1.5 : att.tactic === 'points' ? 0.7 : 1);
-      if (isMeAttacking ? (B.buff && B.buff.combo > 0) : (B.foeBuff && B.foeBuff.combo > 0)) stamCost *= 1.4; // 修复批次 B 三调：组合拳爆发期全力连打，出拳体力 ×1.4——爆发是拿体力换的，无脑开局乱开会中盘熄火（双方同规则）
+      if (isMeAttacking ? (B.buff && B.buff.combo > 0) : (B.foeBuff && B.foeBuff.combo > 0)) stamCost *= 2.6; // 修复批次 B 三调：组合拳爆发期全力连打，出拳体力 ×1.4——爆发是拿体力换的，无脑开局乱开会中盘熄火（双方同规则）；批次 G3-b：×1.4→×1.7（迭代1）→×2.0（迭代2）→×2.6（迭代3：power×attack 组 spam−smart 仍 +12pp 且用量差集中在组合拳 170 vs 103 次/100 场，继续加深爆发体力税，属代价组不改效果本体）
       if (!isMeAttacking) stamCost *= styleVal(att, 'stamMul', 1); // 力量型重拳耗体力大
       if (isMeAttacking && B.mindStamMul) stamCost *= B.mindStamMul; // 心态疲劳：我方体力消耗 +10%
       if (isMeAttacking) stamCost *= gearStamMul(); // 修复批次 D：战靴机制——我方出拳体力消耗倍率
@@ -894,6 +1169,7 @@
         if (B.time >= (B.foeBrokenUntil || -1) && Math.random() < gbCh) {
           B.foeBlocking = true;
           $('figFoe').classList.add('guarding');
+          driveFoeRig('block', POSE_TIMING.block); // G2：对手抱架纸偶同步格挡姿态
           setTimeout(function () { var el = $('figFoe'); if (el) el.classList.remove('guarding'); }, 260);
         }
       }
@@ -909,7 +1185,7 @@
       setTimeout(function () { figAtt.classList.remove('punching'); figAtt.classList.remove('lined'); }, 170);
       // 姿势帧/对手强化：我方出拳切对应拳种姿势图；对手出拳在其身前刷拳风弧光
       if (isMeAttacking) setMePose(key, POSE_TIMING.punch);
-      else spawnPunchArc(figAtt);
+      else { spawnPunchArc(figAtt); driveFoeRig(key); } // G2：对手出拳纸偶同步出拳动作
 
       if (Math.random() > hitChance) {
         // 打空：进攻方连击清零；防守方视为闪避成功 → 开 1 秒反击窗口
@@ -917,6 +1193,7 @@
         B.foeBlocking = false;
         openCounterWindow(!isMeAttacking, null);
         if (!isMeAttacking) setMePose('dodge', POSE_TIMING.dodge); // 对手的拳打空＝我方闪避成功，切闪避姿势
+        else driveFoeRig('dodge'); // G2：我的拳打空＝对手闪避成功，纸偶同步闪避
         var counterP = def.tactic === 'counter' ? 0.45 : (def.style === 'guardcounter' ? 0.55 : 0.22);
         if (att.tactic === 'points') counterP *= 0.35; // 修复批次 B（M1）：打点拳进出快、出拳即走，被闪开也只吃约三分之一立即反击——点数克稳守的另一环（初版 0.5 时稳守打速度仍有 60%，收紧后稳守才真正怕快拳量）
         if (att.style === 'guardcounter') counterP *= 0.65; // 修复批次 B（M1）：防反型的拳收得快、不露空档——反击战术打它时「等空档」经常等不到
@@ -1044,6 +1321,10 @@
       if (!isMeAttacking) {
         if (guarding && !pierce) setMePose('block', POSE_TIMING.block);
         else setMePose('hit', POSE_TIMING.hit);
+      } else {
+        // G2：对手挨打纸偶同步——格挡住（未被击腹穿透）格挡姿态，其余受击（与主角同口径）
+        if (guarding && !pierce) driveFoeRig('block', POSE_TIMING.block);
+        else driveFoeRig('hit');
       }
       hitFx(figDef, heavy, crit);
       if (guarding && !pierce) SFX.block(); else if (heavy) SFX.heavy(); else SFX.light();
@@ -1086,6 +1367,15 @@
           if (traumaBefore < t && traumaAfter >= t && !marks[t]) { marks[t] = true; crossedMark = true; }
         });
         if (crossedMark) startKnockdown(!isMeAttacking);
+      }
+      /* G5 即时教学触发（仅手动模式＋教学窗，每条只出现一次；判定数值零改动，纯播报）：
+         格挡＝第一次硬吃对手的拳；击腹破防＝自己的拳第一次被格挡；连击＝第一次攒到 3 连；
+         重创＝任意一方重创第一次涨过 30。反击在 openCounterWindow（闪避成功开窗）处触发。 */
+      if (B.mode === 'manual') {
+        if (!isMeAttacking && !guarding) jitTeach('guard', '这拳你硬吃了——' + (isTouch ? '按住格挡键' : '按住空格') + '抱架：挡住的拳伤害大幅降低、重创也只积一半；被连打时先挡住，能打断他的连击。');
+        if (isMeAttacking && guarding && !pierce) jitTeach('body', '你的拳被他抱架挡下了——换' + (isTouch ? '金边「击腹」按钮' : 'B 键击腹') + '打肚子：击腹能穿透高位格挡、把他打入破防，趁破防接直拳最疼。');
+        if (isMeAttacking && comboNow >= 3) jitTeach('combo', '3 连击！干净命中连续不断就有连击加成（2 连 +5% / 3 连 +15% / 4 连起 +25%），但自己的拳被格挡就会清零——压着打别断档。');
+        if (traumaAfter >= 30) jitTeach('trauma', '重创槽涨起来了：有效命中会积累重创，跨过 25 / 50 / 75 会把人击倒读秒，攒满 100 直接 KO；它会随时间慢慢消退，所以要连续施压。');
       }
     }
 
@@ -1203,6 +1493,17 @@
       var sumEl = $('breakSummary'); if (sumEl) sumEl.innerHTML = '<b>本回合战况</b> — 你：命中 ' + rs.meHits + ' · 伤害 ' + rs.meDmg + ' · 最高连击 ' + rs.meMaxCombo + ' · 击倒对手 ' + (B.foeDownsRound || 0) + ' 次<br />对手：命中 ' + rs.foeHits + ' · 伤害 ' + rs.foeDmg + ' · 最高连击 ' + rs.foeMaxCombo + ' · 击倒你 ' + (B.meDownsRound || 0) + ' 次<br />重创值 — 你 ' + Math.round(B.meTrauma || 0) + ' / 100 · 对手 ' + Math.round(B.foeTrauma || 0) + ' / 100（休整期间每秒衰减 ' + KO_DECAY + '）';
       var foeEl = $('breakFoeInfo'); if (foeEl) foeEl.innerHTML = '<b>敌人特点</b> — 风格：' + (B.foe.style ? FOE_STYLES[B.foe.style].name : '—') + (B.foe.persona ? ' · 打法：' + personaDesc(B.foe.persona) : '') + ' · 当前战术：' + TACTICS[B.foe.tactic].name + '<br />观察：' + foeTendencyTxt() + '。';
       var tipsEl = $('breakTips'); if (tipsEl) tipsEl.innerHTML = breakTips().map(function (t) { return '<li><b>提示：</b>' + t + '</li>'; }).join('');
+      /* G5 即时教学（自动模式）：指令与战术不在开场灌输，等第一个回合间休息——第一次真正能下指令时才教，只教一次。 */
+      if (B.mode === 'auto' && teachWindow()) {
+        var tutCmd = tutorialState();
+        if (tutCmd.taught.indexOf('cmd') < 0) {
+          tutCmd.taught.push('cmd');
+          save();
+          var cmdTipTxt = '现在你能干预了：下方指令按钮——「组合拳」短时爆发连击、「铁壁」全力防守并按住重创积累、「搂抱」贴身停战回体力（都有冷却）；左侧战术按钮切换整场倾向。先试着下一个指令看看效果。';
+          if (tipsEl) tipsEl.innerHTML += '<li><b>教学：</b>' + cmdTipTxt + '</li>';
+          blog('【教学】' + cmdTipTxt, 'good');
+        }
+      }
       var tacBox = $('breakTacticBox'); if (tacBox) tacBox.style.display = isManual ? '' : 'none';
       $('breakInfo').textContent = '伤势 — 你：HP ' + mePct + '%（' + woundTxt(mePct) + (Math.round(S.injury) > 0 ? '；既有伤病 ' + Math.round(S.injury) + (injuryDebuffMul() < 1 ? '，本场属性受压制' : '') : '；无既有伤病') + '）· 体力已回复到 ' + Math.round(B.me.stam) +
         '　|　对手：HP ' + foePct + '%（' + woundTxt(foePct) + '）· 体力 ' + Math.round(B.foe.stam) +
@@ -1231,15 +1532,21 @@
       B.me.speechBuff = B.pendingSpeech === true;
       B.pendingSpeech = false;
       /* 修复批次 B（M5）：对手不再每回合随机重掷战术——整场人格在此按既定规则评估一次：
-         comeback 点数落后 ≥30 转强攻反扑 / protect 点数领先 ≥30 转稳守保胜果 / desperate 残血（HP<35%）转强攻拼命 / none 整场不变；
+         comeback 点数落后 ≥20 转强攻反扑 / protect 点数领先 ≥20 转稳守保胜果 / desperate 残血（HP<35%）转强攻拼命 / none 整场不变；
          规则不满足时回到 base。发生切换才播报：整场一致、跨回合可辨识，玩家能「读人」。
+         （批次 G7，2026-11-10：变招门槛 ±30→±20——人格参数、非用户硬数字。foeai 合并采样：
+         ±30 场均 0.153 条（360 场）→ ±20 0.203 条（360 场），未达 0.4 目标线；±15 合并 600 场 0.160 不更优。
+         定因：门槛非绑定约束——能产生可见切换的只有 points/counter×comeback 与 points×protect 三种
+         人格组合（attack 系 comeback/desperate 的目标战术即其 base、结构上不产生切换），且短局每场
+         仅约 1.1 次回合间评估；达 0.4 需动人格构成/切换口径，超出本批授权，数据与建议见
+         plan/04_CHANGELOG「2026-11-10 · G7」条。）
          （练习赛陪练不走人格：整场稳守带攻，行为可预期才教得到东西。） */
       if (!B.practice && B.foe.persona) {
         var per = B.foe.persona;
         var ptsMeNow = pointsOf(B.me, 0), ptsFoeNow = pointsOf(B.foe, 0);
         var wantTac = per.base;
-        if (per.adjust === 'comeback' && ptsMeNow - ptsFoeNow >= 30) wantTac = 'attack';
-        else if (per.adjust === 'protect' && ptsFoeNow - ptsMeNow >= 30) wantTac = 'counter';
+        if (per.adjust === 'comeback' && ptsMeNow - ptsFoeNow >= 20) wantTac = 'attack';
+        else if (per.adjust === 'protect' && ptsFoeNow - ptsMeNow >= 20) wantTac = 'counter';
         else if (per.adjust === 'desperate' && B.foe.hp < B.foe.hpMax * 0.35) wantTac = 'attack';
         if (wantTac !== B.foe.tactic) {
           B.foe.tactic = wantTac;
@@ -1272,8 +1579,8 @@
       var foePts = pointsOf(B.foe, B.foe.tactic === 'points' ? B.foe.hits * 2 : 0);
       var win, how;
       var isKO = B.foe.hp <= 0 || B.me.hp <= 0;
-      if (B.koKind === 'tko-giveup' && B.foe.hp <= 0) { win = true; how = 'TKO 获胜！（对手第 3 次击倒，死战设置关直接判负）'; $('figFoe').classList.add('down'); }
-      else if (B.koKind === 'tko-giveup' && B.me.hp <= 0) { win = false; how = 'TKO 落败（第 3 次击倒，死战设置关直接判负）'; $('figMe').classList.add('down'); }
+      if (B.koKind === 'tko-giveup' && B.foe.hp <= 0) { win = true; how = 'TKO 获胜！（对手本回合第 3 次击倒，直接判负）'; $('figFoe').classList.add('down'); }
+      else if (B.koKind === 'tko-giveup' && B.me.hp <= 0) { win = false; how = 'TKO 落败（本回合第 3 次击倒，直接判负）'; $('figMe').classList.add('down'); }
       else if (B.koKind === 'deathfight-down' && B.foe.hp <= 0) { win = true; how = 'TKO 获胜！（对手死战中再次被击倒）'; $('figFoe').classList.add('down'); }
       else if (B.koKind === 'deathfight-down' && B.me.hp <= 0) { win = false; how = 'TKO 落败（死战中再次被击倒）'; $('figMe').classList.add('down'); }
       else if (B.koKind === 'trauma' && B.foe.hp <= 0) { win = true; how = 'KO 获胜！（重创值满格 100，积累终结）'; $('figFoe').classList.add('down'); }
@@ -1289,6 +1596,9 @@
       // 姿势帧终局定格：胜＝胜利举臂图（结算窗延迟弹出，擂台上可见）；被 KO＝受击图配合倒地
       if (win) setMePose('victory', 0);
       else if (B.me.hp <= 0) setMePose('hit', 0);
+      // G2：对手纸偶终局定格（与主角同口径）——被 KO/TKO 倒地不起走 down；对手获胜举臂；点数负于我方保持抱架
+      if (B.foe.hp <= 0) driveFoeRig('hit');
+      else if (!win) driveFoeRig('victory');
       if (isKO) koFx(); else { SFX.finalBell(); if (win) SFX.victory(); } // Phase 9：KO 欢呼在 koFx 内（koCheer），判定胜另加胜利欢呼
       if (typeof BGM !== 'undefined') BGM.start('daily'); // Phase 9：战斗结束切回日常曲
       settleNow(win, how, isKO ? 2000 : 900);
@@ -1358,8 +1668,24 @@
       }
       S.money += prize;
       if (win) { S.wins += 1; S.fame += 1; S.winStreak = (S.winStreak || 0) + 1; } else { S.losses += 1; S.winStreak = 0; }
+      // 批次 G1：正式赛战绩入运行时日志（动态难度的数据源；练习赛/约战已在上方分流，不入日志；不落存档）
+      formLog.push({ t: S.wins + S.losses, win: win, round: B.round, meHpPct: B.me.hpMax ? Math.max(0, B.me.hp) / B.me.hpMax : 0 });
+      if (formLog.length > 8) formLog.shift();
       // 修复批次 C：正式赛击败伊芙琳（国内第 1 名）落盘——阶段 5「击败特定对手」通道与成就「弑王者」的依据（老档无此记录、不可追溯）
       if (win && B.foe && B.foe.key === 'opp_world_champion') S.beatChamp = true;
+      /* 正式版批次 G9 短期：卫冕战记账——本场在此之前/之后的一切（奖金/战绩/排名/影响力/阶段/成就）
+         都与普通正式赛完全同口径，此处只补卫冕专属状态：胜 → 累计卫冕 +1（与阶段 6 目标、成就
+         defend_1/defend_3 共用同一计数）；无论胜负都清掉待应战挑战并记本周已战（每周至多 1 场）。
+         放在 checkStageCompletion/checkAchievements 之前，让本场的卫冕胜场同场计入阶段与成就判定。 */
+      var defenseSettled = false;
+      if (B.defense) {
+        defenseState();
+        defenseSettled = true;
+        S.defenseWeek = w;
+        S.defenseChallenge = null;
+        if (win) S.defenses += 1;
+        dailyLog('卫冕战 vs ' + (B.foe ? B.foe.name : '挑战者') + '：' + (win ? '卫冕成功（累计 ' + S.defenses + ' 次）' : '卫冕失败，冠军易主') + '。', win ? 'good' : 'bad');
+      }
       // Phase 9 纯计数：累计 KO 胜场（对手 HP 归零的胜场，含 TKO/模拟 KO）。只写入计数，不参与任何胜负/数值逻辑
       if (win && B.foe && B.foe.hp <= 0) S.koWins = (typeof S.koWins === 'number' && S.koWins >= 0 ? S.koWins : 0) + 1;
       // 排名升降：赢高排名 +3~5 名、赢低排名 +1~2 名；输低排名 −3~5 名、输高排名 −1~2 名（名次数字增减相反）
@@ -1429,6 +1755,10 @@
         rows += '<tr><td>阶段完成：' + d.name + '</td><td>奖励 ¥<span class="tween-num" data-to="' + d.reward + '">0</span> 已到账' + (d.title ? ' ＋称号「' + d.title + '」' : '') + '</td></tr>'; // C2：阶段奖励同奖金一起滚动
       });
       rows += '<tr><td>国内排名</td><td>第 ' + oldRank + ' 名 → 第 ' + S.rank + ' 名' + (rankMoved < 0 ? '（上升 ' + (-rankMoved) + ' 名）' : rankMoved > 0 ? '（下降 ' + rankMoved + ' 名）' : '（不变）') + '</td></tr>';
+      /* 【新增文案·待用户审】卫冕战结算行（批次 G9 短期） */
+      if (defenseSettled) rows += win
+        ? '<tr><td>卫冕</td><td><b>卫冕成功！</b>累计第 ' + S.defenses + ' 次守住冠军（阶段 6 卫冕目标 ' + Math.min(S.defenses, 3) + ' / 3）</td></tr>'
+        : '<tr><td>卫冕</td><td>卫冕失败——冠军易主。排名与影响力已按正式赛口径重算；打回第 1 名后，新的挑战者还会再来</td></tr>';
       rows += '<tr><td>我方总伤害 / 命中</td><td>' + B.me.dmg + ' / ' + B.me.hits + '</td></tr>';
       rows += '<tr><td>对手总伤害 / 命中</td><td>' + B.foe.dmg + ' / ' + B.foe.hits + '</td></tr>';
       PUNCH_KEYS.forEach(function (k) {
@@ -1438,7 +1768,7 @@
       if (downInj) rows += '<tr><td>被击倒 ' + B.meDowns + ' 次</td><td>伤病 +' + downInj + '</td></tr>';
       if (koInj) rows += '<tr><td>被 KO 的代价</td><td>伤病 +' + koInj + '</td></tr>';
       if (deathInj) rows += '<tr><td>死战到底的代价</td><td>伤病 +' + deathInj + '</td></tr>';
-      if (B.koKind) rows += '<tr><td>终结方式</td><td>' + (B.koKind === 'trauma' ? '重创值满格 KO' : B.koKind === 'tko-giveup' ? 'TKO（死战关，直接判负）' : B.koKind === 'deathfight-down' ? '死战中再次击倒判负' : B.koKind === 'sim' ? 'KO（模拟）' : B.koKind === 'sim-tko' ? 'TKO（模拟）' : 'HP 归零 KO') + '</td></tr>';
+      if (B.koKind) rows += '<tr><td>终结方式</td><td>' + (B.koKind === 'trauma' ? '重创值满格 KO' : B.koKind === 'tko-giveup' ? 'TKO（本回合第 3 次击倒，直接判负）' : B.koKind === 'deathfight-down' ? '死战中再次击倒判负' : B.koKind === 'sim' ? 'KO（模拟）' : B.koKind === 'sim-tko' ? 'TKO（模拟）' : 'HP 归零 KO') + '</td></tr>';
       rows += '<tr><td>心态</td><td>' + (mindDelta > 0 ? '+' : '') + mindDelta + '（当前 ' + Math.round(S.mind) + ' · ' + mindTierName(S.mind) + '）</td></tr>';
       rows += '<tr><td>体力</td><td>降至 15，先好好休息</td></tr>';
       rows += '<tr><td>今日剩余行动点</td><td>' + S.ap + ' AP（报名免费，赛后保留）</td></tr>';
@@ -1447,7 +1777,9 @@
       var res = $('settleResult');
       res.textContent = win ? '胜 利' : '败 北';
       res.className = 'big-result ' + (win ? 'win' : 'lose');
-      $('settleDesc').textContent = how + '　战绩 ' + S.wins + ' 胜 · ' + S.losses + ' 负' + (rankMoved < 0 ? '　排名升至第 ' + S.rank + ' 名，恭喜！' : '') + '　影响力 ' + influenceLabel(influenceAfter) + (stageDoneNow.length ? '　阶段「' + stageDoneNow[stageDoneNow.length - 1].name + '」完成！' : '');
+      $('settleDesc').textContent = how + '　战绩 ' + S.wins + ' 胜 · ' + S.losses + ' 负' + (rankMoved < 0 ? '　排名升至第 ' + S.rank + ' 名，恭喜！' : '') + '　影响力 ' + influenceLabel(influenceAfter) + (stageDoneNow.length ? '　阶段「' + stageDoneNow[stageDoneNow.length - 1].name + '」完成！' : '') +
+        /* 【新增文案·待用户审】卫冕战结算尾句（批次 G9 短期） */
+        (defenseSettled ? (win ? '　——卫冕成功，王座又守住了一次。' : '　——冠军易主。跌下去不可怕，爬回来的人才配叫传奇。') : '');
       var sfl = $('settleFoeLine'); if (sfl && B.foe) sfl.textContent = B.foe.name + '：「' + foeLine(B.foe.key, win ? 'lose' : 'win') + '」'; // D1：赛后对手台词（win/lose 为对手视角：玩家胜→对手负台词）
       if (B.mode !== 'sim') dailyLog('比赛 vs ' + B.foe.name + '（第 ' + foeRank + ' 名）：' + how + '，国内排名第 ' + oldRank + ' 名 → 第 ' + S.rank + ' 名，影响力 ' + influenceLabel(influenceAfter) + (influenceUp ? '（本场后提升！）' : influenceDown ? '（本场后下降！）' : '') + '。', win ? 'good' : 'bad');
       if (rankMoved < 0) setTimeout(function () { toast('国内排名升至第 ' + S.rank + ' 名！'); }, (delay || 900) + 500);
@@ -1456,6 +1788,7 @@
         setScene(win && S.rank === 1 ? 'title_stage' : 'ring_corner'); // A1：夺冠结算切冠军舞台，其余结算切擂台角
         Array.prototype.forEach.call(document.querySelectorAll('#settleModal .tween-num'), function (el) { countUp(el, parseInt(el.getAttribute('data-to'), 10) || 0); }); // C2：开窗后启动数字滚动
       }, delay || 900);
+      maybeDefenseChallenge(); // 正式版批次 G9 短期：正式赛结算后补检卫冕挑战——刚登顶即有挑战者上门；卫冕战本身刚结算时 defenseWeek 已记本周、不会连环生成；跌下第 1 名则待应战挑战在此作废
       save();
     }
 
@@ -1463,34 +1796,115 @@
     function simulateBattle() {
       var foe = pendingFoe || makeFoe();
       pendingFoe = null;
+      var simDefense = nextBattleDefense; nextBattleDefense = false; // 正式版批次 G9 短期：卫冕战走模拟跳过时同样带卫冕标记进结算
       if (!foe.weakness && S.scoutedForDay === S.day) foe.weakness = PUNCH_KEYS[Math.floor(Math.random() * PUNCH_KEYS.length)];
       var me = myFighter();
-      B = { mode: 'sim', me: me, foe: foe, round: 1, phase: 'over', buff: { combo: 0, wall: 0 }, cd: { combo: 0, wall: 0 }, meBlocking: false, foeBlocking: false, time: 0, comboMe: 0, comboFoe: 0, meCounterUntil: -1, foeCounterUntil: -1, meBrokenUntil: -1, foeBrokenUntil: -1, meDownsRound: 0, foeDownsRound: 0, koKind: null };
-      S.lastMatchDay = S.day; // 报名免费（0 AP），只记录今日已比赛
+      B = { mode: 'sim', me: me, foe: foe, defense: simDefense, round: 1, phase: 'over', buff: { combo: 0, wall: 0 }, cd: { combo: 0, wall: 0 }, meBlocking: false, foeBlocking: false, time: 0, comboMe: 0, comboFoe: 0, meCounterUntil: -1, foeCounterUntil: -1, meBrokenUntil: -1, foeBrokenUntil: -1, meDownsRound: 0, foeDownsRound: 0, koKind: null };
+      if (!simDefense) S.lastMatchDay = S.day; // 报名免费（0 AP），只记录今日已比赛（卫冕战不占每周正式赛位，与 startBattle 同口径）
       B.bandage = !!S.buffs.bandage; S.buffs.bandage = false;
       if (S.mind >= 20 && S.mind < 40) ATTRS.forEach(function (a) { B.me.attrs[a.key] = Math.round(B.me.attrs[a.key] * 0.95 * 10) / 10; }); // 心态紧张修正
       /* KO 定型（2026-11-03，KO_AUDIT.md 实装记录）：模拟跳过按新引擎实测分布重标定，不再用旧评分线性式＋45% 平直 KO 抽签。
-         胜率改走 TTK 竞赛：以与引擎同构的 DPS 模型（出拳率 0.24+速度*0.012、命中率 clamp(0.70+(精准-步法)*0.01)、
-         格挡期望 *0.85、单拳净伤害走 F2 地板 max(1, raw-min(防守, raw*0.7))）估算双方击杀回合数 ttkMe/ttkFoe，
-         winP = clamp(logistic(2.0*(ttkFoe-ttkMe-0.2)/0.6) - 0.03*max(0, 对手防守-我方力量-6) + 弱点 0.05, 0.02, 0.98)；
-         KO 率 koP = clamp(1.75 - 0.271*minTTK, 0.02, 0.99)；KO 终结回合按 minTTK 采样（见下）。
-         标定数据（ko-impl-verify 确定性口径 8 环境，拟合脚本 tests/ko-sim-fit.mjs）：胜率平均误差 7.4pp（旧制 25~41pp）、KO 率误差 ≤1.8pp；
-         spd/t6 两类构筑仍高估约 19~22pp（DPS 模型对熟练度缩放的刻画偏差），属已知遗留，见 KO_AUDIT 实装记录。 */
-      function profAvg(f) { var s = 0; PUNCH_KEYS.forEach(function (k) { s += f.prof[k] || 0; }); return s / PUNCH_KEYS.length; }
-      function simNetDmg(att, def) {
-        var raw = att.attrs.power * (1 + profAvg(att) * 0.05) * 1.05;
+         胜率改走 TTK 竞赛：以与引擎同构的 DPS 模型估算双方击杀回合数 ttkMe/ttkFoe，
+         winP 与 KO 率的现行常量见下方 G3-a 拟合值（旧制 logistic(2.0/0.6/平移0.2)+罚项与 koP 1.75-0.271 已被取代）；KO 终结回合按 minTTK 采样（见下）。
+         批次 G3-a 重标定（2026-11-10，plan/04_CHANGELOG G3 条）：旧 DPS 模型把单拳伤害写成
+         「力量×(1+平均熟练度×0.05)×1.05」的平直式——漏了拳种系数混合（pickPunch 权重×战术倾向）、
+         强攻战术 ×1.3、暴击期望、对手风格 dmgMul 与连击积累，且对双方都套 ×0.85 格挡折损
+         （引擎里我方在无指令口径下根本不持架、对手的拳不吃格挡折损），又用 40 次平直封顶代替
+         体力税。探针（research/g3_logs/probe_sim.mjs，同对 fighter 分解）实测：引擎单拳净伤是
+         旧模型的 1.9~2.4 倍、且对手侧低估更甚，TTK 竞赛被系统性推向玩家——spd 构筑残差达
+         32.5pp（复测 I1）。新模型逐项按引擎期望重写：拳种混合（权重＝熟练度×风格×战术倾向）、
+         战术命中表（calcHitChance 同分支）、格挡只折我方进攻且按对手真实格挡率＋击腹穿透混合、
+         出拳数走体力 duty-cycle 期望模拟（90 tick×3 回合、回合间 +30、被击腹/命中削体力按对手
+         命中期望扣减）。logistic 与 koP 常量由 research/g3_logs/fit_sim.mjs 对引擎实测胜率网格拟合。 */
+      var SIM_FIT = 1.10; // 连击积累＋反击窗口的期望增益（引擎分解残差的全局吸收项，fit_sim 拟合）
+      function simMix(att, isFoe) {
+        var tac = isFoe ? ((att.persona && att.persona.base) || att.tactic || 'attack') : 'attack'; // 模拟口径：我方整场强攻（与 ko-impl-verify 无指令口径一致），对手走人格 base
+        var st = isFoe ? styleOf(att) : null;
+        var inten = st && typeof att.styleIntensity === 'number' ? att.styleIntensity : 0;
+        var tacBias = tac === 'attack' ? { jab: 0.8, straight: 1.0, hook: 1.35, upper: 1.35, body: 1.15 }
+          : tac === 'points' ? { jab: 1.5, straight: 1.25, hook: 0.75, upper: 0.75, body: 0.9 }
+          : { jab: 0.9, straight: 1.15, hook: 1.0, upper: 1.05, body: 1.0 };
+        var wsum = 0, coef = 0, stam = 0, prof = 0, bodyW = 0;
+        PUNCH_KEYS.forEach(function (k) {
+          var base = 1 + (att.prof[k] || 0) * (isFoe ? 1 : 1.6); // pickPunch 同权重（我方 ×1.6、对手 ×1）
+          if (st) base *= (1 + (st.weights[k] - 1) * inten);
+          var wgt = Math.max(0.1, base * (tacBias[k] || 1));
+          wsum += wgt; coef += wgt * PUNCHES[k].coef; stam += wgt * PUNCHES[k].stam; prof += wgt * (att.prof[k] || 0);
+          if (k === 'body') bodyW = wgt;
+        });
+        return { tac: tac, coefMix: coef / wsum, stamMix: stam / wsum, profMix: prof / wsum, bodyShare: bodyW / wsum };
+      }
+      function simNetDmg(att, isFoe, mix) {
+        var raw = att.attrs.power * mix.coefMix * (1 + mix.profMix * 0.05) * (mix.tac === 'attack' ? 1.3 : 1) * 1.05; // 战术强攻 ×1.3、暴击期望 ×1.05（tryAttack/dealDamage 同口径）
+        if (isFoe) raw *= styleVal(att, 'dmgMul', 1);
+        raw *= SIM_FIT;
+        return raw;
+      }
+      function simNetPer(att, def, isFoe, mix) { // 单拳净伤害期望（F2 地板：减伤封顶 raw 的 70%）
+        var raw = simNetDmg(att, isFoe, mix);
         return Math.max(1, raw - Math.min(def.attrs.defense * 1.0, raw * 0.7));
       }
-      function simDps(att, def, isFoe) {
-        var attempts = Math.min(90 * (0.24 + att.attrs.speed * 0.012) * (isFoe ? 1.15 : 1), 40);
-        var hc = Math.min(0.95, Math.max(0.30, 0.70 + (att.attrs.accuracy - def.attrs.footwork) * 0.01)) * 0.9;
-        return attempts * hc * 0.85 * simNetDmg(att, def);
+      function simHitChance(att, def, attTac, defTac) { // calcHitChance 同分支（含战术相克乘子与双重钳制）
+        var hc = 0.70 + (att.attrs.accuracy - def.attrs.footwork) * 0.01;
+        hc = Math.min(0.95, Math.max(0.30, hc));
+        if (defTac === 'counter') hc *= (attTac === 'points' ? 0.88 : 0.7);
+        else if (defTac === 'points') hc *= (attTac === 'attack' ? 1.06 : 0.95);
+        else if (attTac === 'attack') hc *= 1.02;
+        return Math.min(0.95, Math.max(0.30, hc));
       }
-      var ttkMe = foe.hpMax / Math.max(1, simDps(me, foe, false));
-      var ttkFoe = me.hpMax / Math.max(1, simDps(foe, me, true));
+      function simBlockFactor(def, defTac, mix) { // 只有对手会持架格挡我方（calcBlockChance 同式）；击腹穿透 70%、其余格挡后 ×0.3
+        var bp = 0.16 + (defTac === 'counter' ? 0.08 : 0);
+        if (def.style === 'guardcounter') bp += styleVal(def, 'blockAdd', 0);
+        bp = clamp(bp, 0.05, 0.45);
+        return (1 - bp) + bp * (mix.bodyShare * 0.7 + (1 - mix.bodyShare) * 0.3);
+      }
+      function simAttempts(att, isFoe, mix, drainPerRound) { // 体力税：90 tick 期望 duty-cycle（<6 歇气 +4.6、<30 频率 ×0.7、失败回气 +0.92、回合间 +30、被命中削体力）
+        var freq = 0.24 + att.attrs.speed * 0.012;
+        if (isFoe) freq *= 1.15 * styleVal(att, 'freqMul', 1);
+        if (mix.tac === 'counter') freq *= 0.6;
+        var cost = mix.stamMix * (mix.tac === 'attack' ? 1.5 : mix.tac === 'points' ? 0.7 : 1);
+        if (isFoe) cost *= styleVal(att, 'stamMul', 1);
+        var stam = 100, total = 0;
+        for (var r = 0; r < 3; r++) {
+          for (var t = 0; t < 90; t++) {
+            if (stam < 6) { stam = Math.min(100, stam + 4.6); continue; }
+            var p = freq * (stam < 30 ? 0.7 : 1);
+            total += p;
+            stam += (1 - p) * 0.92 - p * cost;
+            if (stam < 0) stam = 0; else if (stam > 100) stam = 100;
+          }
+          stam = Math.min(100, Math.max(0, stam + 30 - (drainPerRound || 0)));
+        }
+        return total / 3;
+      }
+      function simDps(att, def, isFoe, foeHitsPerRound, foeNetPer, foeBodyShare) {
+        var mix = simMix(att, isFoe);
+        var defTac = isFoe ? 'attack' : ((def.persona && def.persona.base) || def.tactic || 'attack');
+        var net = simNetPer(att, def, isFoe, mix);
+        var drain = foeHitsPerRound ? foeHitsPerRound * (1 + (foeBodyShare || 0) * 0.6 * (foeNetPer || 0)) : 0; // 被命中每拳 −1 体力、击腹再 −伤害×0.6（dealDamage 同口径）
+        var attempts = simAttempts(att, isFoe, mix, drain);
+        var hc = simHitChance(att, def, mix.tac, defTac);
+        var bf = isFoe ? 1 : simBlockFactor(def, defTac, mix);
+        return { dps: attempts * hc * bf * net, attempts: attempts, hc: hc, net: net, mix: mix };
+      }
+      var simMe0 = simDps(me, foe, false, 0, 0, 0); // 第一遍不计被削体力，求对手命中量后再算 drain
+      var simFoe0 = simDps(foe, me, true, 0, 0, 0);
+      var simMe = simDps(me, foe, false, simFoe0.attempts * simFoe0.hc, simFoe0.net, simFoe0.mix.bodyShare);
+      var simFoe = simDps(foe, me, true, simMe0.attempts * simMe0.hc, simMe0.net, simMe0.mix.bodyShare);
+      var ttkMe = foe.hpMax / Math.max(1, simMe.dps);
+      var ttkFoe = me.hpMax / Math.max(1, simFoe.dps);
       var raceD = ttkFoe - ttkMe;
-      var defPen = Math.max(0, foe.attrs.defense - me.attrs.power - 6);
-      var winP = clamp(1 / (1 + Math.exp(-2.0 * (raceD - 0.2) / 0.6)) - 0.03 * defPen + (foe.weakness ? 0.05 : 0), 0.02, 0.98);
+      var defPen = Math.max(0, foe.attrs.defense - me.attrs.power - 6); // G3-a 拟合后系数归零（新模型已把防守写进单拳净伤，罚项冗余），保留变量备查
+      var winP = clamp(1 / (1 + Math.exp(-4.0 * (raceD - 0.3) / 0.55)) - 0 * defPen + (foe.weakness ? 0.05 : 0), 0.02, 0.98); // G3-a 拟合：k=4.0/平移 0.3/alpha=0.55（fit_sim v2，全环境拟合误差 ≤8.4pp）
+      /* G3-a 记分混合（fit_sim2 拟合，K=0.075）：winP 原式只建模 TTK 竞赛；当对局大概率走点数终局时
+         （koP 低），胜负由记分牌决定——scoreOf 的「伤害＋命中×2」口径利好量产型构筑，纯 TTK 会系统性
+         低估 spd/tec（G1b 后中盘点数局变多后实测残差 spd 8.3/tec 11.7/br1 17pp）。按 (1-koP)² 为权重
+         混合记分胜率 logistic(0.075×记分率差)：拟合样本 spd Δ1.2/tec Δ0.4/pow Δ2.0，br1 实测 31% vs 混合预测 30.7%。 */
+      var koP = clamp(1.90 - 0.425 * Math.min(ttkMe, ttkFoe), 0.02, 0.99);
+      var scoreRateD = (simMe.dps + 2 * simMe.attempts * simMe.hc) - (simFoe.dps + 2 * simFoe.attempts * simFoe.hc);
+      var winPPts = 1 / (1 + Math.exp(-0.075 * scoreRateD));
+      var ptsW = Math.pow(1 - koP, 2);
+      winP = clamp(winP * (1 - ptsW) + winPPts * ptsW, 0.02, 0.98);
       var win = Math.random() < winP;
       var totalPunches = Math.round(rnd(24, 44));
       var weights = PUNCH_KEYS.map(function (k) { return 1 + me.prof[k] * 1.6; });
@@ -1503,11 +1917,11 @@
       if (win && me.dmg < foe.dmg) { var swapD = me.dmg; me.dmg = foe.dmg; foe.dmg = swapD; } // 展示口径：胜者总伤害不低于负者
       if (!win && foe.dmg < me.dmg) { var swapD2 = me.dmg; me.dmg = foe.dmg; foe.dmg = swapD2; }
       var minTTK = Math.min(ttkMe, ttkFoe);
-      var ko = Math.random() < clamp(1.75 - 0.271 * minTTK, 0.02, 0.99);
+      var ko = Math.random() < koP; // G3-a 拟合（fit_sim v2：br1 KO 率误差 0.2pp、其余环境 ≤1.3pp）；koP 已在记分混合处统一计算
       var r = 3;
       if (ko) {
-        var pR1 = clamp(1.62 - 0.55 * minTTK, 0, 0.97);
-        var pR2 = clamp(1.30 - 0.22 * minTTK, 0.60, 0.99);
+        var pR1 = clamp(1.62 - 0.89 * minTTK, 0, 0.97); // G3-a：minTTK 随新模型缩短（约旧尺度 ×0.62），斜率按比例放大保住终结回合分布（展示口径近似）
+        var pR2 = clamp(1.30 - 0.355 * minTTK, 0.60, 0.99);
         var rollR = Math.random();
         r = rollR < pR1 ? 1 : (rollR < pR1 + (1 - pR1) * pR2 ? 2 : 3);
       }
@@ -1698,6 +2112,7 @@
       spawnAfterimage(fig); // B2：对手手动模式出拳残影
       setTimeout(function () { fig.classList.remove('punching'); fig.classList.remove('lined'); }, 150);
       spawnPunchArc(fig); // 对手强化：出拳瞬间身前刷拳风弧光
+      driveFoeRig(key); // G2：手动模式对手出拳纸偶同步
       if (performance.now() < B.man.dodgeUntil) {
         SFX.whiff();
         setMePose('dodge', POSE_TIMING.dodge); // 主动闪避帧内躲开：切闪避姿势
@@ -1744,7 +2159,7 @@
       if (M.fX < M.mX + 6) M.fX = M.mX + 6;
       if (Math.random() < 0.03) M.fY = clamp(M.fY + rnd(-6, 6), -10, 10);
       foe.stam = Math.min(100, foe.stam + 3.5 * dt);
-      M.foePunchT -= dt * ((B.foeBuff && B.foeBuff.wall > 0) ? 0.55 : 1); // 修复批次 B 三调：对手铁壁抱架期间出拳间隔同样放慢（与自动模式 freq ×0.55 对称）
+      M.foePunchT -= dt * ((B.foeBuff && B.foeBuff.wall > 0) ? 0.40 : 1); // 修复批次 B 三调：对手铁壁抱架期间出拳间隔同样放慢（与自动模式 freq 对称）；批次 G3-b 迭代2 同步 ×0.55→×0.40
       if (M.foePunchT <= 0) {
         var w = weekOf(S.day);
         M.foePunchT = Math.max(0.33, (rnd(0.55, 1.0) - w * 0.03) * 0.87) * (foe.tactic === 'counter' ? 1.5 : 1) / styleVal(foe, 'freqMul', 1) * (foe.practice ? (B.round === 1 ? 2.2 : 1.6) : 1); // 修复批次 A：手动模式陪练同样少进攻（出拳间隔拉长）
@@ -2003,10 +2418,12 @@
     /* 指令（修复批次 B · M2 重构：玩家与对手 AI 共用同一套指令——同 CD、同效果、同判罚；
        缠抱停战中双方都不能下指令。指令用量记入 B.cmdUse 遥测，供实验室 A/B 采样。） */
     function cmdHoldOn() { return B && B.time < (B.holdUntil || -1); }
+    var CMD_FATIGUE = 1.5; // 批次 G3-b：指令疲劳系数 0.5→1.0（迭代1）→1.5（迭代2）——冷却 = 基础×(1+系数×已用次数)；spam 在 1.2~1.5 回合的短局里开局即叠满三指令、smart 的择时优势等不到窗口。迭代1（1.0）实测合并 n=200 仍有 3/4 组 spam 领先 +5~+10pp：CD 单位是 tick（冷却值以 dt=0.5 递减，45 冷却=90 tick），×2 仍够 spam 在两回合局里各用两次；1.5 让第二次冷却 ×2.5，smart 以单次择时为主、受影响小。双方同规则
+    // 批次 G3-b 迭代4：组合拳/搂抱基础冷却 45→60 / 30→55（双方同规则，护腕 meCdMul 照旧先行缩放我方）——迭代3 后 power×attack 组 spam−smart 仍 +11pp，用量差集中在组合（184 vs 98）与搂抱（199 vs 166）：搂抱对强攻人格是反复清零连击积累的釜底抽薪、且原 CD 最短，拉长两者的基础冷却直接削 spam 的单位时间指令密度，smart 的择时单发基本不吃。
     function useCombo() {
       if (!B || B.phase !== 'fight' || B.cd.combo > 0 || cmdHoldOn()) return;
       B.buff.combo = 10;
-      B.cdMax.combo = Math.round(45 * (B.meCdMul || 1) * (1 + 0.5 * (B.cmdUse ? B.cmdUse.me.combo : 0))); B.cd.combo = B.cdMax.combo; // 指令疲劳：喊得越多、冷却越久；修复批次 D：护腕机制先缩短基础冷却
+      B.cdMax.combo = Math.round(60 * (B.meCdMul || 1) * (1 + CMD_FATIGUE * (B.cmdUse ? B.cmdUse.me.combo : 0))); B.cd.combo = B.cdMax.combo; // 指令疲劳：喊得越多、冷却越久；修复批次 D：护腕机制先缩短基础冷却
       if (B.cmdUse) B.cmdUse.me.combo++;
       blog('指令：组合拳爆发！接下来 10 秒火力全开，期间连击被格挡也不清零。', 'good');
       renderBattle();
@@ -2014,7 +2431,7 @@
     function useWall() {
       if (!B || B.phase !== 'fight' || B.cd.wall > 0 || cmdHoldOn()) return;
       B.buff.wall = 10;
-      B.cdMax.wall = Math.round(60 * (B.meCdMul || 1) * (1 + 0.5 * (B.cmdUse ? B.cmdUse.me.wall : 0))); B.cd.wall = B.cdMax.wall; // 修复批次 D：护腕机制先缩短基础冷却
+      B.cdMax.wall = Math.round(60 * (B.meCdMul || 1) * (1 + CMD_FATIGUE * (B.cmdUse ? B.cmdUse.me.wall : 0))); B.cd.wall = B.cdMax.wall; // 修复批次 D：护腕机制先缩短基础冷却
       if (B.cmdUse) B.cmdUse.me.wall++;
       blog('指令：铁壁防守！10 秒内大幅减伤，且重创值不积累。', 'good');
       renderBattle();
@@ -2032,10 +2449,10 @@
       var user = isMe ? B.me : B.foe;
       var other = isMe ? B.foe : B.me;
       var warn;
-      if (isMe) { B.cdMax.clinch = Math.round(30 * (B.meCdMul || 1) * (1 + 0.5 * (B.cmdUse ? B.cmdUse.me.clinch : 0))); B.cd.clinch = B.cdMax.clinch; B.clinchWarn += 1; warn = B.clinchWarn; if (B.cmdUse) B.cmdUse.me.clinch++; } // 修复批次 D：护腕机制同样作用于搂抱冷却（对手侧不吃装备）
-      else { B.foeCd.clinch = Math.round(30 * (1 + 0.5 * (B.cmdUse ? B.cmdUse.foe.clinch : 0))); B.foeClinchWarn = (B.foeClinchWarn || 0) + 1; warn = B.foeClinchWarn; if (B.cmdUse) B.cmdUse.foe.clinch++; }
+      if (isMe) { B.cdMax.clinch = Math.round(55 * (B.meCdMul || 1) * (1 + CMD_FATIGUE * (B.cmdUse ? B.cmdUse.me.clinch : 0))); B.cd.clinch = B.cdMax.clinch; B.clinchWarn += 1; warn = B.clinchWarn; if (B.cmdUse) B.cmdUse.me.clinch++; } // 修复批次 D：护腕机制同样作用于搂抱冷却（对手侧不吃装备）
+      else { B.foeCd.clinch = Math.round(55 * (1 + CMD_FATIGUE * (B.cmdUse ? B.cmdUse.foe.clinch : 0))); B.foeClinchWarn = (B.foeClinchWarn || 0) + 1; warn = B.foeClinchWarn; if (B.cmdUse) B.cmdUse.foe.clinch++; }
       // 修复批次 B 三调：回体力按需求缩放——体力 <50 回满 20，体力还多时只回 8（抱这一口主要是停战，不是充电）；乱抱喂对手 +8 反成净亏
-      var stamGain = user.stam < 50 ? 20 : 8;
+      var stamGain = user.stam < 35 ? 12 : user.stam < 60 ? 6 : 3; // 批次 G3-b：回体按需求缩放收紧（旧 <50 回 20/否则 8；迭代1 改 16/8/4 后 spam 合并仍占优，迭代2 再收一档为 12/6/3）——spam 每场搂抱 2~2.8 次远超 smart，属代价组不改停战/清连击本体
       user.stam = Math.min(100, user.stam + stamGain);
       other.stam = Math.min(100, other.stam + 8);
       B.comboMe = 0; B.comboFoe = 0;
@@ -2058,7 +2475,7 @@
     /* 对手指令（与玩家同 CD/同效果，触发由 foeCommandAI 按人格评估） */
     function foeUseCombo() {
       if (!B || B.phase !== 'fight' || B.foeCd.combo > 0 || cmdHoldOn()) return false;
-      B.foeBuff.combo = 10; B.foeCd.combo = Math.round(45 * (1 + 0.5 * (B.cmdUse ? B.cmdUse.foe.combo : 0)));
+      B.foeBuff.combo = 10; B.foeCd.combo = Math.round(60 * (1 + CMD_FATIGUE * (B.cmdUse ? B.cmdUse.foe.combo : 0)));
       if (B.cmdUse) B.cmdUse.foe.combo++;
       blog('对手指令：组合拳爆发！对手接下来 10 秒火力全开（连击被格挡也不清零），小心！', 'bad');
       renderBattle();
@@ -2066,7 +2483,7 @@
     }
     function foeUseWall() {
       if (!B || B.phase !== 'fight' || B.foeCd.wall > 0 || cmdHoldOn()) return false;
-      B.foeBuff.wall = 10; B.foeCd.wall = Math.round(60 * (1 + 0.5 * (B.cmdUse ? B.cmdUse.foe.wall : 0)));
+      B.foeBuff.wall = 10; B.foeCd.wall = Math.round(60 * (1 + CMD_FATIGUE * (B.cmdUse ? B.cmdUse.foe.wall : 0)));
       if (B.cmdUse) B.cmdUse.foe.wall++;
       blog('对手指令：铁壁防守！对手 10 秒内大幅减伤，且重创值不积累。', 'bad');
       renderBattle();

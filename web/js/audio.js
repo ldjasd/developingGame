@@ -100,24 +100,51 @@
     };
 
     /* ================= Phase 9：BGM（全合成循环 sequencer，无外部文件） =================
-       两套曲目、8 步/小节、4 小节循环。调度：setInterval 90ms 前瞻 0.25s 排音，
+       8 步/小节、4 小节循环。调度：setInterval 90ms 前瞻 0.25s 排音，
        每个音符仍走 playTone/playNoise（自带 muted 守卫与 AC 解锁）。
        muted 或页面隐藏时调度器只推进时间锚点、不产生任何振荡器/噪声节点（不空转发声）；
        已排进 0.25s 前瞻窗的极少数音符无法撤回，是前瞻调度的固有尾音（<0.25s）。
-       状态只存内存（BGM.track），不入存档；开始播放只由用户手势路径触发（见文件末解锁监听）。 */
+       状态只存内存（BGM.track），不入存档；开始播放只由用户手势路径触发（见文件末解锁监听）。
+       正式版批次 G6（plan T10）：曲目全面参数化——BPM/音阶/编排皆数据（每曲一张 kit 参数表：
+       低音模式/波形/峰值/时值、和弦步位与奏法、旋律波形、底鼓步位、踩镲奇偶），调度器只读表、
+       不再按曲名写分支。曲目：title（标题）/ daily（日常）/ story·shop（daily 变体：同小节数据、
+       换 BPM 与乐器参数）/ battle（战斗）。daily/battle 的 kit 即旧写死编排的逐项转写，音响不变。 */
     function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+    var BGM_DAILY_BARS = [
+      { bass: 45, chord: [57, 60, 64, 67], mel: [64, -1, 67, -1, 69, -1, 67, 64] },
+      { bass: 41, chord: [53, 57, 60, 65], mel: [65, -1, 64, -1, 60, -1, 57, -1] },
+      { bass: 48, chord: [55, 59, 64, 67], mel: [64, -1, 67, -1, 71, -1, 67, -1] },
+      { bass: 43, chord: [55, 59, 62, 67], mel: [62, -1, 59, -1, 55, -1, 59, -1] }
+    ];
     var BGM_TRACKS = {
+      title: { // 标题曲（G6 新增）：96 BPM，Cmaj7–Am7–Fmaj7–G，大调明亮、高八度旋律，与日常曲（Am/76）可分辨
+        bpm: 96,
+        kit: { bassMode: 'bar', bassWave: 'triangle', bassPeak: 0.05, bassDurMul: 1.9, chordMode: 'arp', chordSteps: [0, 2, 4, 6], chordWave: 'sine', chordPeak: 0.02, chordDurMul: 1.6, chordOct: 0, melWave: 'sine', melPeak: 0.042, melDurMul: 1.5 },
+        bars: [
+          { bass: 48, chord: [60, 64, 67, 71], mel: [72, -1, 76, -1, 79, -1, 76, 72] },
+          { bass: 45, chord: [57, 60, 64, 67], mel: [69, -1, 72, -1, 76, -1, 72, -1] },
+          { bass: 41, chord: [53, 57, 60, 65], mel: [77, -1, 76, -1, 72, -1, 69, -1] },
+          { bass: 43, chord: [55, 59, 62, 67], mel: [74, -1, 71, -1, 67, -1, 71, -1] }
+        ]
+      },
       daily: { // 日常曲：76 BPM，Am7–Fmaj7–Cmaj7–G，低音量、慢速轻松
         bpm: 76,
-        bars: [
-          { bass: 45, chord: [57, 60, 64, 67], mel: [64, -1, 67, -1, 69, -1, 67, 64] },
-          { bass: 41, chord: [53, 57, 60, 65], mel: [65, -1, 64, -1, 60, -1, 57, -1] },
-          { bass: 48, chord: [55, 59, 64, 67], mel: [64, -1, 67, -1, 71, -1, 67, -1] },
-          { bass: 43, chord: [55, 59, 62, 67], mel: [62, -1, 59, -1, 55, -1, 59, -1] }
-        ]
+        kit: { bassMode: 'bar', bassWave: 'triangle', bassPeak: 0.055, bassDurMul: 1.9, chordMode: 'arp', chordSteps: [0, 2, 4, 6], chordWave: 'sine', chordPeak: 0.022, chordDurMul: 1.6, chordOct: 0, melWave: 'triangle', melPeak: 0.038, melDurMul: 1.4 },
+        bars: BGM_DAILY_BARS
+      },
+      story: { // 剧情变体（G6）：daily 同小节，64 BPM 更慢、旋律换正弦长音——对白场面压低存在感
+        bpm: 64,
+        kit: { bassMode: 'bar', bassWave: 'triangle', bassPeak: 0.045, bassDurMul: 2.2, chordMode: 'arp', chordSteps: [0, 2, 4, 6], chordWave: 'triangle', chordPeak: 0.018, chordDurMul: 2.0, chordOct: 0, melWave: 'sine', melPeak: 0.03, melDurMul: 1.8 },
+        bars: BGM_DAILY_BARS
+      },
+      shop: { // 商店变体（G6）：daily 同小节，88 BPM 提速、旋律换方波轻跳——货架浏览的轻快感
+        bpm: 88,
+        kit: { bassMode: 'bar', bassWave: 'triangle', bassPeak: 0.05, bassDurMul: 1.9, chordMode: 'arp', chordSteps: [0, 2, 4, 6], chordWave: 'sine', chordPeak: 0.02, chordDurMul: 1.6, chordOct: 0, melWave: 'square', melPeak: 0.014, melDurMul: 1.2 },
+        bars: BGM_DAILY_BARS
       },
       battle: { // 战斗曲：140 BPM，Dm–B♭–F–C，驱动低音+底鼓/踩镲，音量略高
         bpm: 140,
+        kit: { bassMode: 'step', bassWave: 'triangle', bassPeak: 0.075, bassDurMul: 0.95, bassAlt: { mod: 4, rem: 2, oct: 12 }, chordMode: 'stab', chordSteps: [0, 3, 6], chordWave: 'sine', chordPeak: 0.016, chordDurAbs: 0.18, chordOct: 12, melWave: 'square', melPeak: 0.018, melDurMul: 1.1, kickSteps: [0, 4], hatParity: 'odd' },
         bars: [
           { bass: 38, chord: [50, 53, 57], mel: [62, -1, 65, 62, -1, 69, -1, 65] },
           { bass: 34, chord: [46, 50, 53], mel: [58, -1, 62, 58, -1, 65, -1, 62] },
@@ -155,22 +182,30 @@
       },
       _schedule: function (name, tr, step, delay, stepDur) {
         audioBus = 'music'; // 本函数的全部 playTone/playNoise 归音乐总线（同步执行，排完立即复位）
+        var kit = tr.kit; // 批次 G6：编排全部读 kit 参数表（daily/battle 的 kit 与旧写死编排逐项等价）
         var bar = tr.bars[Math.floor(step / 8) % tr.bars.length];
         var s = step % 8;
-        if (name === 'daily') {
-          if (s === 0) playTone(mtof(bar.bass), stepDur * 1.9, 'triangle', 0.055, delay);
-          if (s % 2 === 0) playTone(mtof(bar.chord[(s / 2) % bar.chord.length]), stepDur * 1.6, 'sine', 0.022, delay);
-          var dm = bar.mel[s];
-          if (dm > 0) playTone(mtof(dm), stepDur * 1.4, 'triangle', 0.038, delay);
-        } else {
-          var bNote = (s % 4 === 2) ? bar.bass + 12 : bar.bass;
-          playTone(mtof(bNote), stepDur * 0.95, 'triangle', 0.075, delay);
-          if (s === 0 || s === 4) playTone(110, 0.12, 'sine', 0.10, delay, 48); // 合成底鼓
-          if (s % 2 === 1) playNoise(0.03, 'highpass', 6500, 0.016, delay); // 合成踩镲
-          if (s === 0 || s === 3 || s === 6) for (var ci = 0; ci < bar.chord.length; ci++) playTone(mtof(bar.chord[ci] + 12), 0.18, 'sine', 0.016, delay);
-          var bm = bar.mel[s];
-          if (bm > 0) playTone(mtof(bm), stepDur * 1.1, 'square', 0.018, delay);
+        if (kit.bassMode === 'bar') { // 小节长音低音（daily/title/story/shop）
+          if (s === 0) playTone(mtof(bar.bass), stepDur * kit.bassDurMul, kit.bassWave, kit.bassPeak, delay);
+        } else { // 每步驱动低音（battle；bassAlt 步位高八度）
+          var bNote = bar.bass + ((kit.bassAlt && s % kit.bassAlt.mod === kit.bassAlt.rem) ? kit.bassAlt.oct : 0);
+          playTone(mtof(bNote), stepDur * kit.bassDurMul, kit.bassWave, kit.bassPeak, delay);
         }
+        if (kit.kickSteps && kit.kickSteps.indexOf(s) >= 0) playTone(110, 0.12, 'sine', 0.10, delay, 48); // 合成底鼓
+        if (kit.hatParity === 'odd' && s % 2 === 1) playNoise(0.03, 'highpass', 6500, 0.016, delay); // 合成踩镲
+        if (kit.chordMode && kit.chordSteps) {
+          var csIdx = kit.chordSteps.indexOf(s);
+          if (csIdx >= 0) {
+            var cDur = kit.chordDurAbs || stepDur * kit.chordDurMul;
+            if (kit.chordMode === 'arp') { // 分解和弦：每步位取一音轮转
+              playTone(mtof(bar.chord[csIdx % bar.chord.length] + (kit.chordOct || 0)), cDur, kit.chordWave, kit.chordPeak, delay);
+            } else { // stab：整和弦同发
+              for (var ci = 0; ci < bar.chord.length; ci++) playTone(mtof(bar.chord[ci] + (kit.chordOct || 0)), cDur, kit.chordWave, kit.chordPeak, delay);
+            }
+          }
+        }
+        var mm = bar.mel[s];
+        if (mm > 0) playTone(mtof(mm), stepDur * kit.melDurMul, kit.melWave, kit.melPeak, delay);
         audioBus = 'sfx';
       }
     };
@@ -180,7 +215,10 @@
     function bgmFirstGesture() {
       if (bgmUnlocked) return;
       bgmUnlocked = true;
-      if (!BGM.track) BGM.start('daily');
+      if (!BGM.track) { // 批次 G6：首手势默认曲目跟当前场景（标题屏起标题曲、商店起商店变体，其余日常曲）
+        var v = (typeof document !== 'undefined' && document.body) ? document.body.getAttribute('data-view') : '';
+        BGM.start(v === 'title' ? 'title' : v === 'shop' ? 'shop' : 'daily');
+      }
     }
     if (typeof document !== 'undefined' && document.addEventListener) {
       document.addEventListener('pointerdown', bgmFirstGesture);

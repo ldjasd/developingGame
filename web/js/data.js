@@ -306,7 +306,7 @@
         check: function (s) { return (s.rank <= 10 || s.wins >= 25) && (s.influence || 1) >= 3; } },
       { id: 5, name: '国内之巅', reward: 10000, title: '国内冠军', goalText: '登上国内第 1 名（或在正式赛击败伊芙琳）且影响力 Lv4',
         check: function (s) { return (s.rank <= 1 || !!s.beatChamp) && (s.influence || 1) >= 4; } },
-      { id: 6, name: '传奇之路', reward: 20000, title: '传奇', goalText: '影响力 Lv5（传奇）且成为第 1 名后再赢 3 场（卫冕）',
+      { id: 6, name: '传奇之路', reward: 20000, title: '传奇', goalText: '影响力 Lv5（传奇）且成为第 1 名后再赢 3 场（卫冕，含卫冕战胜利）',
         check: function (s) { return (s.influence || 1) >= 5 && winsAfterChamp(s) >= 3; } }
     ];
 
@@ -490,6 +490,29 @@
       return g[Math.floor(Math.random() * g.length)];
     }
 
+    /* ================= 正式版批次 G9 短期（plan T8）：卫冕战挑战宣言 =================
+       玩家登顶（国内第 1 名）后，高排名具名角色以「约战升级版」发起卫冕挑战（通道与结算见
+       battle.js 的卫冕战一节）；这里只放挑战者下战书时的专属宣言：高频挑战者（初始前 8 名）
+       各 1 条，其余走通用池（2 条轮换）。【新增文案·待用户审】清单见 plan/04_CHANGELOG G9 条。 */
+    var DEFENSE_LINES = {
+      opp_world_champion: '王座是我让出去的吗？不——是你抢走的。这次，我亲手拿回来。', // 伊芙琳：前冠军的复仇战
+      opp_crimson: '冠军的位子，我盯了很久了。别躲，正面来——输的人，把第 1 名留下！', // 薇拉
+      opp_champion_domestic: '礼仪课没教过怎么输。所以这一场，我只能赢。', // 白鸟丽华
+      opp_legend: '我打冠军战的时候，你还没进这家拳馆呢。让我看看新王的成色。', // 白霜华
+      opp_asia: '沙漠里没人让着谁。冠军，我来拿了。', // 萨菲娅
+      opp_saint: '愿这一战干净利落——冠军之名，不该落在怯懦者头上。', // 塞西莉亚
+      opp_amazon: '丛林的规矩：最强的那个，站在最高处。现在，换我站。', // 塔娅
+      opp_counter: '……正式赛的规格，我说过吧。这一战，我等了很久了。' // 沈墨凛：呼应约战赛后对白
+    };
+    var DEFENSE_LINES_GENERIC = [
+      '冠军只有一个。下一场，我来当那一个。',
+      '别以为坐上第 1 名就结束了——我就是冲你来的。'
+    ];
+    function defenseLine(key) {
+      if (key && DEFENSE_LINES[key]) return DEFENSE_LINES[key];
+      return DEFENSE_LINES_GENERIC[personaHash(String(key || '')) % DEFENSE_LINES_GENERIC.length];
+    }
+
     var APPEARANCE = {
       hair: {
         ponytail: { name: '高马尾', src: 'assets/portrait.webp' },
@@ -593,6 +616,11 @@
       /* 修复批次 C（M7 中期锚点）：弑王者——与阶段 5 的「击败伊芙琳」通道共用 S.beatChamp（批次 C 起记录，老档无此字段时按未达成计，无法追溯） */
       { id: 'champ_slayer', cat: 'career', name: '弑王者', desc: '在正式比赛中击败国内第 1 名伊芙琳',
         check: function (s) { return !!s.beatChamp; } },
+      /* 正式版批次 G9 短期（plan T8）：卫冕锚点——与阶段 6 的卫冕目标共用同一计数 S.defenses（卫冕战胜利累计，不另起计数；老档无此字段时按 0 计，无法追溯）【新增文案·待用户审】 */
+      { id: 'defend_1', cat: 'career', name: '王座守卫', desc: '首次在卫冕战中击败挑战者，守住国内冠军',
+        check: function (s) { return (s.defenses || 0) >= 1; } },
+      { id: 'defend_3', cat: 'career', name: '三度卫冕', desc: '累计卫冕成功 3 场（与阶段 6「传奇之路」的卫冕目标对齐）',
+        check: function (s) { return (s.defenses || 0) >= 3; } },
       /* ---- 装备 / 经营 ---- */
       { id: 'first_craft', cat: 'gear', name: '亲手打造', desc: '在工坊打造第 1 件装备',
         check: function (s) { return (s.customGear || []).some(function (g) { return g && g.source === 'craft'; }); } },

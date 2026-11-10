@@ -163,6 +163,11 @@
         b.classList.toggle('active', b.getAttribute('data-nav') === name);
       });
       if (SCENE_BG[name]) setScene(SCENE_BG[name]);
+      if (typeof BGM !== 'undefined' && (BGM.track || (typeof bgmUnlocked !== 'undefined' && bgmUnlocked))) { // 批次 G6：场景 BGM——标题/商店用专属曲目，其余回日常曲；战斗曲由 battle.js 开/收（战斗中 showScene 本就禁止切走），剧情变体由 ui.js 的 storyModal 观察者接管。未解锁（无用户手势）时不抢先起播，首手势由 bgmFirstGesture 按 data-view 选曲
+        if (name === 'title') BGM.start('title');
+        else if (name === 'shop') BGM.start('shop');
+        else if (name !== 'battle') BGM.start('daily');
+      }
       activateLazyImgs($(id)); // 批次 E：该视图的图首次显示时才下载
       if (name !== 'title') { // 顶栏装饰图（视图外元素）：进游戏后才需要
         var tb = document.querySelector('.topbar'); if (tb) activateLazyImgs(tb);
@@ -173,6 +178,19 @@
     function backFromUtility() { // 功能屏（画廊/存档/设置）返回：已进入游戏回据点，未进入回标题
       showScene(gameEntered ? 'daily' : 'title');
     }
+
+    /* 批次 G6：全屏切换（标题屏/设置屏按钮共用）——requestFullscreen 被拒绝/不支持时静默降级，保持窗口模式不报错 */
+    function toggleFullscreen() {
+      try {
+        if (document.fullscreenElement) { var p = document.exitFullscreen(); if (p && p.catch) p.catch(function () {}); }
+        else if (document.documentElement && document.documentElement.requestFullscreen) { var r = document.documentElement.requestFullscreen(); if (r && r.catch) r.catch(function () {}); }
+      } catch (e) { /* 静默降级 */ }
+    }
+    function syncFullscreenBtns() { // 按钮文案跟随实际全屏态（含浏览器自带 Esc 退出全屏时）
+      var on = !!document.fullscreenElement;
+      ['btnTitleFullscreen', 'btnSettingsFullscreen'].forEach(function (id) { var b = $(id); if (b) b.textContent = on ? '退出全屏' : '全屏'; });
+    }
+    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('fullscreenchange', syncFullscreenBtns);
 
     // 视图过渡（C1）：监视全部全屏视图的 display 切换，变为可见时重播淡入+轻上滑动画，不改任何切换逻辑。
     (function () {

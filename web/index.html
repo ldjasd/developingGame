@@ -96,6 +96,7 @@
                 <button class="secondary-btn title-pill" id="btnTitleSaves">读取存档</button>
                 <button class="secondary-btn title-pill" id="btnTitleGallery">画廊</button>
                 <button class="secondary-btn title-pill" id="btnTitleSettings">设置</button>
+                <button class="secondary-btn title-pill" id="btnTitleFullscreen">全屏</button>
               </div>
             </div>
           </div>
@@ -145,6 +146,8 @@
           <div class="match-vs" id="matchVs"></div>
           <div class="match-cta">
             <p class="week-note match-note" id="matchWeekNote"></p>
+            <!-- 正式版批次 G9 短期：卫冕战挑战卡（登顶后挑战者上门时由 renderDefenseCard 呈现，无挑战时自隐） -->
+            <div class="defense-card" id="defenseCard" style="display:none"></div>
             <div class="actions match-actions">
                   <button class="act-btn" id="btnMatch">
                     <span class="t"><span><span class="btn-star">★</span>报名比赛</span> <span class="cost">免费 · 0 AP</span></span>
@@ -232,7 +235,7 @@
             <section class="set-panel">
               <h3 class="set-panel-h">声音</h3>
               <div class="set-row">
-                <div class="set-txt"><span class="set-name">音乐</span><span class="set-desc">日常 / 战斗两套合成 BGM</span></div>
+                <div class="set-txt"><span class="set-name">音乐</span><span class="set-desc">标题 / 日常 / 剧情 / 商店 / 战斗合成 BGM</span></div>
                 <button class="set-toggle on" id="setMusicOn" role="switch" aria-checked="true">开</button>
                 <input class="set-range" type="range" id="setMusicVol" min="0" max="100" step="1" value="80" />
                 <span class="set-val num" id="setMusicVolVal">80</span>
@@ -250,6 +253,10 @@
                 <div class="set-txt"><span class="set-name">减少动效</span><span class="set-desc">关掉场景过渡、出拳残影等动画效果（手动版 prefers-reduced-motion）</span></div>
                 <button class="set-toggle" id="setReduceMotion" role="switch" aria-checked="false">关</button>
               </div>
+              <div class="set-row">
+                <div class="set-txt"><span class="set-name">全屏显示</span><span class="set-desc">把游戏铺满整个屏幕；浏览器不支持或拒绝时自动保持窗口模式</span></div>
+                <button class="secondary-btn" id="btnSettingsFullscreen" type="button">全屏</button>
+              </div>
             </section>
             <section class="set-panel">
               <h3 class="set-panel-h">帮助</h3>
@@ -266,6 +273,20 @@
               <h3 class="set-panel-h">关于</h3>
               <p><b>心跳在左，拳头在右 v0.9.0</b> · 二次元美少女拳击养成经营游戏</p>
               <p>从无名新人打起：训练、打工、买装备、打比赛，从国内第 50 名一路打到国内之巅——世界擂台，是下一个目标。进度自动保存在本浏览器（3 个存档槽），设置单独保存、互不影响。</p>
+            </section>
+            <section class="set-panel">
+              <h3 class="set-panel-h">存档备份（导出 / 导入）</h3>
+              <div class="set-row">
+                <div class="set-txt"><span class="set-name">导出存档</span><span class="set-desc">把某个存档槽导出为文本或文件。存档只保存在本浏览器里，换设备、换浏览器或清缓存前先导出一份最稳妥</span></div>
+                <button class="secondary-btn" id="btnExportSave" type="button">导出存档</button>
+              </div>
+              <div class="set-row">
+                <div class="set-txt"><span class="set-name">导入存档</span><span class="set-desc">把之前导出的存档文本/文件导回任意一槽。导入前会做版本迁移与完整性校验，不过关会说明原因且不影响现有存档</span></div>
+                <button class="secondary-btn" id="btnImportSave" type="button">导入存档</button>
+              </div>
+              <div class="set-row">
+                <div class="set-txt"><span class="set-name">异常存档保护</span><span class="set-desc">存档损坏或版本比游戏更新时，该槽会被锁定：游戏绝不自动覆盖或删除，只会提示你导出原文或亲手清除</span></div>
+              </div>
             </section>
             <div class="danger-zone">
               <h3>危险区</h3>
@@ -538,7 +559,7 @@
           <div class="fighter foe" id="figFoe" style="left:68%">
             <div class="dmg-pop" id="popFoe"></div>
             <div class="speedline"></div>
-            <div class="fig"><img class="fig-img" id="figFoeImg" alt="" /></div>
+            <div class="fig"><img class="fig-img" id="figFoeImg" alt="" /><div class="rig-host" id="foeRig"></div></div>
           </div>
           <div class="ko-flash" id="koFlash"></div>
           <div class="ko-text" id="koText">K.O.!</div>
@@ -699,6 +720,7 @@
           <li><b>连胜</b>：赢一场 +1，输一场清零。③阶段需要 3 连胜，中途别翻车。</li>
           <li><b>剧情与关系（可选）</b>：生涯推进会触发剧情对白（阶段提升、首胜/首败、进前 25/前 10、登顶、首次 KO 等节点各一次；进前 25/前 10 的节点攒够胜场也能推进），选项有小额后果。和前辈藤原梢、经纪人栗原真纪、宿敌沈墨凛、同期林小葵相处会积累好感，在状态页「关系」区查看；好感达 30/60/90 各解锁一段专属剧情。和沈墨凛比赛后还会有赛后对白。这条线纯属可选：不理会不影响训练、比赛与生涯推进，也没有任何惩罚。</li>
           <li><b>约战</b>：在比赛屏可指名挑战交过手的对手（2 AP/场，每周至多 2 场、同一对手每周 1 场）：不计战绩、不动排名、没有奖金，出拳经验半额，伤病风险减半；宿敌沈墨凛在打完第 1 场正式赛后解锁，好感结算与正式赛相同——排名赛遇不上她时，这是推进宿敌线的保底办法。</li>
+          <li><b>卫冕战</b>：登上国内第 1 名后，排名前列的具名选手会主动下战书（比赛屏金色挑战卡，每周至多 1 场）。应战是<b>正式规格</b>：免费 0 AP、不占每周正式赛位，计战绩、动排名与影响力，奖金按正式赛出场费口径；赢下计 1 次卫冕成功（阶段 ⑥ 的卫冕目标与成就「王座守卫 / 三度卫冕」都看它），输了冠军易主、按正式赛口径掉名次——打回第 1 名后，新的挑战者还会再来。跌下第 1 名时，未应战的挑战自动作废。【新增条目·待用户审】</li>
           <li><b>赞助</b>：状态页「赞助」区有 4 档——街边拉面店（影响力 Lv1）、运动饮料「燃力」（Lv2）、拳套品牌「铁拳堂」（Lv3）、全国体育连锁「胜道」（Lv4）。同时只能签一家：签约立刻拿签约金，之后每周第 1 天自动到账周薪（日志播报）。想换更高的，先解约再签新的（解约不退签约金）。</li>
         </ul>
         <h3>战斗深化（Phase 4）</h3>
@@ -899,6 +921,36 @@
         <div class="modal-btns">
           <button class="secondary-btn" id="btnCancelReset">取消</button>
           <button class="primary-btn" id="btnConfirmReset">确认重开</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- G4：存档导出弹窗（选槽 → 文本复制 / 文件下载；异常槽导出的即是被锁定的原文） -->
+    <div class="modal-mask" id="saveExportModal">
+      <div class="modal io-modal">
+        <h2>导出存档</h2>
+        <div class="io-slot-btns" id="exportSlotBtns"></div>
+        <textarea class="io-text" id="exportText" readonly rows="8" placeholder="该槽暂无存档"></textarea>
+        <p class="io-msg" id="exportMsg"></p>
+        <div class="modal-btns">
+          <button class="secondary-btn" id="btnExportClose">关闭</button>
+          <button class="secondary-btn" id="btnExportDownload">下载文件</button>
+          <button class="primary-btn" id="btnExportCopy">复制文本</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- G4：存档导入弹窗（选目标槽 → 粘贴/读文件 → 同一条迁移+校验链 → 写入；覆盖正常档需确认，异常槽拒绝） -->
+    <div class="modal-mask" id="saveImportModal">
+      <div class="modal io-modal">
+        <h2>导入存档</h2>
+        <div class="io-slot-btns" id="importSlotBtns"></div>
+        <textarea class="io-text" id="importText" rows="8" placeholder="把导出的存档文本粘贴到这里，或用下方按钮选文件读入"></textarea>
+        <p class="io-msg" id="importMsg"></p>
+        <div class="modal-btns">
+          <button class="secondary-btn" id="btnImportClose">取消</button>
+          <label class="secondary-btn io-file-btn">选文件读入<input type="file" id="importFile" accept=".json,.txt,application/json,text/plain" hidden /></label>
+          <button class="primary-btn" id="btnImportRun">导入到该槽</button>
         </div>
       </div>
     </div>

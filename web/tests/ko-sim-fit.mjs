@@ -1,6 +1,9 @@
 // 模拟跳过标定拟合：采样各环境 fighter 分布（score 差 / 击杀回合数 TTK），
 // 对照引擎实测（balance-retest + ko-impl-verify）网格搜索 winP 与 koP 参数。
 // 用法：node tests/ko-sim-fit.mjs [--n 400]
+// ⚠ G3-a（2026-11-10）后本文件的 DPS 复制是【旧模型】（平直单拳式），battle.js 已换成
+//   拳种混合＋战术命中＋体力 duty-cycle 的新模型；现行拟合脚本为 research/g3_logs/fit_sim.mjs
+//   （模型与 battle.js 逐字同构、参照含 pow/spd 合并实测）。本文件保留作旧制拟合史，不要再用它给现行模型定参。
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
