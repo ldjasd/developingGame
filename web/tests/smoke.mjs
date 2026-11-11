@@ -1111,6 +1111,33 @@ async function suite(label, dir) {
       g9Diag.afterChallenge === true && g9Diag.errs === 0,
       JSON.stringify(g9Diag));
     g9Load.w.close();
+    // 【正式版批次 G10】战斗呈现：选手牌新结构 / 状态词牌映射 / 分级飘字 / 台词气泡节流（纯呈现层，判定零改动）
+    const g10 = JSON.parse(bc.w.eval(`(function () {
+      var out = {};
+      out.hasEls = ['meAvatar', 'meSubLabel', 'meState', 'foeState', 'bubbleMe', 'bubbleFoe'].every(function (id) { return !!document.getElementById(id); });
+      S = defaultState(); S.name = '测试';
+      startBattle('auto');
+      B.foeTrauma = 80; B.meBrokenUntil = B.time + 1.5;
+      renderBattle();
+      out.foeState = document.getElementById('foeState').textContent;
+      out.meState = document.getElementById('meState').textContent;
+      spawnDmgFloat(document.getElementById('figFoe'), { dmg: 42, tier: 'ko', tag: 'KO!', combo: 0, koAdd: 30 });
+      var fl = document.querySelector('#figFoe .dmg-float.t-ko');
+      out.floatOk = !!fl && fl.textContent.indexOf('42') >= 0;
+      B.bubbleAt = { me: 0, foe: 0 };
+      showBubble(false, 'hit');
+      var t1 = B.bubbleAt.foe; var txt1 = document.getElementById('bubbleFoe').textContent;
+      showBubble(false, 'hit');
+      out.throttleOk = B.bubbleAt.foe === t1 && document.getElementById('bubbleFoe').textContent === txt1 && txt1.length > 0;
+      out.errs = window.__errs.length;
+      return JSON.stringify(out);
+    })()`));
+    ok('G10：选手牌新结构元素齐全（我方头像/副标/状态词牌/气泡，对手状态词牌/气泡）', g10.hasEls === true, JSON.stringify(g10));
+    ok('G10：状态词牌映射（对手重创 80 → 「重创临界」；我方破防中 → 「破防中」词牌）',
+      g10.foeState.indexOf('重创临界') >= 0 && g10.meState.indexOf('破防中') >= 0, JSON.stringify(g10));
+    ok('G10：分级飘字生成（KO 级 .dmg-float.t-ko 含伤害数字与 KO 标记）', g10.floatOk === true, JSON.stringify(g10));
+    ok('G10：台词气泡节流（同侧连续触发只生效一次、台词非空、零脚本错误）',
+      g10.throttleOk === true && g10.errs === 0, JSON.stringify(g10));
     bc.w.close();
   } finally {
     srv.close();

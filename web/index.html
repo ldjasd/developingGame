@@ -524,24 +524,40 @@
           <div class="rt" id="roundTimer">45.0 秒</div>
         </div>
         <div class="fighters">
-          <div class="fcard">
-            <div class="fname"><span id="meNameLabel">小拳（你）</span><span class="corner red">红角</span></div>
+          <div class="fcard me-card">
+            <div class="fhead">
+              <img class="favatar" id="meAvatar" alt="" />
+              <div class="fhead-main">
+                <div class="fname"><span id="meNameLabel">小拳（你）</span></div>
+                <div class="fsub" id="meSubLabel"></div>
+              </div>
+              <span class="corner red">红角</span>
+            </div>
             <div class="fbar"><i id="meHpBar" style="width:100%"></i></div>
             <div class="fnums"><span>HP <span class="num" id="meHpNum">150</span></span><span>战术：<b id="meTacticName">强攻压制</b></span></div>
             <div class="fbar stam"><i id="meStamBar" style="width:100%"></i></div>
             <div class="fnums"><span>体力 <span class="num" id="meStamNum">100</span></span><span>命中 <span class="num" id="meHits">0</span> · 伤害 <span class="num" id="meDmg">0</span></span></div>
             <div class="ko-row"><span><b>重创值（KO槽）</b> 满100直接KO<span class="ko-decay"> · 每秒衰减6</span></span><span class="num" id="meKoNum">0 / 100</span></div>
             <div class="fbar ko" id="meKoWrap"><i id="meKoBar" style="width:0%"></i></div>
+            <div class="fstate" id="meState"></div>
           </div>
           <div class="vs">VS</div>
-          <div class="fcard">
-            <div class="fname"><span><img class="foe-portrait" id="foePortrait" alt="" /><span id="foeName">对手</span><span class="style-badge" id="foeStyleBadge" style="display:none"></span></span><span class="corner blue">蓝角</span></div>
+          <div class="fcard foe-card">
+            <div class="fhead">
+              <img class="favatar foe-portrait" id="foePortrait" alt="" />
+              <div class="fhead-main">
+                <div class="fname"><span id="foeName">对手</span></div>
+                <div class="fsub"><span class="style-badge" id="foeStyleBadge" style="display:none"></span></div>
+              </div>
+              <span class="corner blue">蓝角</span>
+            </div>
             <div class="fbar"><i id="foeHpBar" style="width:100%"></i></div>
             <div class="fnums"><span>HP <span class="num" id="foeHpNum">150</span></span><span>战术：<b id="foeTacticName">—</b></span></div>
             <div class="fbar stam"><i id="foeStamBar" style="width:100%"></i></div>
             <div class="fnums"><span>体力 <span class="num" id="foeStamNum">100</span></span><span>命中 <span class="num" id="foeHits">0</span> · 伤害 <span class="num" id="foeDmg">0</span></span></div>
             <div class="ko-row"><span><b>重创值（KO槽）</b> 满100直接KO<span class="ko-decay"> · 每秒衰减6</span></span><span class="num" id="foeKoNum">0 / 100</span></div>
             <div class="fbar ko" id="foeKoWrap"><i id="foeKoBar" style="width:0%"></i></div>
+            <div class="fstate" id="foeState"></div>
           </div>
         </div>
 
@@ -553,11 +569,13 @@
           <div class="mini-keys" id="miniKeys" style="display:none"><b>A/D</b> 移动 · <b>W/S</b> 站位 · <b>J</b> 前手 · <b>K</b> 后手 · <b>U</b> 上勾 · <b>B</b> 击腹 · <b>空格</b> 格挡 · <b>Shift+方向</b> 闪避 · <b>H</b> 键位</div>
           <div class="fighter me" id="figMe" style="left:18%">
             <div class="dmg-pop" id="popMe"></div>
+            <div class="speech-bubble" id="bubbleMe"></div>
             <div class="speedline"></div>
             <div class="fig"><img class="fig-img" id="figMeImg" alt="" /><div class="rig-host" id="meRig"></div></div>
           </div>
           <div class="fighter foe" id="figFoe" style="left:68%">
             <div class="dmg-pop" id="popFoe"></div>
+            <div class="speech-bubble" id="bubbleFoe"></div>
             <div class="speedline"></div>
             <div class="fig"><img class="fig-img" id="figFoeImg" alt="" /><div class="rig-host" id="foeRig"></div></div>
           </div>

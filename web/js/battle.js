@@ -618,6 +618,7 @@
         meDownsRound: 0, foeDownsRound: 0,
         meTrauma: 0, foeTrauma: 0, koKind: '',
         meDownMarks: {}, foeDownMarks: {}, // KO 定型：本回合已兑现的重创刻度（25/50/75），跨回合在 endBreak 重置，防衰减回落再跨越刷同一刻度
+        bubbleAt: { me: 0, foe: 0 }, // G10：台词气泡节流时间戳（呈现层，不参与判定）
         meDeathFight: false, foeDeathFight: false,
         roundStats: freshRoundStats(), meRoundMod: 'balanced', nextRoundMod: 'balanced',
         meBodyHits: 0, foeBodyHits: 0,
@@ -648,6 +649,17 @@
       var ffi = $('figFoeImg'); if (ffi) ffi.src = foeAlphaSrc(B.foe.img) || ''; // 框架重构一期：舞台用去底立绘
       $('foeName').textContent = B.foe.name + '（第 ' + B.foe.rank + ' 名）';
       var fp = $('foePortrait'); if (fp) { fp.src = B.foe.img || ''; fp.alt = B.foe.name + ' 的立绘'; }
+      // G10：选手牌——我方头像与称号/阶段副标；清上一场飘字/气泡残留并重置气泡节流
+      var ma = $('meAvatar'); if (ma) { ma.src = 'assets/portrait.webp'; ma.alt = S.name + ' 的头像'; }
+      var msub = $('meSubLabel');
+      if (msub) {
+        var stgName = '';
+        for (var si = 0; si < STAGES.length; si++) if (STAGES[si].id === S.stage) stgName = STAGES[si].name;
+        msub.textContent = (S.titles && S.titles.length) ? '称号「' + S.titles[S.titles.length - 1] + '」' : stgName;
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('.dmg-float'), function (n) { n.remove(); });
+      ['bubbleMe', 'bubbleFoe'].forEach(function (id) { var bb = $(id); if (bb) bb.classList.remove('show'); });
+      B.bubbleAt = { me: 0, foe: 0 };
       var stb = $('foeStyleBadge');
       if (stb && B.foe.style) { var stDef = FOE_STYLES[B.foe.style]; stb.textContent = stDef.name; stb.className = 'style-badge ' + stDef.cls; stb.style.display = ''; }
       $('battleLog').innerHTML = '';
@@ -916,11 +928,12 @@
       setTimeout(function () { g.remove(); }, 190);
     }
     // B2：命中点小闪光——在防守方靠进攻方一侧的胸口高度放一颗星形闪光，动画结束自回收
-    function spawnHitFlash(figDefender) {
+    // G10：按本拳分级放大/换色（tier：heavy/crit/down 放大走粉紫，ko 金色，blocked 缩小）
+    function spawnHitFlash(figDefender, tier) {
       var ring = $('ring'); if (!ring || !figDefender) return;
       var foeDef = figDefender.id === 'figFoe';
       var s = document.createElement('span');
-      s.className = 'hit-flash';
+      s.className = 'hit-flash' + (tier && tier !== 'normal' ? ' t-' + tier : '');
       s.style.left = (figDefender.offsetLeft + (foeDef ? 4 : figDefender.offsetWidth - 4)) + 'px';
       s.style.top = (figDefender.offsetTop + Math.round(figDefender.offsetHeight * 0.3)) + 'px';
       ring.appendChild(s);
@@ -975,7 +988,7 @@
       figEl.style.transform = 'translateX(' + (dirSign * (heavy ? 26 : 13)) + 'px)';
       setTimeout(function () { figEl.style.transform = ''; }, 70);
     }
-    function hitFx(figDefender, heavy, crit) {
+    function hitFx(figDefender, heavy, crit, tier) {
       hitstop(crit || heavy ? 100 : 60);
       shakeRing(heavy || crit);
       figDefender.classList.remove('flashwhite'); void figDefender.offsetWidth;
@@ -988,7 +1001,7 @@
       figDefender.classList.add('stumbling');
       knockback(figDefender, foeDef ? 1 : -1, heavy);
       burstParticles(figDefender, heavy);
-      spawnHitFlash(figDefender); // B2：命中点星形闪光（与粒子同点位体系，接触瞬间一闪）
+      spawnHitFlash(figDefender, tier); // B2：命中点星形闪光（与粒子同点位体系，接触瞬间一闪）；G10 起按分级呈现
       // 对手强化：受击后仰回弹（位移/回弹曲线比通用 stumble 更明显），与主角侧的姿势切换观感对齐
       if (foeDef) {
         figDefender.classList.remove('recoiling'); void figDefender.offsetWidth;
@@ -1003,6 +1016,99 @@
       var fl = $('koFlash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
       var kt = $('koText'); kt.classList.remove('go'); void kt.offsetWidth; kt.classList.add('go');
       SFX.koCheer(); SFX.heavy();
+    }
+
+    /* ================= G10 战斗呈现（plan T13）：分级飘字 / 台词气泡 / 状态词牌 =================
+       纯呈现层：只读 dealDamage / renderBattle 的既有结果与状态字段，不改任何数值、判定与存档。
+       「减少动效」（SETTINGS.reduceMotion）时不生成飘字/气泡（星爆由 CSS 全局规则停动画），
+       状态词牌是静态信息、照常显示。台词均为本批新写短句（清单见 plan/04_CHANGELOG G10 条）。 */
+    function fxReduced() { return typeof SETTINGS !== 'undefined' && !!SETTINGS.reduceMotion; }
+    var ME_LINES = {
+      hit: ['唔…！', '好重的一拳…', '还没倒！', '别小看我！', '站稳了…'],
+      down: ['还没…结束…！', '我还能站起来！', '唔…腿在抖…'],
+      counter: ['抓到了！', '就是现在！', '你的空档！', '还给你！'],
+      ko: ['到此为止…吗…', '眼前…发黑…'],
+      break: ['架被打散了…！', '唔、挡不住…']
+    };
+    var FOE_LINES_FX = {
+      generic: {
+        hit: ['唔…！', '好沉的拳…', '切…被打中了', '还没完呢！', '唔、真疼啊…'],
+        down: ['还没…输…', '我还能打…！', '唔…站起来…'],
+        counter: ['抓到你了。', '空档太大了。', '还嫩着呢。', '这拳，回敬你。'],
+        ko: ['是我…输了…', '到此为止…了'],
+        break: ['架、被打穿了…！', '唔…挡不住…']
+      },
+      power: { hit: ['这点疼，不算什么！', '唔…有劲！', '打得好，再来！'] },
+      speed: { hit: ['被、被碰到了？！', '唔…好快…', '居然跟上了…'] },
+      guardcounter: { hit: ['唔…架乱了…', '看走眼了…', '唔、这一拳…'] },
+      balanced: { hit: ['唔…！', '有点分量…', '还没完！'] }
+    };
+    function pickFxLine(pool) { return pool[Math.floor(Math.random() * pool.length)]; }
+    function showBubble(isMe, kind) {
+      if (!B || fxReduced()) return;
+      if (!B.bubbleAt) B.bubbleAt = { me: 0, foe: 0 };
+      var now = performance.now();
+      var gap = (kind === 'down' || kind === 'ko') ? 1200 : 3600; // 节流：大事件 1.2 秒、常规 3.6 秒，同侧不刷屏
+      var side = isMe ? 'me' : 'foe';
+      var lastBubble = B.bubbleAt[side] || 0;
+      if (lastBubble > 0 && now - lastBubble < gap) return; // 时间戳 0＝本场还没出过气泡，不节流（页面刚加载时 performance.now 本身就小于间隔）
+      var el = $(isMe ? 'bubbleMe' : 'bubbleFoe'); if (!el) return;
+      var pool;
+      if (isMe) pool = ME_LINES[kind] || ME_LINES.hit;
+      else {
+        var byStyle = FOE_LINES_FX[B.foe.style];
+        pool = (byStyle && byStyle[kind]) || FOE_LINES_FX.generic[kind] || FOE_LINES_FX.generic.hit;
+      }
+      B.bubbleAt[side] = now;
+      el.textContent = pickFxLine(pool);
+      el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    }
+    function spawnDmgFloat(figDef, o) {
+      if (fxReduced() || !figDef) return;
+      var olds = figDef.querySelectorAll('.dmg-float');
+      if (olds.length >= 3) olds[0].remove(); // 同屏上限 3 个：新出挤掉最旧的，不堆积
+      var el = document.createElement('div');
+      el.className = 'dmg-float t-' + o.tier;
+      el.style.left = (44 + Math.random() * 12) + '%';
+      el.style.top = (15 + olds.length * 11) + '%'; // 同侧多条飘字纵向错层，连打不糊成一团
+      var html = '';
+      if (o.tag) html += '<span class="df-tag">' + o.tag + '</span>';
+      html += '<span class="df-num">-' + o.dmg + '</span>';
+      var sub = [];
+      if (o.combo >= 2) sub.push(o.combo + ' 连击');
+      if (o.koAdd >= 1) sub.push('重创 +' + Math.round(o.koAdd));
+      if (sub.length) html += '<span class="df-sub">' + sub.join(' · ') + '</span>';
+      el.innerHTML = html;
+      figDef.appendChild(el);
+      setTimeout(function () { el.remove(); }, 1000);
+    }
+    /* 状态词牌：把既有状态字段映射成词牌挂在选手牌内（呈现映射，不新增任何状态）。
+       优先级：读秒＞死战＞破防＞重创临界/重创＞反击窗口＞铁壁/组合拳＞缠抱/格挡＞待机，最多 2 枚。 */
+    function stateChips(isMe) {
+      var chips = [];
+      var trauma = isMe ? (B.meTrauma || 0) : (B.foeTrauma || 0);
+      var brokenUntil = isMe ? (B.meBrokenUntil || -1) : (B.foeBrokenUntil || -1);
+      var ctrUntil = isMe ? (B.meCounterUntil || -1) : (B.foeCounterUntil || -1);
+      var buff = isMe ? B.buff : B.foeBuff;
+      if (B.phase === 'down' && B.downFighter === (isMe ? 'me' : 'foe')) chips.push(['读秒中', 'st-danger']);
+      if (isMe ? B.meDeathFight : B.foeDeathFight) chips.push(['死战中', 'st-danger']);
+      if (B.time < brokenUntil) chips.push(['破防中 ' + Math.max(1, Math.ceil(brokenUntil - B.time)) + 's', 'st-warn']);
+      if (trauma >= 75) chips.push(['重创临界 ' + Math.round(trauma), 'st-danger']);
+      else if (trauma >= 50) chips.push(['重创 ' + Math.round(trauma), 'st-warn']);
+      if (B.time < ctrUntil) chips.push(['反击窗口', 'st-buff']);
+      if (buff && buff.wall > 0) chips.push(['铁壁中', 'st-info']);
+      if (buff && buff.combo > 0) chips.push(['组合拳爆发', 'st-buff']);
+      if (B.time < (B.holdUntil || -1)) chips.push(['缠抱停战', 'st-info']);
+      if (isMe ? B.meBlocking : B.foeBlocking) chips.push(['格挡中', 'st-info']);
+      if (!chips.length && B.phase === 'fight') chips.push(['待机', 'st-dim']);
+      return chips.slice(0, 2);
+    }
+    function renderStatePlates() {
+      [['meState', true], ['foeState', false]].forEach(function (pair) {
+        var el = $(pair[0]); if (!el) return;
+        var html = stateChips(pair[1]).map(function (c) { return '<span class="state-chip ' + c[1] + '">' + c[0] + '</span>'; }).join('');
+        if (el._g10html !== html) { el.innerHTML = html; el._g10html = html; }
+      });
     }
 
     function setTactic(tac) {
@@ -1048,6 +1154,7 @@
       $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——' + (S.deathFight ? '死战到底：读秒起身继续，再被击倒直接判负' : '直接判负（TKO）') : '读秒中…站起来就能继续，HP 回到至少 20%';
       $('downCount').textContent = '3';
       $('downOverlay').classList.add('go');
+      showBubble(defIsMe, 'down'); // G10：被击倒方台词气泡（呈现层）
       SFX.heavy(); shakeRing(true);
       B._countShown = 3; SFX.countTick(3); // Phase 9：读秒开始即第一记计数音，后续每秒一记在 tickDown
       blog('第' + B.round + '回合：' + (defIsMe ? '你的重创值冲破刻度，被击倒了！' : '对手重创值冲破刻度，被击倒了！') + '裁判开始读秒（本回合第 ' + downs + ' 次击倒' + (B.downIsTKO ? '，已达 3 次，读秒后 TKO 判定' : '') + '）。', defIsMe ? 'bad' : 'good');
@@ -1315,8 +1422,11 @@
       def.stam = Math.max(0, def.stam - 1);
 
       var figDef = $(isMeAttacking ? 'figFoe' : 'figMe');
-      var pop = $(isMeAttacking ? 'popFoe' : 'popMe');
       var heavy = crit || dmg >= 16;
+      // G10：飘字/星爆分级（纯呈现，只读本拳既有结果与刻度标记：KO＞跨刻度＞暴击/反击＞重击＞格挡＞普通）
+      var marksFx = isMeAttacking ? (B.foeDownMarks || {}) : (B.meDownMarks || {});
+      var crossedFx = [25, 50, 75].some(function (t) { return traumaBefore < t && traumaAfter >= t && !marksFx[t]; });
+      var fxTier = koTriggered ? 'ko' : crossedFx ? 'down' : (crit || counterBonus) ? 'crit' : heavy ? 'heavy' : (guarding && !pierce) ? 'blocked' : 'normal';
       // 姿势帧：我方挨打时按结果切姿势——格挡住（未被击腹穿透）切格挡图，其余切受击图（与顿帧/飘字同一时点）
       if (!isMeAttacking) {
         if (guarding && !pierce) setMePose('block', POSE_TIMING.block);
@@ -1326,12 +1436,20 @@
         if (guarding && !pierce) driveFoeRig('block', POSE_TIMING.block);
         else driveFoeRig('hit');
       }
-      hitFx(figDef, heavy, crit);
+      hitFx(figDef, heavy, crit, fxTier);
       if (guarding && !pierce) SFX.block(); else if (heavy) SFX.heavy(); else SFX.light();
       figDef.classList.remove('hit'); void figDef.offsetWidth; figDef.classList.add('hit');
-      pop.textContent = (koTriggered ? 'KO! ' : '') + (counterBonus ? '反击! ' : '') + (brokeNow ? '破防! ' : '') + (crit ? '暴击! ' : '') + '-' + dmg + (comboNow >= 2 ? ' · ' + comboNow + '连击' : '') + ' · 重创+' + Math.round(koAdd);
-      pop.className = 'dmg-pop' + (crit || counterBonus ? ' crit' : heavy ? ' heavy' : '');
-      void pop.offsetWidth; pop.classList.add('show');
+      // G10：分级伤害飘字（替代旧单元素长串飘字；旧 #popMe/#popFoe 元素保留在 DOM 中不再驱动）
+      spawnDmgFloat(figDef, {
+        dmg: dmg, tier: fxTier,
+        tag: koTriggered ? 'KO!' : brokeNow ? '破防!' : counterBonus ? '反击!' : crit ? '暴击!' : (guarding && !pierce) ? '格挡' : '',
+        combo: comboNow, koAdd: koAdd
+      });
+      // G10：台词气泡（节流在 showBubble 内：KO/反击/破防必出，重击 45% 概率出）
+      if (koTriggered) showBubble(!isMeAttacking, 'ko');
+      else if (counterBonus) showBubble(isMeAttacking, 'counter');
+      else if (brokeNow) showBubble(!isMeAttacking, 'break');
+      else if (heavy && !guarding && Math.random() < 0.45) showBubble(!isMeAttacking, 'hit');
       // B2：连击计数演出——连击 ≥2 时在飘字上方挂「N 连击」小字，字号随连段放大，随飘字节奏弹出后自回收（只演出，不动判定）
       if (comboNow >= 2) {
         var comboPop = document.createElement('span');
@@ -2405,6 +2523,7 @@
       cmdState('cmdWall', B.cd.wall, (B.cdMax && B.cdMax.wall) || 60, B.buff.wall > 0 ? '生效中 ' + Math.ceil(B.buff.wall) + 's' : '');
       cmdState('cmdClinch', B.cd.clinch, (B.cdMax && B.cdMax.clinch) || 30, '');
       cmdState('btnManualClinch', B.cd.clinch, (B.cdMax && B.cdMax.clinch) || 30, cmdHoldOn() ? '缠抱中' : ''); // 修复批次 B（m3）：手动面板搂抱按钮与自动面板共用同一 CD
+      renderStatePlates(); // G10：选手牌状态词牌（呈现映射，随每帧渲染同步）
     }
     function cmdState(id, cd, max, extra) {
       var btn = $(id);

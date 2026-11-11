@@ -591,7 +591,7 @@
       /* 命中点星形闪光：JS 在接触点生成 span.hit-flash，星芒造型一闪后自回收 */
       .hit-flash {
         position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; z-index: 6; pointer-events: none;
-        background: radial-gradient(circle, #ffffff 0 16%, #ffd34d 42%, rgba(255, 138, 40, 0) 72%);
+        background: radial-gradient(circle, #ffffff 0 16%, #f27bb5 44%, rgba(123, 75, 181, 0) 72%);
         clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
         animation: hitFlash .2s ease-out forwards;
       }
@@ -600,6 +600,13 @@
         35% { opacity: 1; }
         100% { opacity: 0; transform: scale(1.4) rotate(26deg); }
       }
+      /* G10：星爆分级尺寸（配色粉紫薰衣草，金色仅 KO 级） */
+      .hit-flash.t-blocked { width: 26px; height: 26px; margin: -13px 0 0 -13px; opacity: .85; }
+      .hit-flash.t-heavy { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+      .hit-flash.t-crit { width: 58px; height: 58px; margin: -29px 0 0 -29px; }
+      .hit-flash.t-down { width: 70px; height: 70px; margin: -35px 0 0 -35px; }
+      .hit-flash.t-ko { width: 94px; height: 94px; margin: -47px 0 0 -47px;
+        background: radial-gradient(circle, #ffffff 0 14%, #ffd34d 42%, rgba(255, 150, 20, 0) 72%); }
       /* 连击计数演出：飘字上方「N 连击」小字（字号由 JS 按连段内联放大），弹跳后上浮淡出自回收 */
       .combo-pop {
         position: absolute; top: -44px; left: 50%; z-index: 7; pointer-events: none; white-space: nowrap;
@@ -1052,11 +1059,11 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
 #battleView .fighters > * { min-width: 0; } /* 防长名字把对位卡撑出舞台（grid 子项 min-width:auto 溢出） */
 #battleView .round-banner .rb { font-size: 20px; color: #fff; text-shadow: 0 2px 12px rgba(0, 0, 0, .55); }
 #battleView .round-banner .rt { color: rgba(255, 255, 255, .78); font-size: 12px; }
-#battleView .fighters { flex: none; margin: 0; padding: 6px 10px 4px; gap: 8px; position: relative; z-index: 2; }
+#battleView .fighters { flex: none; margin: 0; padding: 4px 10px 2px; gap: 8px; position: relative; z-index: 2; }
 #battleView .fcard {
   background: rgba(19, 10, 40, .74); border-color: rgba(255, 255, 255, .16);
   color: #fff; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-  padding: 8px 10px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+  padding: 7px 10px; border-radius: 12px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
 }
 #battleView .fname { font-size: 13.5px; }
 #battleView .fbar { height: 15px; background: rgba(255, 255, 255, .16); margin-top: 5px; }
@@ -1071,16 +1078,16 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
   container-type: size;
 }
 #battleView .fighter {
-  height: auto; width: min(54cqh, 40cqw); aspect-ratio: 700 / 1004; bottom: 4.2%;
+  height: auto; width: min(63cqh, 43cqw); aspect-ratio: 700 / 1004; bottom: 3.4%;
 }
 @media (orientation: portrait) {
-  #battleView .fighter { width: min(56cqh, 46cqw); }
+  #battleView .fighter { width: min(58cqh, 47cqw); }
 }
 #battleView .fighter .fig { z-index: 1; }
 #battleView .fighter .fig-img { object-fit: contain; }
 #battleView .fighter::after {
-  content: ""; position: absolute; left: 4%; right: 4%; bottom: -1.6%; height: 4.6%;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(8, 4, 20, .55), transparent 70%);
+  content: ""; position: absolute; left: 2%; right: 2%; bottom: -1.2%; height: 5.6%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(8, 4, 20, .66), transparent 70%);
   z-index: 0; pointer-events: none;
 }
 #battleView .fighter.guarding .fig::after {
@@ -1090,9 +1097,85 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
 #battleView .fighter.foe .speedline { right: auto; left: -14%; top: 30%; }
 #battleView .ko-text { font-size: clamp(64px, 17vw, 124px); }
 #battleView .dmg-pop { font-size: clamp(17px, 4.6vw, 25px); }
+/* —— G10 战斗呈现（plan T13）：选手牌重做 / 分级飘字 / 台词气泡 / 状态词牌 —— */
+.fcard .fhead { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.fcard .fhead-main { flex: 1 1 auto; min-width: 0; }
+.fcard .fhead .corner { flex: none; white-space: nowrap; }
+.fcard .fhead-main .fname > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fcard .favatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  object-fit: cover; object-position: top center;
+  border: 2px solid rgba(255, 255, 255, .65); background: #241145;
+}
+.fcard .fsub { font-size: 11px; color: var(--ink-2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fcard .fsub .style-badge { font-size: 11px; }
+.foe-card .fhead { flex-direction: row-reverse; }
+.foe-card .fhead-main { text-align: right; }
+.foe-card .fname { justify-content: flex-end; }
+#battleView .fcard { border: 2px solid rgba(255, 255, 255, .22); border-radius: 16px; }
+#battleView .fcard.me-card { border-color: rgba(242, 123, 181, .62); box-shadow: 0 6px 18px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(242, 123, 181, .16); }
+#battleView .fcard.foe-card { border-color: rgba(151, 116, 255, .58); box-shadow: 0 6px 18px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(151, 116, 255, .16); }
+#battleView .fname { text-shadow: 0 1px 6px rgba(0, 0, 0, .5); letter-spacing: .02em; }
+#battleView .fsub { color: rgba(255, 255, 255, .68); }
+/* 状态词牌（选手牌内底部一行，随 renderBattle 同步；静态信息，减少动效时照常显示） */
+.fstate { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; min-height: 17px; align-items: center; }
+.foe-card .fstate { justify-content: flex-end; }
+.state-chip { font-size: 11px; font-weight: 800; line-height: 1.5; padding: 0 8px; border-radius: 99px; border: 1.5px solid; white-space: nowrap; }
+.state-chip.st-danger { background: rgba(217, 56, 46, .92); border-color: #ffb3ab; color: #fff; }
+.state-chip.st-warn { background: rgba(240, 160, 32, .92); border-color: #ffe1a8; color: #3a2400; }
+.state-chip.st-buff { background: linear-gradient(90deg, rgba(242, 123, 181, .94), rgba(123, 75, 181, .94)); border-color: rgba(255, 255, 255, .7); color: #fff; }
+.state-chip.st-info { background: rgba(64, 44, 110, .88); border-color: rgba(196, 181, 253, .65); color: #e6defc; }
+.state-chip.st-dim { background: transparent; border-color: rgba(255, 255, 255, .28); color: rgba(255, 255, 255, .55); font-weight: 600; }
+/* 分级伤害飘字（JS 逐拳生成 .dmg-float，动画结束自回收；transform/opacity 动画） */
+.dmg-float {
+  position: absolute; top: 15%; transform: translateX(-50%); z-index: 8; pointer-events: none;
+  text-align: center; font-family: "Oswald", "Noto Sans SC", sans-serif; white-space: nowrap;
+  animation: dmgFloat .95s cubic-bezier(.17, .67, .35, 1) forwards;
+}
+@keyframes dmgFloat {
+  0% { opacity: 0; transform: translate(-50%, 14px) scale(.6); }
+  16% { opacity: 1; transform: translate(-50%, 0) scale(1.12); }
+  30% { transform: translate(-50%, -4px) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -34px) scale(.98); }
+}
+.dmg-float .df-num { display: block; font-weight: 800; font-size: 27px; line-height: 1.05; color: #fff;
+  text-shadow: 0 2px 0 #4a2a7a, 0 0 3px rgba(20, 8, 40, .9), 0 3px 8px rgba(0, 0, 0, .55); }
+.dmg-float .df-tag { display: inline-block; font-family: "Noto Sans SC", sans-serif; font-weight: 900; font-size: 12px;
+  color: #fff; background: linear-gradient(90deg, #f27bb5, #7b4bb5); border: 1.5px solid rgba(255, 255, 255, .85);
+  border-radius: 99px; padding: 0 8px; margin-bottom: 2px; box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
+.dmg-float .df-sub { display: block; font-family: "Noto Sans SC", sans-serif; font-weight: 700; font-size: 11.5px; color: #ffd9ec;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8); margin-top: 1px; }
+.dmg-float.t-heavy .df-num { font-size: 33px; color: #ffc46b; }
+.dmg-float.t-crit .df-num { font-size: 38px; color: #ff8a5c; text-shadow: 0 2px 0 #7a1f3d, 0 0 4px rgba(20, 8, 40, .9), 0 0 14px rgba(255, 110, 60, .55); }
+.dmg-float.t-down .df-num { font-size: 43px; color: #ff5f8f; text-shadow: 0 2px 0 #6e1030, 0 0 4px rgba(20, 8, 40, .9), 0 0 16px rgba(255, 95, 143, .6); }
+.dmg-float.t-ko .df-num { font-size: 54px; color: #ffd34d; text-shadow: 0 3px 0 #8a5a00, 0 0 5px rgba(20, 8, 40, .9), 0 0 22px rgba(255, 211, 77, .75); }
+.dmg-float.t-ko .df-tag { background: linear-gradient(90deg, #ffb02e, #ffd34d); color: #4a2c00; border-color: #fff2c4; }
+.dmg-float.t-blocked .df-num { font-size: 20px; color: #c3cdea; }
+.dmg-float.t-blocked .df-tag { background: rgba(90, 105, 160, .88); border-color: rgba(255, 255, 255, .5); }
+/* 台词气泡（受击/击倒/反击/KO 时冒一句，JS 节流；白底粗描边漫画气泡） */
+.speech-bubble {
+  position: absolute; top: 2%; left: 50%; transform: translate(-50%, 8px) scale(.75); z-index: 9;
+  max-width: 200px; padding: 5px 12px; pointer-events: none; opacity: 0;
+  background: #fff; color: #33195e; border: 2.5px solid #33195e; border-radius: 14px;
+  font-size: 13.5px; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(10, 4, 26, .45);
+}
+.speech-bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+  border: 5px solid transparent; border-top: 7px solid #33195e; border-bottom: 0;
+}
+.speech-bubble.show { animation: bubblePop 2.1s ease-out forwards; }
+@keyframes bubblePop {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(.75); }
+  10% { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
+  16% { transform: translate(-50%, 0) scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(.98); }
+}
 #battleView .fight-status {
   flex: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-  margin: 0; padding: 6px 10px; gap: 6px; position: relative; z-index: 2;
+  margin: 0; padding: 4px 10px; gap: 6px; position: relative; z-index: 2;
 }
 #battleView .fight-status::-webkit-scrollbar { display: none; }
 #battleView .fs-pill { flex: none; }
@@ -1109,7 +1192,7 @@ body[data-view="battle"] #battleView { display: flex !important; flex-direction:
 #battleView .tbtn.punch { padding: 14px 6px; }
 #battleView .cmd-grid {
   flex: none; grid-template-columns: 1fr; margin: 0; gap: 0;
-  max-height: 37dvh; overflow-y: auto; overscroll-behavior: contain;
+  max-height: 29dvh; overflow-y: auto; overscroll-behavior: contain;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
 }
 #battleView .cmd-grid .card {
