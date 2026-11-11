@@ -22,8 +22,11 @@ from scipy import ndimage
 ROOT = Path(__file__).resolve().parents[2]  # boxing/
 WEB = ROOT / "web"
 SRC = ROOT / "assets/pose_src_pilot/video"
+SRC_BATCH = ROOT / "assets/pose_src_batch/video"
 OUT = WEB / "assets/anim"
 QC = ROOT / "research/anim_pilot_logs"
+QC_BATCH = ROOT / "research/anim_batch_logs"
+BATCH_CHARS = {"champion_domestic", "rookie", "shy", "pocket", "braid", "brick"}
 CELL_W, CELL_H = 352, 505
 COLS = 6
 SAMPLE_FPS = 12
@@ -31,17 +34,27 @@ SAMPLE_FPS = 12
 # 取段表（秒）：start/end 为源视频时间窗；playFps 为游戏内播放速率；loop=待机循环
 JOBS = {
     "evelyn": {
-        "idle":   ("evelyn_straight_side_v2.mp4", 4.20, 5.32, 12, True),  # 6fps 细查：3.7s 与 5.4s 各有一发直拳，干净抱架只有 4.2~5.3s
-        # 2026-11-11 拳套裁切修复：原窗 0.95~1.85 的伸展峰值帧拳套已冲出源视频画框
-        # （原生 24fps 量测：1.13s 起手套带触右缘 735/736），整段无一帧完整伸展。
-        # 改选帧模式：24fps 逐帧取到「伸展中拳套仍完整可见」的帧（源 ~1.06s）作峰值
-        # 定格，再往后一帧起手套即被运动拖影吞没并冲出画框；回程用出程帧逆序回放
-        # （乒乓），保证每一帧拳套都在框内。
-        "attack": {"video": "evelyn_straight_side_v2.mp4", "from": 0.80, "pick_fps": 24,
-                   "picks": [2, 3, 4, 5, 6, 6, 5, 4, 3, 2], "fps": 18, "loop": False},
-        # hit 首帧（1.75s）同病：她出拳被打断的瞬间拳套在画框外；窗口后移一帧（+0.08s）去掉
-        "hit":    ("evelyn_hit_side_v1.mp4",      1.83, 4.35, 20, False),
-        "down":   ("evelyn_down_side_v1.mp4",     2.00, 5.20, 12, False),
+        # A2 比赛服回炉（2026-11-11）：换 ring 四段（黑金短款上衣＋黑短裤、无披风），
+        # 旧披风版精灵图归档于 web/assets/anim/_archive_cape/evelyn/。
+        # idle 源段她是朝左的 3/4 抱架（视线投向画面左），与另三段朝右不一致——播放器
+        # 统一 scaleX(-1) 镜像，直接接入会背对主角；生产时水平翻转烘入（FLIP_STATES），
+        # 显示端即与其他状态同向。窗口 2.60~4.90：避开 0.7~1.7s 拳套旁的紫色烟团段，
+        # 6fps 细查此窗全程干净抱架律动、无出拳。
+        "idle":   ("evelyn_ring_idle_v1.mp4",     2.60, 4.90, 12, True),
+        # attack 选帧重构：ring 直拳两轮全伸展峰值拳套均冲出画框（24fps 管线同口径
+        # 量测 f26~33/f52~63 右缘 351 触边），但第二轮伸展后带一段「近全伸展缓退
+        # 平台」（f64~107 拳套完整在框内、alpha maxX 349→342 渐降）——取平台帧作
+        # 伸展相：抱架 f48~51 蓄势、跳切平台 f66/f72 作峰值定格（maxX 349/347、
+        # 全帧右缘接触＝0）、逆序回架（同苏雾/赤磊 1 帧弹射借帧口径）。下标自
+        # from=2.00s（＝源 f48）起算。
+        "attack": {"video": "evelyn_ring_straight_v1.mp4", "from": 2.00, "pick_fps": 24,
+                   "picks": [0, 1, 2, 3, 18, 24, 24, 18, 3, 2, 1, 0], "fps": 18, "loop": False},
+        "hit":    ("evelyn_ring_hit_v1.mp4",      0.95, 4.60, 22, False),  # 冲击前少许起、覆盖后仰→覆面回架前段
+        # down：ring 段平躺帧全身完整在框内（与批量 6 人「平躺帧双脚出框」不同），
+        # 按 A2 口径用完整平躺段：1.50s 踉跄起切、经跪倒→坐倒→后仰→平躺（约 5.5s
+        # 落定），6.30s 收尾保证末帧＝平躺保持帧（downK/锚点由管线按末帧量测重算）。
+        # 去底走 carpet_full 整带剔除（A2 残留修复，见 alpha_of 注释）。
+        "down":   ("evelyn_ring_down_v1.mp4",     1.50, 6.30, 12, False),
     },
     "counter": {
         "idle":   ("counter_idle_v1.mp4",         2.70, 5.10, 12, True),  # 避开原窗 1.5~2.5s 拳套旁的紫色烟团
@@ -57,6 +70,57 @@ JOBS = {
                    "fps": 15, "loop": False},
         "hit":    ("counter_hit_v1.mp4",          1.55, 4.55, 22, False),
         "down":   ("counter_down_v1.mp4",         1.80, 4.70, 12, False),
+    },
+    # ===== A3 批量（2026-11-11）：6 名重点角色，素材在 assets/pose_src_batch/video（"batch:" 前缀）=====
+    # 取段口径同试点：idle 取无出拳的最稳抱架窗（24fps bbox 量测选窗）；hit 从冲击前少许起、
+    # 覆盖后仰→回架前段；down 从挨打帧起切（开头混有本人出拳的段一律切掉，见各注）；
+    # attack 全员选帧重构——源视频全伸展帧拳套普遍出框，峰值取「框内最伸展帧」
+    # （24fps 逐帧量测 maxX：丽华 715/小葵 680/小朵 721/小麦 721，触边帧 735 一律不用），
+    # 苏雾改用其第二发完整框内直拳的自然周期（窗取，非选帧）。
+    # down 落点口径：各人平躺帧双脚都伸出源画框（生成构图如此、无帧可补），保持帧一律
+    # 收在「刚倒地、腿朝上/屈起、全身完整在框内」的落点帧——读秒停在刚倒地姿势，
+    # 不用下肢被画框截断的平躺帧（全员一致，无例外）。
+    "champion_domestic": {
+        "idle":   ("batch:champion_domestic_idle_v1.mp4",     2.50, 4.92, 12, True),
+        "attack": {"video": "batch:champion_domestic_straight_v1.mp4", "from": 0.833, "pick_fps": 24,
+                   "picks": [1, 2, 3, 4, 5, 5, 4, 3, 2, 1], "fps": 18, "loop": False},
+        "hit":    ("batch:champion_domestic_hit_v1.mp4",      0.95, 3.95, 22, False),
+        "down":   ("batch:champion_domestic_down_v1.mp4",     1.00, 3.75, 12, False),  # 0.67s 她出拳、1.0s 挨打起切；3.75 收在刚倒地腿朝上（平躺帧双脚出框，见批量口径注）
+    },
+    "rookie": {
+        "idle":   ("batch:rookie_idle_v1.mp4",     7.00, 9.42, 12, True),
+        "attack": {"video": "batch:rookie_straight_v1.mp4", "from": 1.79, "pick_fps": 24,
+                   "picks": [2, 3, 4, 6, 8, 8, 6, 4, 3, 2], "fps": 18, "loop": False},  # 刺拳渐进伸展：f47 671→f51 680 框内峰值，其后整段出框
+        "hit":    ("batch:rookie_hit_v1.mp4",      0.60, 4.20, 22, False),
+        "down":   ("batch:rookie_down_v1.mp4",     1.85, 4.27, 12, False),  # 1.3~1.7s 她本人出拳、约 1.85s 挨打起切；4.27 收在刚倒地腿朝上帧
+    },
+    "shy": {
+        "idle":   ("batch:shy_idle_v1.mp4",     7.17, 9.59, 12, True),
+        "attack": {"video": "batch:shy_straight_v1.mp4", "from": 4.17, "pick_fps": 24,
+                   "picks": [2, 3, 4, 26, 26, 27, 28, 29], "fps": 18, "loop": False},  # 她的直拳全是 1 帧弹射出框：峰值借收拳首帧 j26（臂伸展、拳套完整在框内），j27/28 顺收拳序回架
+        "hit":    ("batch:shy_hit_v1.mp4",      1.50, 5.00, 22, False),
+        "down":   ("batch:shy_down_v1.mp4",     1.50, 4.42, 12, False),  # 收在坐倒屈腿帧（平躺帧双腿同样出框，她不例外）
+    },
+    "pocket": {
+        "idle":   ("batch:pocket_idle_v1.mp4",     1.83, 4.25, 12, True),
+        "attack": {"video": "batch:pocket_straight_v1.mp4", "from": 3.71, "pick_fps": 24,
+                   "picks": [1, 2, 3, 4, 5, 5, 4, 3, 2, 1], "fps": 18, "loop": False},  # 她的拳几乎全出框，唯 3.92s 刺拳框内峰值 721
+        "hit":    ("batch:pocket_hit_v1.mp4",      0.45, 4.20, 22, False),
+        "down":   ("batch:pocket_down_v1.mp4",     1.20, 4.15, 12, False),  # 1.0s 她本人出拳、约 1.2s 挨打起切；4.15 收在刚倒地腿屈起帧
+    },
+    "braid": {
+        "idle":   ("batch:braid_idle_v1.mp4",     5.33, 7.75, 12, True),
+        "attack": {"video": "batch:braid_straight_v1.mp4", "from": 1.417, "pick_fps": 24,
+                   "picks": [2, 3, 4, 5, 6, 6, 5, 4, 3, 2], "fps": 18, "loop": False},
+        "hit":    ("batch:braid_hit_v1.mp4",      1.70, 5.05, 22, False),
+        "down":   ("batch:braid_down_v1.mp4",     1.85, 4.20, 12, False),  # 1.3~1.7s 她本人出拳、约 1.85s 挨打起切；4.20 收在刚倒地腿朝上帧
+    },
+    "brick": {
+        "idle":   ("batch:brick_idle_v1.mp4",     3.17, 5.59, 12, True),
+        "attack": {"video": "batch:brick_straight_v1.mp4", "from": 3.29, "pick_fps": 24,
+                   "picks": [10, 11, 12, 6, 6, 7, 8, 9], "fps": 18, "loop": False},  # 发射 1 帧出框、框内无伸展帧：峰值借第一发收拳首帧 j6（maxX 707、臂全伸展、拳套完整），j7~9 顺收拳序回架，前置 j10~12 抱架作起势
+        "hit":    ("batch:brick_hit_v1.mp4",      1.05, 4.90, 22, False),
+        "down":   ("batch:brick_down_v1.mp4",     1.15, 3.95, 12, False),  # 3.95 收在刚倒地腿朝上帧（强 alpha 包围盒右缘 331、全身在框内）
     },
 }
 
@@ -113,8 +177,21 @@ def _skirt_flank(dist: np.ndarray, y: int, x: int) -> bool:
     return bool((dist[y0:y1, x] < 30).any())
 
 
+# 生产时水平翻转烘入的状态：源段朝向与同人其余状态相反（播放器统一镜像、无逐状态
+# 翻转开关），翻转后显示端才同向。仅伊芙琳比赛服 idle（源段朝左 3/4 抱架）。
+FLIP_STATES = {("evelyn", "idle")}
+
+
+def resolve_video(name: str) -> Path:
+    """视频路径解析："batch:" 前缀走批量素材目录，其余走试点目录。"""
+    if name.startswith("batch:"):
+        return SRC_BATCH / name[len("batch:"):]
+    return SRC / name
+
+
 def alpha_of(img: Image.Image, down: bool = False, skirt: bool = False, dim_glow: bool = False,
-             purge_pockets: bool = False) -> Image.Image:
+             purge_pockets: bool = False, down_clean: bool = False, floor_ref: bool = False,
+             carpet_full: bool = False) -> Image.Image:
     """v3 管线：T=30 连通去底 → 清孤岛 → 闭合+补洞 →（伊芙琳）口袋清理 →（倒地帧）辉光毯清理 → 窄带去溢色。
 
     口径（两轮试错定型）：阈值必须停在 30——沈墨凛黑衣/黑发与底色距离仅 35~71，
@@ -127,11 +204,23 @@ def alpha_of(img: Image.Image, down: bool = False, skirt: bool = False, dim_glow
     （距离≥84 的皮肤/银发/金饰/黑披风）超过 20px 的低距离前景像素删除」清理，
     20px 内留下作贴地阴影；沈墨凛黑发距离仅 36、发梢离皮肤较远处会被削短，
     属试点已知取舍（远好于整块紫毯）。
+    carpet_full（仅伊芙琳比赛服 down）：地板辉光均匀亮紫（距离≈71~79），20px 规则
+    ＋dim_glow 会留下整带 45% alpha 的蓝灰矩形——改走 dist<84 整段剔除＋补洞填回
+    轮廓内阴影（她的本体距离全 ≥84，见 down 分支注释）。
     """
     a = np.asarray(img.convert("RGB")).astype(np.float64)
     border = np.concatenate([a[0, :, :], a[-1, :, :], a[:, 0, :], a[:, -1, :]]).reshape(-1, 3)
     med = np.median(border, axis=0)
     dist = np.sqrt(((a - med) ** 2).sum(axis=2))
+    if floor_ref:
+        # 倒地帧地板参考（A3 批量）：生成视频的地板辉光自上而下渐亮，画面下部的地板色
+        # 与全边框中位色距可达 100+，单参考会把整块地板当成前景（丽华 down 的紫色矩形
+        # 即此故）。取底部 14 行中位作第二参考，色距取两者最小值（并集判底，随后仍走
+        # 边框传播——地板与底边相连、整片传走）。底部条在倒地帧恒为纯地板（人物底边
+        # ≤90% 高度），站立/下落帧靴子只占小幅宽、中位稳健；人物本体色与两种紫色
+        # 参考的色距都远大于阈值，不受影响。
+        med2 = np.median(a[-14:, :, :].reshape(-1, 3), axis=0)
+        dist = np.minimum(dist, np.sqrt(((a - med2) ** 2).sum(axis=2)))
     cand = dist < 30
     seed = np.zeros_like(cand)
     seed[0, :] = cand[0, :]
@@ -189,12 +278,25 @@ def alpha_of(img: Image.Image, down: bool = False, skirt: bool = False, dim_glow
                         fg = fg & ~comp
     if skirt:
         fg = skirt_fill(fg, out, dist)
-    # 倒地帧：清理身下辉光毯（保留核心 20px 内作贴地阴影）
-    if down:
+    # 倒地帧：清理身下辉光毯（保留核心近旁作贴地阴影）。试点口径保留 20px；
+    # A3 批量（down_clean）收紧到 8px——用户裁定倒地帧身下深色矩形必须清净，
+    # 8px 内残带读作接触阴影、矩形外缘（离核心远）整段删净。
+    if down and carpet_full:
+        # 伊芙琳比赛服 down 专用（A2 残留修复，2026-11-11）：她的地板辉光是均匀亮紫
+        # （实测 RGB≈(98,67,165)、与边框中位色距≈71~79）——20px 毯规则只删核心
+        # 20px 外的部分、余下整带再被 dim_glow 以 45% alpha 保留，在明亮擂台地板
+        # 上显成一整块蓝灰矩形（用户点名过的「身下垫着没抠净的矩形」同族）。
+        # 她本体距离全 ≥84（黑衣≈132/金饰≈188/皮肤≈199/银发≈272），故 dist<84
+        # 的前景整段剔除；随后补洞把轮廓内被核心围住的低距离阴影填回原色——
+        # 地板横带与画框边缘相通、不是洞，不会被填回。发丝间露出的辉光同理
+        # 与外界相通、删净；dim_glow 对本路关闭（已无毯可压）。
+        fg = fg & ~(dist < 84)
+        fg = ndimage.binary_fill_holes(fg)
+    elif down:
         core = fg & (dist >= 84)
         if core.any():
             dmap = ndimage.distance_transform_edt(~core)
-            fg = fg & ~((dist < 84) & (dmap > 20))
+            fg = fg & ~((dist < 84) & (dmap > (8 if down_clean else 20)))
     bg2 = ndimage.binary_erosion(~fg, iterations=1, border_value=1)
     alpha = np.where(bg2, 0.0, 255.0)
     alpha = ndimage.gaussian_filter(alpha, 0.8)
@@ -225,6 +327,8 @@ def build_sheet(frames: list[Image.Image]) -> Image.Image:
 
 def qc_strip(char: str, state: str, frames: list[Image.Image]) -> None:
     """QC：抽 4 帧贴到深色擂台色＋棋盘格上各一排，看边缘。"""
+    qdir = QC_BATCH if char in BATCH_CHARS else QC
+    qdir.mkdir(parents=True, exist_ok=True)
     picks = [frames[i] for i in np.linspace(0, len(frames) - 1, 4).astype(int)]
     for bgname, bgc in [("dark", (24, 18, 44, 255)), ("check", None)]:
         strip = Image.new("RGBA", (CELL_W * 4, CELL_H), bgc or (255, 255, 255, 255))
@@ -236,7 +340,16 @@ def qc_strip(char: str, state: str, frames: list[Image.Image]) -> None:
             strip = Image.fromarray(px, "RGBA")
         for i, fr in enumerate(picks):
             strip.alpha_composite(fr, (i * CELL_W, 0))
-        strip.convert("RGB").save(QC / f"qc_{char}_{state}_{bgname}.png")
+        strip.convert("RGB").save(qdir / f"qc_{char}_{state}_{bgname}.png")
+
+
+def alpha_bbox(img: Image.Image):
+    """已去底帧的 alpha 包围盒（cell 坐标）：(x0, y0, x1, y1)，无内容返回 None。"""
+    a = np.asarray(img.split()[-1])
+    ys, xs = np.nonzero(a > 8)
+    if not len(xs):
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
 
 
 def main() -> None:
@@ -246,6 +359,7 @@ def main() -> None:
     tmp.mkdir(exist_ok=True)
     for char, states in JOBS.items():
         meta = {"cell": [CELL_W, CELL_H], "cols": COLS, "states": {}}
+        keyed_bbox = {}  # state -> [bbox per frame]，供 down 显示元数据计算
         for state, spec in states.items():
             if only and f"{char}/{state}" not in only:
                 continue
@@ -255,17 +369,28 @@ def main() -> None:
                 pf = spec["pick_fps"]
                 t0 = spec["from"]
                 t1 = t0 + (max(spec["picks"]) + 2) / pf
-                all_paths = extract_frames(SRC / video, t0, t1, tmp, fps=pf)
+                all_paths = extract_frames(resolve_video(video), t0, t1, tmp, fps=pf)
                 paths = [all_paths[i] for i in spec["picks"]]
                 src_desc = f"{video} [pick {pf}fps from {t0:.2f}s: {spec['picks']}]"
             else:
                 video, t0, t1, fps, loop = spec
-                paths = extract_frames(SRC / video, t0, t1, tmp)
+                paths = extract_frames(resolve_video(video), t0, t1, tmp)
                 src_desc = f"{video} [{t0:.2f}~{t1:.2f}s]"
+            # down 去底参数按人分档（A3 实测）：floor_ref 只给丽华——她的地板辉光亮到
+            # 与边框色距 100+、非双参考吃不掉整块地板；但苏雾的深灰蓝服装与她的地板色
+            # 距过近、双参考会把衣服吃穿（实测变黑影），其余人地板辉光都在毯规则射程内。
+            # dim_glow 给丽华（压身下辉光毯的残影）；伊芙琳 down 改走 carpet_full
+            # 整带剔除（A2 残留修复：dim_glow 的 45% 保留带在擂台上显成蓝灰矩形）。
             frames = [alpha_of(Image.open(p), down=(state == "down"),
                                skirt=(char == "counter" and state != "down"),
-                               dim_glow=(char == "evelyn" and state == "down"),
-                               purge_pockets=(char == "evelyn")) for p in paths]
+                               dim_glow=((char == "champion_domestic") and state == "down"),
+                               purge_pockets=(char == "evelyn"),
+                               down_clean=(char in BATCH_CHARS and state == "down"),
+                               floor_ref=(char == "champion_domestic" and state == "down"),
+                               carpet_full=(char == "evelyn" and state == "down")) for p in paths]
+            if (char, state) in FLIP_STATES:
+                frames = [f.transpose(Image.FLIP_LEFT_RIGHT) for f in frames]
+            keyed_bbox[state] = [alpha_bbox(f) for f in frames]
             sheet = build_sheet(frames)
             dst = OUT / char / f"{state}.webp"
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -277,6 +402,27 @@ def main() -> None:
                 "src": src_desc,
             }
             print(f"{char}/{state}: {len(frames)} frames -> {dst} ({dst.stat().st_size/1024:.0f} KiB)")
+        # 倒地显示新规元数据（A3）：down 末帧躺姿 bbox → 体长缩放系数与地面锚点。
+        # downK：躺姿体长（末帧 bbox 宽）放大到站立身高（idle bbox 高中位数）的 94%；
+        # downOX/OY：末帧 bbox 底边中点（cell 百分比），播放器以此为变换原点，
+        # 缩放时该点不动——身体贴地面线长大，不再缩成一团浮空。
+        if "down" in keyed_bbox and "idle" in keyed_bbox:
+            db = keyed_bbox["down"][-1]
+            ih = [b[3] - b[1] for b in keyed_bbox["idle"] if b]
+            if db and ih:
+                idle_h = float(np.median(ih))
+                idle_gy = float(np.median([b[3] for b in keyed_bbox["idle"] if b]))
+                body_w = db[2] - db[0]
+                st = meta["states"]["down"]
+                st["downK"] = round(min(2.6, max(1.0, 0.94 * idle_h / body_w)), 3)
+                st["downOX"] = round((db[0] + db[2]) / 2 / CELL_W * 100, 1)
+                st["downOY"] = round(db[3] / CELL_H * 100, 1)
+                # downGY：站立时脚底的地面线（idle 包围盒底边中位）。倒地帧的身体底边
+                # 一般高于地面线（源视频构图），播放器用 downGY−downOY 做竖直补偿，
+                # 让放大后的身体底边正好落回地面线（治「浮在半空」）。
+                st["downGY"] = round(idle_gy / CELL_H * 100, 1)
+                print(f"{char}/down meta: downK={st['downK']} origin=({st['downOX']}%,{st['downOY']}%) "
+                      f"groundY={st['downGY']}% idleH={idle_h:.0f} bodyW={body_w}")
         # anim.json 合并写回（only 模式只覆盖本次处理的状态，其余沿用已有记录）
         jpath = OUT / char / "anim.json"
         if jpath.exists():

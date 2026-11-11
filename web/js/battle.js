@@ -881,15 +881,22 @@
         var im = new Image(); im.src = dir + p + '.webp';
       });
     }
-    /* ===== 动画试点（2026-11-11）：整段动作帧序列接入对手侧（仅伊芙琳 opp_world_champion／沈墨凛 opp_counter）=====
-       素材 assets/anim/<char>/（scripts/make_anim.py 从整段动作视频抽帧去底的精灵图＋anim.json），只在两名试点
+    /* ===== 对手整段动作帧序列（试点 2026-11-11 两人＋A3 批量 6 人＝8 名重点角色全员）=====
+       素材 assets/anim/<char>/（scripts/make_anim.py 从整段动作视频抽帧去底的精灵图＋anim.json），只在对应
        对手出场时懒加载（开战后才拉，不进标题路径）；状态机 idle 循环／attack／combo（仅沈墨凛）／hit／down
        （播完停在躺姿帧）。素材朝右、对手在右侧面向左：.anim-sprite 以 scaleX(-1) 镜像（CSS，与 .fig-img 同口径），
        翻转后拳路朝主角、视线投向主角一侧；attack 触发时容器再叠一段前冲（.lunging），让拳头视觉上够到主角。
        触发点与 driveFoeRig 同挂既有事件点（出拳/受击/格挡/击倒/起身），只读事件、不参与任何判定与数值；
        主角受击呈现仍在 dealDamage 既有时点发生，attack 序列 18fps 使伸展峰值（约第 4~5 帧）贴近该时点后约 200ms。
-       「减少动效」开启时不启用、回退静态立绘（与纸偶同口径）；XHR/Image 不可用的环境（jsdom 验证）整体 no-op。 */
-    var FOE_ANIM_CHARS = { opp_world_champion: 'evelyn', opp_counter: 'counter' };
+       「减少动效」开启时不启用、回退静态立绘（与纸偶同口径）；XHR/Image 不可用的环境（jsdom 验证）整体 no-op。
+       倒地显示新规（A3，用户裁定）：down 帧的身体在源帧里又小又浮（横躺塞进竖格＋底边离地），按 anim.json 的
+       downK/downOX/downOY/downGY 在 foeAnimDraw 里做「体长缩放＋地面锚点」：随倒下进度把精灵以躺姿底边
+       中点为原点放大到体长≈站立身高，并竖直补偿到身体底边落在站立地面线——不再缩成一团浮空。 */
+    var FOE_ANIM_CHARS = {
+      opp_world_champion: 'evelyn', opp_counter: 'counter',
+      opp_champion_domestic: 'champion_domestic', opp_rookie: 'rookie', opp_shy: 'shy',
+      opp_pocket: 'pocket', opp_braid: 'braid', opp_brick: 'brick'
+    };
     var _foeAnim = null; // { char, meta, imgs, state, stateAt, frame, acc, lastTs, raf, active, pending }
     function foeAnimStart() {
       foeAnimStop();
@@ -930,7 +937,10 @@
       if (_foeAnim) { _foeAnim.active = false; if (_foeAnim.raf) cancelAnimationFrame(_foeAnim.raf); _foeAnim = null; }
       var ff = $('figFoe'); if (ff) ff.classList.remove('anim-on');
       var spr = $('foeAnimSprite');
-      if (spr) { spr.classList.remove('lunging'); delete spr.dataset.state; delete spr.dataset.frame; }
+      if (spr) {
+        spr.classList.remove('lunging'); delete spr.dataset.state; delete spr.dataset.frame;
+        spr.style.transform = ''; spr.style.transformOrigin = ''; spr.style.translate = ''; // 倒地新规的内联变换一并清
+      }
     }
     function foeAnimSetState(A, name) {
       var st = A.meta && A.meta.states[name]; if (!st) return false;
@@ -950,6 +960,8 @@
         spr.dataset.state = name;
         if (name === 'attack' || name === 'combo') { spr.classList.remove('lunging'); void spr.offsetWidth; spr.classList.add('lunging'); }
         else spr.classList.remove('lunging');
+        // 离开 down 状态即撤倒地新规的内联变换（进 down 时 foeAnimDraw 逐帧重设）
+        if (name !== 'down') { spr.style.transform = ''; spr.style.transformOrigin = ''; spr.style.translate = ''; }
       }
       return true;
     }
@@ -959,6 +971,24 @@
       var col = A.frame % cols, row = Math.floor(A.frame / cols);
       img.style.transform = 'translate(' + (-(col * 100) / cols) + '%, ' + (-(row * 100) / A.rows) + '%)';
       var spr = $('foeAnimSprite'); if (spr) spr.dataset.frame = String(A.frame);
+      // 倒地显示新规：down 状态随帧进度把精灵按体长放大＋竖直补偿到地面线。
+      // 进度过半前身体还在下落途中（源帧本就立姿/半倒），缩放只在后段平滑 ramp-in，
+      // 原点取躺姿底边中点（downOX/downOY）使该点在缩放下不动，再以 translate 把
+      // 该点从 downOY 平移到站立地面线 downGY——身体贴地长大、不浮空不沉地。
+      // 变换串保留 CSS 的 scaleX(-1) 镜像（内联 transform 会覆盖样式表值）。
+      if (spr && A.state === 'down') {
+        var st = A.meta.states.down;
+        if (st && st.downK > 1) {
+          var p = st.frames > 1 ? A.frame / (st.frames - 1) : 1;
+          var t = Math.min(1, Math.max(0, (p - 0.15) / 0.40));
+          var e = t * t * (3 - 2 * t); // smoothstep
+          var s = 1 + (st.downK - 1) * e;
+          spr.style.transformOrigin = (st.downOX || 50) + '% ' + (st.downOY || 100) + '%';
+          spr.style.transform = 'scaleX(-1) scale(' + s.toFixed(3) + ')';
+          var dy = ((st.downGY != null ? st.downGY : 99.8) - (st.downOY || 100)) * e;
+          spr.style.translate = '0 ' + dy.toFixed(2) + '%';
+        }
+      }
     }
     function foeAnimTick(A, ts) {
       if (document.body && document.body.getAttribute('data-view') !== 'battle') { foeAnimStop(); return; } // 离开战斗屏自停（结算离场后不再空转）

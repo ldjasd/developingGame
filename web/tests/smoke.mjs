@@ -1138,23 +1138,28 @@ async function suite(label, dir) {
     ok('G10：分级飘字生成（KO 级 .dmg-float.t-ko 含伤害数字与 KO 标记）', g10.floatOk === true, JSON.stringify(g10));
     ok('G10：台词气泡节流（同侧连续触发只生效一次、台词非空、零脚本错误）',
       g10.throttleOk === true && g10.errs === 0, JSON.stringify(g10));
-    // 【动画试点】帧序列接入：素材契约（磁盘）/ 精灵元素与播放器在位 / 减少动效门 / 非试点对手不启用
-    // （jsdom 无图像解码，序列实际播放与状态推进由 Playwright 真浏览器实证，见 research/anim_pilot_logs/）
+    // 【对手帧序列动画】试点 2 人＋A3 批量 6 人＝8 人：素材契约（磁盘）/ 倒地新规元数据 /
+    // 精灵元素与播放器在位 / 减少动效门 / 非动画对手不启用
+    // （jsdom 无图像解码，序列实际播放与状态推进由 Playwright 真浏览器实证，见 research/anim_batch_logs/）
     const animDisk = (function () {
       try {
         var res = {};
-        ['evelyn', 'counter'].forEach(function (c) {
+        ['evelyn', 'counter', 'champion_domestic', 'rookie', 'shy', 'pocket', 'braid', 'brick'].forEach(function (c) {
           var meta = JSON.parse(fs.readFileSync(path.join(dir, 'assets', 'anim', c, 'anim.json'), 'utf8'));
           var sts = Object.keys(meta.states);
           res[c] = ['idle', 'attack', 'hit', 'down'].every(function (st) { return sts.indexOf(st) >= 0; }) &&
             sts.every(function (st) { var f = path.join(dir, 'assets', 'anim', c, meta.states[st].file); return fs.existsSync(f) && fs.statSync(f).size > 10000; });
+          var dn = meta.states.down || {};
+          res[c + 'Down'] = dn.downK > 1 && dn.downOX > 0 && dn.downOY > 0 && dn.downGY > dn.downOY;
           if (c === 'counter') res.counterCombo = sts.indexOf('combo') >= 0;
         });
         return res;
       } catch (e) { return { err: String(e) }; }
     })();
-    ok('动画试点：素材契约（anim.json 状态齐全＋精灵图落盘、沈墨凛含 combo 序列）',
-      animDisk.evelyn === true && animDisk.counter === true && animDisk.counterCombo === true, JSON.stringify(animDisk));
+    ok('对手动画：素材契约（8 人 anim.json 状态齐全＋精灵图落盘、沈墨凛含 combo）＋倒地新规元数据齐全（downK>1＋锚点/地面线）',
+      ['evelyn', 'counter', 'champion_domestic', 'rookie', 'shy', 'pocket', 'braid', 'brick'].every(function (c) {
+        return animDisk[c] === true && animDisk[c + 'Down'] === true;
+      }) && animDisk.counterCombo === true, JSON.stringify(animDisk));
     const animPg = JSON.parse(bc.w.eval(`(function () {
       var out = {};
       out.hasSprite = !!document.getElementById('foeAnimSprite') && !!document.getElementById('foeAnimImg');
@@ -1165,13 +1170,13 @@ async function suite(label, dir) {
       startBattle('auto');
       out.gateOk = !document.getElementById('figFoe').classList.contains('anim-on');
       SETTINGS.reduceMotion = false;
-      B.foe = makeFoe({ forceKey: 'opp_rookie' });
+      B.foe = makeFoe({ forceKey: 'opp_africa' });
       foeAnimStart();
       out.nonPilotOk = !document.getElementById('figFoe').classList.contains('anim-on');
       out.errs = window.__errs.length;
       return JSON.stringify(out);
     })()`));
-    ok('动画试点：精灵元素与播放器在位、减少动效门生效、非试点对手不启用、零脚本错误',
+    ok('对手动画：精灵元素与播放器在位、减少动效门生效、非动画对手不启用、零脚本错误',
       animPg.hasSprite === true && animPg.hasPlayer === true && animPg.gateOk === true && animPg.nonPilotOk === true && animPg.errs === 0,
       JSON.stringify(animPg));
     bc.w.close();
