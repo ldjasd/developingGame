@@ -46,7 +46,7 @@
     hook: Object.assign({}, G, LUNGE, { root: { x: 16, y: 2, r: 0 }, torso: 9, head: -3, armNearUpper: 18, armNearFore: -58, legNearThigh: 70, legNearShin: 90 }),
     upper: Object.assign({}, G, LUNGE, { root: { x: 8, y: -6, r: 0 }, torso: -4, head: -3, armNearUpper: 55, armNearFore: -80 }),
     body: Object.assign({}, G, { root: { x: 18, y: 46, r: 0 }, torso: 15, head: 7, armNearUpper: 62, armNearFore: 36, legNearThigh: 76, legNearShin: 108, legFarThigh: 100, legFarShin: 62 }),
-    hit: Object.assign({}, G, { root: { x: -16, y: 3, r: 0 }, torso: -11, head: -12, armNearUpper: 70, armNearFore: 105, armFarUpper: 60, armFarFore: 120, legNearThigh: 58, legFarThigh: 88 }),
+    hit: Object.assign({}, G, { root: { x: -16, y: 3, r: 0 }, torso: -11, head: -12, armNearUpper: 70, armNearFore: 30, armFarUpper: 60, armFarFore: 48, legNearThigh: 58, legFarThigh: 88 }), // 2026-11-11 缺件修复：原前臂角 105/120 把双拳套折到躯干背后，受击＋回程插值全程看不见手臂（实战录像里像少了两条胳膊）；改 30/48 让拳套压在腹胸前、后仰读法不变
     dodge: Object.assign({}, G, { root: { x: -6, y: 52, r: 0 }, torso: 14, head: 8, armNearUpper: 98, armNearFore: -78, armFarUpper: 66, armFarFore: -90, legNearThigh: 76, legNearShin: 100, legFarThigh: 105, legFarShin: 60 }),
     down: { root: { x: 95, y: 350, r: 0 }, torso: -78, head: -84, armNearUpper: 160, armNearFore: 20, armFarUpper: -130, armFarFore: -95, legNearThigh: -5, legNearShin: 25, legFarThigh: 8, legFarShin: 30 },
     victory: Object.assign({}, G, { root: { x: 0, y: -4, r: 0 }, torso: -4, head: -5, armNearUpper: -88, armNearFore: -96, armFarUpper: 57, armFarFore: -79 }),

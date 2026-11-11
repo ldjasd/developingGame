@@ -1138,6 +1138,42 @@ async function suite(label, dir) {
     ok('G10：分级飘字生成（KO 级 .dmg-float.t-ko 含伤害数字与 KO 标记）', g10.floatOk === true, JSON.stringify(g10));
     ok('G10：台词气泡节流（同侧连续触发只生效一次、台词非空、零脚本错误）',
       g10.throttleOk === true && g10.errs === 0, JSON.stringify(g10));
+    // 【动画试点】帧序列接入：素材契约（磁盘）/ 精灵元素与播放器在位 / 减少动效门 / 非试点对手不启用
+    // （jsdom 无图像解码，序列实际播放与状态推进由 Playwright 真浏览器实证，见 research/anim_pilot_logs/）
+    const animDisk = (function () {
+      try {
+        var res = {};
+        ['evelyn', 'counter'].forEach(function (c) {
+          var meta = JSON.parse(fs.readFileSync(path.join(dir, 'assets', 'anim', c, 'anim.json'), 'utf8'));
+          var sts = Object.keys(meta.states);
+          res[c] = ['idle', 'attack', 'hit', 'down'].every(function (st) { return sts.indexOf(st) >= 0; }) &&
+            sts.every(function (st) { var f = path.join(dir, 'assets', 'anim', c, meta.states[st].file); return fs.existsSync(f) && fs.statSync(f).size > 10000; });
+          if (c === 'counter') res.counterCombo = sts.indexOf('combo') >= 0;
+        });
+        return res;
+      } catch (e) { return { err: String(e) }; }
+    })();
+    ok('动画试点：素材契约（anim.json 状态齐全＋精灵图落盘、沈墨凛含 combo 序列）',
+      animDisk.evelyn === true && animDisk.counter === true && animDisk.counterCombo === true, JSON.stringify(animDisk));
+    const animPg = JSON.parse(bc.w.eval(`(function () {
+      var out = {};
+      out.hasSprite = !!document.getElementById('foeAnimSprite') && !!document.getElementById('foeAnimImg');
+      out.hasPlayer = typeof foeAnimPlay === 'function' && typeof foeAnimStart === 'function';
+      S = defaultState(); S.name = '测试';
+      pendingFoe = makeFoe({ forceKey: 'opp_world_champion' });
+      SETTINGS.reduceMotion = true;
+      startBattle('auto');
+      out.gateOk = !document.getElementById('figFoe').classList.contains('anim-on');
+      SETTINGS.reduceMotion = false;
+      B.foe = makeFoe({ forceKey: 'opp_rookie' });
+      foeAnimStart();
+      out.nonPilotOk = !document.getElementById('figFoe').classList.contains('anim-on');
+      out.errs = window.__errs.length;
+      return JSON.stringify(out);
+    })()`));
+    ok('动画试点：精灵元素与播放器在位、减少动效门生效、非试点对手不启用、零脚本错误',
+      animPg.hasSprite === true && animPg.hasPlayer === true && animPg.gateOk === true && animPg.nonPilotOk === true && animPg.errs === 0,
+      JSON.stringify(animPg));
     bc.w.close();
   } finally {
     srv.close();

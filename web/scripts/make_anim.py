@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""动画试点：整段动作视频 → alpha 精灵图（对手帧序列接入用）。
+
+来源：assets/pose_src_pilot/video/ 的纯色深紫底视频（736×1056/24fps）。
+做法（沿用 make_alpha.py 的连通域口径，针对紫底调参）：
+  1) ffmpeg 按窗抽帧（12fps 采样、缩到 352×505 cell）；
+  2) 背景候选＝与边框中位色距离 <30（紫裙/紫拳套的亮紫像素虽是候选，
+     但被深色轮廓包围、与边框不连通，binary_propagation 不会误伤）；
+  3) 背景腐蚀 1px + alpha 高斯羽化 0.8；边缘带做去溢色（按羽化 alpha 反解混合色）；
+  4) 帧拼精灵图（6 列网格）存 webp，逐状态写 anim.json（帧数/列数/播放 fps/循环标记）。
+输出：web/assets/anim/<char>/<state>.webp ＋ anim.json；QC 合成图另存 research/anim_pilot_logs/。
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+from scipy import ndimage
+
+ROOT = Path(__file__).resolve().parents[2]  # boxing/
+WEB = ROOT / "web"
+SRC = ROOT / "assets/pose_src_pilot/video"
+OUT = WEB / "assets/anim"
+QC = ROOT / "research/anim_pilot_logs"
+CELL_W, CELL_H = 352, 505
+COLS = 6
+SAMPLE_FPS = 12
+
+# 取段表（秒）：start/end 为源视频时间窗；playFps 为游戏内播放速率；loop=待机循环
+JOBS = {
+    "evelyn": {
+        "idle":   ("evelyn_straight_side_v2.mp4", 4.20, 5.32, 12, True),  # 6fps 细查：3.7s 与 5.4s 各有一发直拳，干净抱架只有 4.2~5.3s
+        # 2026-11-11 拳套裁切修复：原窗 0.95~1.85 的伸展峰值帧拳套已冲出源视频画框
+        # （原生 24fps 量测：1.13s 起手套带触右缘 735/736），整段无一帧完整伸展。
+        # 改选帧模式：24fps 逐帧取到「伸展中拳套仍完整可见」的帧（源 ~1.06s）作峰值
+        # 定格，再往后一帧起手套即被运动拖影吞没并冲出画框；回程用出程帧逆序回放
+        # （乒乓），保证每一帧拳套都在框内。
+        "attack": {"video": "evelyn_straight_side_v2.mp4", "from": 0.80, "pick_fps": 24,
+                   "picks": [2, 3, 4, 5, 6, 6, 5, 4, 3, 2], "fps": 18, "loop": False},
+        # hit 首帧（1.75s）同病：她出拳被打断的瞬间拳套在画框外；窗口后移一帧（+0.08s）去掉
+        "hit":    ("evelyn_hit_side_v1.mp4",      1.83, 4.35, 20, False),
+        "down":   ("evelyn_down_side_v1.mp4",     2.00, 5.20, 12, False),
+    },
+    "counter": {
+        "idle":   ("counter_idle_v1.mp4",         2.70, 5.10, 12, True),  # 避开原窗 1.5~2.5s 拳套旁的紫色烟团
+        # 同批修复：原 attack 峰值 3 帧（旧 f6~f8）拳套同样出框；选帧到 1.30s 框内
+        # 发射帧（右端 714/736）作峰值＋乒乓回程。
+        "attack": {"video": "counter_straight_v1.mp4", "from": 0.80, "pick_fps": 24,
+                   "picks": [5, 8, 9, 10, 11, 12, 12, 11, 10, 9, 8], "fps": 18, "loop": False},
+        # combo 两段直拳峰值同样出框（旧 f7/f26/f28 光臂）：选帧重组——两段伸展都
+        # 截到最后框内帧作峰值、乒乓回收，其余流程（抱架/勾拳/转身）按 24fps 隔帧取。
+        "combo":  {"video": "media-generation-animate-this-character-in-one-0-b20cbd02-b427-4aeb-a77d-a12fb1f8f70a.mp4",
+                   "from": 0.80, "pick_fps": 24,
+                   "picks": [1, 3, 5, 7, 9, 11, 9, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 49, 47, 45, 64, 66, 68],
+                   "fps": 15, "loop": False},
+        "hit":    ("counter_hit_v1.mp4",          1.55, 4.55, 22, False),
+        "down":   ("counter_down_v1.mp4",         1.80, 4.70, 12, False),
+    },
+}
+
+
+def extract_frames(video: Path, t0: float, t1: float, tmp: Path, fps: int = SAMPLE_FPS) -> list[Path]:
+    for p in tmp.glob("f*.png"):
+        p.unlink()
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-ss", str(t0), "-i", str(video),
+         "-t", str(t1 - t0), "-vf", f"fps={fps},scale={CELL_W}:{CELL_H}",
+         str(tmp / "f%03d.png")],
+        check=True)
+    return sorted(tmp.glob("f*.png"))
+
+
+def skirt_fill(fg: np.ndarray, out: np.ndarray, dist: np.ndarray) -> np.ndarray:
+    """沈墨凛裙面修复：裙摆亮褶与底色距离≈3，靠深色褶线分隔成格，其中接通腿间
+    缝隙的一格会被连通去底吃穿，形成向裙摆下方开口的「湾」（补洞补不到）。
+    规则：逐行找背景段，若其左右紧邻的前景像素都是裙色（距离<45），则该段是
+    裙面内部——按最近前景色补回。腿间缝两侧紧邻的是皮肤（距离大），不会误补；
+    倒地帧几何不同，不走此修复。"""
+    fg = fg.copy()
+    _, inds = ndimage.distance_transform_edt(~fg, return_indices=True)
+    near = out[inds[0], inds[1]]
+    h, w = fg.shape
+    # 裙区纵界：含 ≥8 个裙色前景像素的最底行 +4；裙摆下方不补（靴子同为裙色距离，
+    # 腿间行段会被两侧靴/长发夹住误判——v3.1 事故：裙下横条纹）
+    skirt_rows = np.where((fg & (dist < 45)).sum(axis=1) >= 8)[0]
+    if not len(skirt_rows):
+        return fg
+    y_max = int(skirt_rows.max()) + 4
+    for y in range(min(h, y_max + 1)):
+        row = fg[y]
+        if row.all():
+            continue
+        d = np.diff(np.concatenate([[True], row, [True]]).astype(np.int8))
+        starts = np.where(d == -1)[0]
+        ends = np.where(d == 1)[0]
+        for s, e in zip(starts, ends):  # 背景段 [s, e)
+            if s == 0 or e == w or e - s > 80:
+                continue
+            if _skirt_flank(dist, y, s - 1) and _skirt_flank(dist, y, e):
+                fg[y, s:e] = True
+                out[y, s:e] = near[y, s:e]
+    return fg
+
+
+def _skirt_flank(dist: np.ndarray, y: int, x: int) -> bool:
+    """夹逼像素是否裙面：本身距离<45（裙褶线 41.7）且上下 3 行内有亮褶（距离<30）。
+    长发距离 35.6 也 <45，但其邻域没有亮褶，据此与裙褶线区分（v3.2）。"""
+    if dist[y, x] >= 45:
+        return False
+    y0, y1 = max(0, y - 3), min(dist.shape[0], y + 4)
+    return bool((dist[y0:y1, x] < 30).any())
+
+
+def alpha_of(img: Image.Image, down: bool = False, skirt: bool = False, dim_glow: bool = False,
+             purge_pockets: bool = False) -> Image.Image:
+    """v3 管线：T=30 连通去底 → 清孤岛 → 闭合+补洞 →（伊芙琳）口袋清理 →（倒地帧）辉光毯清理 → 窄带去溢色。
+
+    口径（两轮试错定型）：阈值必须停在 30——沈墨凛黑衣/黑发与底色距离仅 35~71，
+    阈值抬到 84 会把整件衣服吃掉（v2 事故）；裙摆亮褶虽是候选（距离≈3），靠深色
+    褶线（距离≈42）分隔成格，只有接通腿间缝隙的一格会被吃穿，先用 5×5 闭合封颈
+    再 binary_fill_holes 补回（大洞>1500px 恢复原色＝裙面原貌；小洞＝手臂/头发围
+    出的透光缝，取最近前景色避免补进紫底）。漂浮烟团等孤岛由连通域清理删除
+    （保留最大域＋与其包围盒 12px 内相交的小域，保住出拳帧的拳套碎片）。
+    倒地帧的身下紫毯（地面辉光，距离 39~72，T=30 吃不掉）：按「距实体核心
+    （距离≥84 的皮肤/银发/金饰/黑披风）超过 20px 的低距离前景像素删除」清理，
+    20px 内留下作贴地阴影；沈墨凛黑发距离仅 36、发梢离皮肤较远处会被削短，
+    属试点已知取舍（远好于整块紫毯）。
+    """
+    a = np.asarray(img.convert("RGB")).astype(np.float64)
+    border = np.concatenate([a[0, :, :], a[-1, :, :], a[:, 0, :], a[:, -1, :]]).reshape(-1, 3)
+    med = np.median(border, axis=0)
+    dist = np.sqrt(((a - med) ** 2).sum(axis=2))
+    cand = dist < 30
+    seed = np.zeros_like(cand)
+    seed[0, :] = cand[0, :]
+    seed[-1, :] = cand[-1, :]
+    seed[:, 0] = cand[:, 0]
+    seed[:, -1] = cand[:, -1]
+    bg = ndimage.binary_propagation(seed, mask=cand)
+    fg = ~bg
+    # 连通域清理：最大域 + 与其包围盒（外扩 12px）相交的小域
+    lab, n = ndimage.label(fg)
+    if n > 1:
+        sizes = ndimage.sum_labels(fg, lab, range(1, n + 1))
+        main = int(np.argmax(sizes)) + 1
+        objs = ndimage.find_objects(lab)
+        mb = objs[main - 1]
+        y0, y1 = mb[0].start - 12, mb[0].stop + 12
+        x0, x1 = mb[1].start - 12, mb[1].stop + 12
+        keep = lab == main
+        for i, ob in enumerate(objs, start=1):
+            if i == main or ob is None:
+                continue
+            if ob[0].start <= y1 and ob[0].stop >= y0 and ob[1].start <= x1 and ob[1].stop >= x0:
+                keep |= lab == i
+        fg = keep
+    # 闭合封颈 + 补洞：大洞恢复原色，小洞取最近前景色
+    fg = ndimage.binary_closing(fg, structure=np.ones((5, 5)), border_value=0)
+    filled = ndimage.binary_fill_holes(fg)
+    holes = filled & ~fg
+    out = a.copy()
+    if holes.any():
+        hlab, hn = ndimage.label(holes)
+        _, inds = ndimage.distance_transform_edt(~fg, return_indices=True)
+        near = a[inds[0], inds[1]]
+        for i in range(1, hn + 1):
+            m = hlab == i
+            if m.sum() <= 1500:
+                out[m] = near[m]
+    fg = filled
+    if purge_pockets:
+        # 口袋清理（2026-11-11 黑矩形修复）：披风与腿之间夹出的封闭背景口袋——
+        # 底色像素被人物轮廓包围，边框传播够不到、又被闭合封颈＋补洞填回，
+        # 在实战里显成下半身后一块边缘笔直的深色板。判据（实测分布定型）：
+        # fg∩cand 连通域中面积 ≥700px 且平均底色距离 ≤7 的整块剔除——真口袋
+        # 是近乎纯底色（实测 3.9~6.8），发梢/披风褶的紫调阴影同面积下平均距离
+        # 都在 8.5 以上、零误伤；倒地辉光毯平均距离 15+，同样不受影响。
+        # 仅伊芙琳启用：沈墨凛紫裙本身就是底色近色的大块封闭前景，绝不能走此规则。
+        m = fg & cand
+        lab, n = ndimage.label(m)
+        if n:
+            sizes = ndimage.sum_labels(m, lab, range(1, n + 1))
+            for i in range(1, n + 1):
+                if sizes[i - 1] >= 700:
+                    comp = lab == i
+                    if dist[comp].mean() <= 7.0:
+                        fg = fg & ~comp
+    if skirt:
+        fg = skirt_fill(fg, out, dist)
+    # 倒地帧：清理身下辉光毯（保留核心 20px 内作贴地阴影）
+    if down:
+        core = fg & (dist >= 84)
+        if core.any():
+            dmap = ndimage.distance_transform_edt(~core)
+            fg = fg & ~((dist < 84) & (dmap > 20))
+    bg2 = ndimage.binary_erosion(~fg, iterations=1, border_value=1)
+    alpha = np.where(bg2, 0.0, 255.0)
+    alpha = ndimage.gaussian_filter(alpha, 0.8)
+    # 去溢色：只在背景 3px 窄带内、且与底色距离 <90 的边缘像素上反解混色
+    band = ndimage.binary_dilation(bg2, iterations=3) & fg
+    edge = band & (alpha > 8) & (alpha < 250) & (dist < 90)
+    if edge.any():
+        af = (alpha / 255.0)[..., None]
+        un = (a - (1.0 - af) * med) / np.maximum(af, 0.35)
+        out[edge] = np.clip(un[edge], 0, 255)
+    if dim_glow:
+        # 伊芙琳倒地专用：保留的辉光边在明亮擂台地板上会显成一块紫斑（源辉光自带
+        # 近矩形边缘），把低距离前景的 alpha 压到 45% 使其退回「贴地阴影」的读法；
+        # 她服装本体距离都在 84 外（黑披风 92/金饰 188/银发 272），不误伤。
+        alpha = alpha * np.where(fg & (dist < 84), 0.45, 1.0)
+    rgba = np.dstack([out, alpha]).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(rgba, "RGBA")
+
+
+def build_sheet(frames: list[Image.Image]) -> Image.Image:
+    n = len(frames)
+    rows = (n + COLS - 1) // COLS
+    sheet = Image.new("RGBA", (COLS * CELL_W, rows * CELL_H), (0, 0, 0, 0))
+    for i, fr in enumerate(frames):
+        sheet.paste(fr, ((i % COLS) * CELL_W, (i // COLS) * CELL_H))
+    return sheet
+
+
+def qc_strip(char: str, state: str, frames: list[Image.Image]) -> None:
+    """QC：抽 4 帧贴到深色擂台色＋棋盘格上各一排，看边缘。"""
+    picks = [frames[i] for i in np.linspace(0, len(frames) - 1, 4).astype(int)]
+    for bgname, bgc in [("dark", (24, 18, 44, 255)), ("check", None)]:
+        strip = Image.new("RGBA", (CELL_W * 4, CELL_H), bgc or (255, 255, 255, 255))
+        if bgc is None:
+            px = np.zeros((CELL_H, CELL_W * 4, 4), np.uint8)
+            yy, xx = np.mgrid[0:CELL_H, 0:CELL_W * 4]
+            px[((xx // 16) + (yy // 16)) % 2 == 0] = (200, 200, 200, 255)
+            px[((xx // 16) + (yy // 16)) % 2 == 1] = (120, 120, 120, 255)
+            strip = Image.fromarray(px, "RGBA")
+        for i, fr in enumerate(picks):
+            strip.alpha_composite(fr, (i * CELL_W, 0))
+        strip.convert("RGB").save(QC / f"qc_{char}_{state}_{bgname}.png")
+
+
+def main() -> None:
+    only = sys.argv[1:] or None
+    QC.mkdir(parents=True, exist_ok=True)
+    tmp = Path("/tmp/anim_frames")
+    tmp.mkdir(exist_ok=True)
+    for char, states in JOBS.items():
+        meta = {"cell": [CELL_W, CELL_H], "cols": COLS, "states": {}}
+        for state, spec in states.items():
+            if only and f"{char}/{state}" not in only:
+                continue
+            if isinstance(spec, dict):
+                # 选帧模式：高帧率抽帧后按下标挑帧（含重复＝峰值定格、逆序＝乒乓回程）
+                video, fps, loop = spec["video"], spec["fps"], spec["loop"]
+                pf = spec["pick_fps"]
+                t0 = spec["from"]
+                t1 = t0 + (max(spec["picks"]) + 2) / pf
+                all_paths = extract_frames(SRC / video, t0, t1, tmp, fps=pf)
+                paths = [all_paths[i] for i in spec["picks"]]
+                src_desc = f"{video} [pick {pf}fps from {t0:.2f}s: {spec['picks']}]"
+            else:
+                video, t0, t1, fps, loop = spec
+                paths = extract_frames(SRC / video, t0, t1, tmp)
+                src_desc = f"{video} [{t0:.2f}~{t1:.2f}s]"
+            frames = [alpha_of(Image.open(p), down=(state == "down"),
+                               skirt=(char == "counter" and state != "down"),
+                               dim_glow=(char == "evelyn" and state == "down"),
+                               purge_pockets=(char == "evelyn")) for p in paths]
+            sheet = build_sheet(frames)
+            dst = OUT / char / f"{state}.webp"
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            sheet.save(dst, "WEBP", quality=82, method=4)
+            qc_strip(char, state, frames)
+            meta["states"][state] = {
+                "file": f"{state}.webp", "frames": len(frames),
+                "fps": fps, "loop": bool(loop),
+                "src": src_desc,
+            }
+            print(f"{char}/{state}: {len(frames)} frames -> {dst} ({dst.stat().st_size/1024:.0f} KiB)")
+        # anim.json 合并写回（only 模式只覆盖本次处理的状态，其余沿用已有记录）
+        jpath = OUT / char / "anim.json"
+        if jpath.exists():
+            old = json.loads(jpath.read_text())
+            old["states"].update(meta["states"])
+            meta = old
+        jpath.write_text(json.dumps(meta, ensure_ascii=False, indent=1))
+        print(f"{char}: anim.json written")
+
+
+if __name__ == "__main__":
+    main()

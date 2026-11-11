@@ -631,7 +631,7 @@
       nextBattleDefense = false; // 正式版批次 G9 短期：卫冕战标记已被本场消费
       keysDown = {};
       touchBlock = false;
-      $('meNameLabel').textContent = S.name + '（你 · 第 ' + S.rank + ' 名）';
+      $('meNameLabel').textContent = S.name + '（你）'; // G10 收尾小修：名次移到副标行，名字行不再被省略号截断
       // 绷带：本场生效，赛后伤病概率减半（练习赛不消耗绷带——它本来就不会产生伤病；约战伤病公式自带减半，同样不消耗）
       B.bandage = !B.practice && !B.spar && !!S.buffs.bandage; if (!B.practice && !B.spar) S.buffs.bandage = false;
       // 报名免费（0 AP）：只记录今天已比赛一场，赛后不跳天、当天剩余 AP 保留（练习赛/约战/卫冕战不占每周正式赛位，不写 lastMatchDay——卫冕战是事件赛，结算口径仍是正式赛）
@@ -647,7 +647,7 @@
       preloadPoses();
       var fmi = $('figMeImg'); if (fmi) { fmi.src = POSE_DIR + POSES.guard; fmi.style.objectPosition = POSE_FOCUS.guard; }
       var ffi = $('figFoeImg'); if (ffi) ffi.src = foeAlphaSrc(B.foe.img) || ''; // 框架重构一期：舞台用去底立绘
-      $('foeName').textContent = B.foe.name + '（第 ' + B.foe.rank + ' 名）';
+      $('foeName').textContent = B.foe.name; // G10 收尾小修：名次移到副标行（foeRankLabel），名字行不再被省略号截断
       var fp = $('foePortrait'); if (fp) { fp.src = B.foe.img || ''; fp.alt = B.foe.name + ' 的立绘'; }
       // G10：选手牌——我方头像与称号/阶段副标；清上一场飘字/气泡残留并重置气泡节流
       var ma = $('meAvatar'); if (ma) { ma.src = 'assets/portrait.webp'; ma.alt = S.name + ' 的头像'; }
@@ -655,13 +655,14 @@
       if (msub) {
         var stgName = '';
         for (var si = 0; si < STAGES.length; si++) if (STAGES[si].id === S.stage) stgName = STAGES[si].name;
-        msub.textContent = (S.titles && S.titles.length) ? '称号「' + S.titles[S.titles.length - 1] + '」' : stgName;
+        msub.textContent = ((S.titles && S.titles.length) ? '称号「' + S.titles[S.titles.length - 1] + '」' : stgName) + ' · 第 ' + S.rank + ' 名';
       }
       Array.prototype.forEach.call(document.querySelectorAll('.dmg-float'), function (n) { n.remove(); });
       ['bubbleMe', 'bubbleFoe'].forEach(function (id) { var bb = $(id); if (bb) bb.classList.remove('show'); });
       B.bubbleAt = { me: 0, foe: 0 };
       var stb = $('foeStyleBadge');
       if (stb && B.foe.style) { var stDef = FOE_STYLES[B.foe.style]; stb.textContent = stDef.name; stb.className = 'style-badge ' + stDef.cls; stb.style.display = ''; }
+      var frl = $('foeRankLabel'); if (frl) frl.textContent = '第 ' + B.foe.rank + ' 名';
       $('battleLog').innerHTML = '';
       var brEl = $('battleReady'); if (brEl) brEl.hidden = true; // 框架重构一期：开战即收起准备层（直调 startBattle 时同样无副作用）
       var ldEl = $('logDrawer'); if (ldEl) ldEl.classList.remove('open');
@@ -682,6 +683,7 @@
       $('figMe').classList.remove('down'); $('figFoe').classList.remove('down');
       _meRigDown = false; if (_meRig) _meRig.toStance('guard'); // 纸偶复位（新一场从抱架起手）
       resetFoeRig(); if (ensureFoeRig()) driveFoeRig('guard'); // G2：对手纸偶按本场对手重建（不在名单则保持静态立绘回退）
+      foeAnimStart(); // 动画试点：试点名单对手改走帧序列（懒加载，加载完成前静态立绘照常显示）
       $('figMe').style.transform = ''; $('figFoe').style.transform = '';
       $('figMe').style.left = B.man.mX + '%'; $('figFoe').style.left = B.man.fX + '%';
       $('figMe').querySelector('.fig').style.top = '0px'; $('figFoe').querySelector('.fig').style.top = '0px';
@@ -879,6 +881,119 @@
         var im = new Image(); im.src = dir + p + '.webp';
       });
     }
+    /* ===== 动画试点（2026-11-11）：整段动作帧序列接入对手侧（仅伊芙琳 opp_world_champion／沈墨凛 opp_counter）=====
+       素材 assets/anim/<char>/（scripts/make_anim.py 从整段动作视频抽帧去底的精灵图＋anim.json），只在两名试点
+       对手出场时懒加载（开战后才拉，不进标题路径）；状态机 idle 循环／attack／combo（仅沈墨凛）／hit／down
+       （播完停在躺姿帧）。素材朝右、对手在右侧面向左：.anim-sprite 以 scaleX(-1) 镜像（CSS，与 .fig-img 同口径），
+       翻转后拳路朝主角、视线投向主角一侧；attack 触发时容器再叠一段前冲（.lunging），让拳头视觉上够到主角。
+       触发点与 driveFoeRig 同挂既有事件点（出拳/受击/格挡/击倒/起身），只读事件、不参与任何判定与数值；
+       主角受击呈现仍在 dealDamage 既有时点发生，attack 序列 18fps 使伸展峰值（约第 4~5 帧）贴近该时点后约 200ms。
+       「减少动效」开启时不启用、回退静态立绘（与纸偶同口径）；XHR/Image 不可用的环境（jsdom 验证）整体 no-op。 */
+    var FOE_ANIM_CHARS = { opp_world_champion: 'evelyn', opp_counter: 'counter' };
+    var _foeAnim = null; // { char, meta, imgs, state, stateAt, frame, acc, lastTs, raf, active, pending }
+    function foeAnimStart() {
+      foeAnimStop();
+      if (!B || !B.foe || (typeof SETTINGS !== 'undefined' && !!SETTINGS.reduceMotion)) return;
+      var ch = FOE_ANIM_CHARS[B.foe.key]; if (!ch) return;
+      if (typeof XMLHttpRequest === 'undefined' || typeof Image === 'undefined') return;
+      var spr = $('foeAnimSprite'), img = $('foeAnimImg'); if (!spr || !img) return;
+      var A = { char: ch, meta: null, imgs: {}, state: '', stateAt: 0, frame: 0, rows: 1, acc: 0, lastTs: 0, raf: 0, active: true, pending: null };
+      _foeAnim = A;
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'assets/anim/' + ch + '/anim.json', true);
+      xhr.onload = function () {
+        if (_foeAnim !== A || !A.active) return;
+        var meta = null;
+        try { meta = JSON.parse(xhr.responseText); } catch (e) { meta = null; }
+        if (!meta || !meta.states || !meta.states.idle) { foeAnimStop(); return; }
+        A.meta = meta;
+        Object.keys(meta.states).forEach(function (st) { var im = new Image(); im.src = 'assets/anim/' + ch + '/' + meta.states[st].file; A.imgs[st] = im; });
+        var idle = A.imgs.idle;
+        var begin = function () {
+          if (_foeAnim !== A || !A.active || !B) { if (!B) foeAnimStop(); return; }
+          var ff = $('figFoe'); if (ff) ff.classList.add('anim-on');
+          foeAnimSetState(A, 'idle');
+          A.lastTs = performance.now();
+          var step = function (ts) {
+            if (!_foeAnim || _foeAnim !== A || !A.active) return;
+            foeAnimTick(A, ts);
+            A.raf = requestAnimationFrame(step);
+          };
+          A.raf = requestAnimationFrame(step);
+        };
+        if (idle.complete) begin(); else { idle.onload = begin; idle.onerror = function () { foeAnimStop(); }; }
+      };
+      xhr.onerror = function () { if (_foeAnim === A) foeAnimStop(); };
+      xhr.send();
+    }
+    function foeAnimStop() {
+      if (_foeAnim) { _foeAnim.active = false; if (_foeAnim.raf) cancelAnimationFrame(_foeAnim.raf); _foeAnim = null; }
+      var ff = $('figFoe'); if (ff) ff.classList.remove('anim-on');
+      var spr = $('foeAnimSprite');
+      if (spr) { spr.classList.remove('lunging'); delete spr.dataset.state; delete spr.dataset.frame; }
+    }
+    function foeAnimSetState(A, name) {
+      var st = A.meta && A.meta.states[name]; if (!st) return false;
+      A.state = name; A.stateAt = performance.now();
+      A.frame = (name === 'attack' || name === 'combo') ? 1 : 0; // 出拳跳过首帧静止抱架，伸展峰值更贴命中时点
+      A.rows = Math.max(1, Math.ceil(st.frames / A.meta.cols));
+      A.acc = 0; A.pending = null;
+      var img = $('foeAnimImg');
+      if (img && A.imgs[name]) {
+        img.src = A.imgs[name].src;
+        img.style.width = (A.meta.cols * 100) + '%';
+        img.style.height = (A.rows * 100) + '%';
+      }
+      foeAnimDraw(A);
+      var spr = $('foeAnimSprite');
+      if (spr) {
+        spr.dataset.state = name;
+        if (name === 'attack' || name === 'combo') { spr.classList.remove('lunging'); void spr.offsetWidth; spr.classList.add('lunging'); }
+        else spr.classList.remove('lunging');
+      }
+      return true;
+    }
+    function foeAnimDraw(A) {
+      var img = $('foeAnimImg'); if (!img || !A.meta) return;
+      var cols = A.meta.cols;
+      var col = A.frame % cols, row = Math.floor(A.frame / cols);
+      img.style.transform = 'translate(' + (-(col * 100) / cols) + '%, ' + (-(row * 100) / A.rows) + '%)';
+      var spr = $('foeAnimSprite'); if (spr) spr.dataset.frame = String(A.frame);
+    }
+    function foeAnimTick(A, ts) {
+      if (document.body && document.body.getAttribute('data-view') !== 'battle') { foeAnimStop(); return; } // 离开战斗屏自停（结算离场后不再空转）
+      var dt = Math.min(100, ts - (A.lastTs || ts)); A.lastTs = ts;
+      if (A.pending && ts >= A.pending.at) { foeAnimSetState(A, A.pending.state); return; }
+      var st = A.meta && A.meta.states[A.state]; if (!st) return;
+      if (A.state === 'down' && A.frame >= st.frames - 1) return; // 倒地播完停在躺姿帧
+      A.acc += dt;
+      var stepMs = 1000 / (st.fps || 12), advanced = false;
+      while (A.acc >= stepMs) {
+        A.acc -= stepMs; A.frame++; advanced = true;
+        if (A.frame >= st.frames) {
+          if (st.loop) A.frame = 0;
+          else if (A.state === 'down') { A.frame = st.frames - 1; break; }
+          else { foeAnimSetState(A, 'idle'); return; }
+        }
+      }
+      if (advanced) foeAnimDraw(A);
+    }
+    function foeAnimPlay(name, force) {
+      var A = _foeAnim; if (!A || !A.active || !A.meta) return;
+      if (!A.meta.states[name]) { if (name === 'combo') name = 'attack'; else return; }
+      var now = performance.now(), el = now - (A.stateAt || 0);
+      if (name === 'idle') { // 格挡打断出拳回抱架；起身（force）自倒地直回抱架
+        if (force) foeAnimSetState(A, 'idle');
+        else if (A.state === 'attack' || A.state === 'combo') foeAnimSetState(A, 'idle');
+        return;
+      }
+      if (A.state === 'down') return; // 倒地中不被任何状态打断
+      if (name === 'down' && A.state === 'down') return;
+      if (name === A.state && (name === 'attack' || name === 'combo') && el < 150) return; // performAttack 与 dealDamage 同 tick 双触发去重
+      if (name === 'hit' && A.state === 'hit' && el < 250) return; // 连打不逐拳重启受击，先吃下冲击段
+      if ((name === 'attack' || name === 'combo') && A.state === 'hit' && el < 300) { A.pending = { state: name, at: A.stateAt + 300 }; return; } // 受击硬直前 300ms 不抢，排队补播出拳
+      foeAnimSetState(A, name);
+    }
     // B2：出拳残影——克隆出拳方当前姿势图生成 1~2 帧半透明残影，滞后于本体朝出拳反方向错开，动画结束自回收
     function spawnAfterimage(figEl) {
       var ring = $('ring'); if (!ring || !figEl) return;
@@ -910,6 +1025,24 @@
           g3.style.transform = (g3.style.transform ? g3.style.transform + ' ' : '') + 'scaleX(-1)';
           ring.appendChild(g3);
           setTimeout(function () { g3.remove(); }, 190);
+          return;
+        }
+      }
+      if (figEl.id === 'figFoe' && figEl.classList.contains('anim-on')) {
+        // 动画试点：残影克隆当前序列帧快照（静态立绘在 .anim-on 时被隐藏，克隆它会出现正面立绘鬼影——同纸偶口径处理）
+        var aspr = $('foeAnimSprite');
+        if (aspr) {
+          var g4 = aspr.cloneNode(true);
+          g4.removeAttribute('id');
+          var g4img = g4.querySelector('img'); if (g4img) g4img.removeAttribute('id');
+          g4.classList.add('fig-ghost'); g4.classList.add('foe'); // foe 变体关键帧自带 scaleX(-1)，与精灵镜像叠加一致
+          g4.style.left = figEl.offsetLeft + 'px';
+          g4.style.top = figEl.offsetTop + 'px';
+          g4.style.width = figEl.offsetWidth + 'px';
+          g4.style.height = figEl.offsetHeight + 'px';
+          g4.style.visibility = 'visible'; // 克隆体脱离 .fighter.anim-on，需显式解除 .anim-sprite 的 hidden
+          ring.appendChild(g4);
+          setTimeout(function () { g4.remove(); }, 190);
           return;
         }
       }
@@ -991,9 +1124,12 @@
     function hitFx(figDefender, heavy, crit, tier) {
       hitstop(crit || heavy ? 100 : 60);
       shakeRing(heavy || crit);
-      figDefender.classList.remove('flashwhite'); void figDefender.offsetWidth;
-      figDefender.classList.add('flashwhite');
-      setTimeout(function () { figDefender.classList.remove('flashwhite'); }, 150);
+      // G10 收尾小修：闪白分两档——普通受击降强度/时长（防峰值帧冲成纯白剪影），KO/跨刻度击倒级保留相对强一档
+      var bigFlash = tier === 'ko' || tier === 'down';
+      var flashCls = bigFlash ? 'flashwhite-big' : 'flashwhite';
+      figDefender.classList.remove('flashwhite', 'flashwhite-big'); void figDefender.offsetWidth;
+      figDefender.classList.add(flashCls);
+      setTimeout(function () { figDefender.classList.remove(flashCls); }, bigFlash ? 180 : 110);
       var foeDef = figDefender.id === 'figFoe';
       figDefender.style.setProperty('--dir', (foeDef ? 9 : -9) + 'px');
       figDefender.style.setProperty('--rot', (foeDef ? 8 : -8) + 'deg');
@@ -1149,7 +1285,7 @@
       var fig = $(defIsMe ? 'figMe' : 'figFoe');
       fig.classList.add('down');
       if (defIsMe) setMePose('hit', 0); // 击倒读秒期间定格受击姿势，配合 .down 旋转倒地
-      else driveFoeRig('hit'); // G2：对手被击倒——figFoe 已挂 .down，纸偶走 down 倒地动作
+      else { driveFoeRig('hit'); foeAnimPlay('down'); } // G2：对手被击倒——figFoe 已挂 .down，纸偶走 down 倒地动作；动画试点：倒地序列（播完停躺姿，.down 旋转已由 CSS 对 .anim-on 关掉）
       $('downWho').textContent = (defIsMe ? '你被击倒了！' : '对手被击倒！') + '（本回合第 ' + downs + ' 次）';
       $('downSub').textContent = B.downIsTKO ? '本回合第 3 次击倒——' + (S.deathFight ? '死战到底：读秒起身继续，再被击倒直接判负' : '直接判负（TKO）') : '读秒中…站起来就能继续，HP 回到至少 20%';
       $('downCount').textContent = '3';
@@ -1201,7 +1337,7 @@
       $('downOverlay').classList.remove('go');
       fig.classList.remove('down');
       if (defIsMe) setMePose('guard', 0); // 起身回抱架（若随后 TKO 判负，finishBattle 会再定格受击姿势）
-      else driveFoeRig('guard'); // G2：对手起身——纸偶走 getup 回抱架
+      else { driveFoeRig('guard'); foeAnimPlay('idle', true); } // G2：对手起身——纸偶走 getup 回抱架；动画试点：倒地序列强制切回待机
       if (B.downIsTKO) {
         B.phase = 'fight';
         decideTKO(defIsMe);
@@ -1277,6 +1413,7 @@
           B.foeBlocking = true;
           $('figFoe').classList.add('guarding');
           driveFoeRig('block', POSE_TIMING.block); // G2：对手抱架纸偶同步格挡姿态
+          foeAnimPlay('idle'); // 动画试点：格挡打断对手出拳序列回抱架
           setTimeout(function () { var el = $('figFoe'); if (el) el.classList.remove('guarding'); }, 260);
         }
       }
@@ -1292,7 +1429,7 @@
       setTimeout(function () { figAtt.classList.remove('punching'); figAtt.classList.remove('lined'); }, 170);
       // 姿势帧/对手强化：我方出拳切对应拳种姿势图；对手出拳在其身前刷拳风弧光
       if (isMeAttacking) setMePose(key, POSE_TIMING.punch);
-      else { spawnPunchArc(figAtt); driveFoeRig(key); } // G2：对手出拳纸偶同步出拳动作
+      else { spawnPunchArc(figAtt); driveFoeRig(key); foeAnimPlay((B.foeBuff && B.foeBuff.combo > 0) ? 'combo' : 'attack'); } // G2：对手出拳纸偶同步出拳动作；动画试点：帧序列同步出拳（组合拳爆发期走组合序列，仅沈墨凛有）
 
       if (Math.random() > hitChance) {
         // 打空：进攻方连击清零；防守方视为闪避成功 → 开 1 秒反击窗口
@@ -1332,6 +1469,7 @@
     }
 
     function dealDamage(att, def, key, mult, isMeAttacking, isCounter, nameOverride) {
+      if (!isMeAttacking) foeAnimPlay((B.foeBuff && B.foeBuff.combo > 0) ? 'combo' : 'attack'); // 动画试点：对手出拳序列（覆盖立即反击与手动模式对手出拳；与 performAttack 的同 tick 触发有 150ms 去重）
       var p = PUNCHES[key];
       var lv = att.prof[key];
       var crit = Math.random() < 0.10;
@@ -1433,8 +1571,8 @@
         else setMePose('hit', POSE_TIMING.hit);
       } else {
         // G2：对手挨打纸偶同步——格挡住（未被击腹穿透）格挡姿态，其余受击（与主角同口径）
-        if (guarding && !pierce) driveFoeRig('block', POSE_TIMING.block);
-        else driveFoeRig('hit');
+        if (guarding && !pierce) { driveFoeRig('block', POSE_TIMING.block); foeAnimPlay('idle'); } // 动画试点：格挡住＝打断出拳回抱架
+        else { driveFoeRig('hit'); foeAnimPlay('hit'); } // 动画试点：受击序列与命中时点同步起播
       }
       hitFx(figDef, heavy, crit, fxTier);
       if (guarding && !pierce) SFX.block(); else if (heavy) SFX.heavy(); else SFX.light();
@@ -1691,6 +1829,7 @@
     function finishBattle() {
       if (!B || B.phase === 'over') return;
       B.phase = 'over';
+      if (B.foe.hp <= 0) foeAnimPlay('down'); // 动画试点：终局 KO/TKO 对手倒地（读秒判负时已在倒地序列中、自动 no-op；点数判负不触发）
       $('downOverlay').classList.remove('go');
       clearInterval(battleTimer);
       var mePts = pointsOf(B.me, B.me.tactic === 'points' ? B.me.hits * 2 : 0);

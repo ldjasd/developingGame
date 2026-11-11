@@ -341,6 +341,17 @@
       .fighter.hit .fig-img { filter: brightness(1.55) sepia(.55) hue-rotate(-35deg) saturate(2.6) drop-shadow(0 7px 7px rgba(8, 10, 18, .45)); }
       @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
       .fighter.down .fig { transform: rotate(82deg) translateY(28px); transform-origin: bottom center; transition: transform .5s; animation: none; }
+      /* 动画试点（2026-11-11）：对手帧序列精灵——素材朝右，对手在右侧面向左，与 .fig-img 同口径 scaleX(-1) 镜像；
+         .anim-on 后序列接管对手呈现，静态立绘退为回退层（加载失败/减少动效时不挂 .anim-on、原样显示） */
+      .anim-sprite { position: absolute; inset: 0; overflow: hidden; visibility: hidden; transform: scaleX(-1); }
+      .anim-sprite img { position: absolute; left: 0; top: 0; max-width: none; pointer-events: none; }
+      .fighter.anim-on .anim-sprite { visibility: visible; }
+      .fighter.anim-on .fig-img { visibility: hidden; }
+      #figFoe.anim-on .fig { animation: none; } /* 序列自带律动/受击后仰：关掉静态 bob 与 .hit 的 shake 防双重摆动 */
+      #figFoe.anim-on.down .fig { transform: none; } /* 倒地由序列呈现，不叠加 .down 的 82° 旋转 */
+      .fighter.anim-on.hit .anim-sprite img { filter: brightness(1.55) sepia(.55) hue-rotate(-35deg) saturate(2.6) drop-shadow(0 7px 7px rgba(8, 10, 18, .45)); } /* 受击闪白与静态版同参数（G10 收尾小修口径），落点改到精灵图 */
+      .anim-sprite.lunging { animation: animLunge .55s ease; }
+      @keyframes animLunge { 0% { transform: scaleX(-1) translateX(0); } 32% { transform: scaleX(-1) translateX(9%); } 100% { transform: scaleX(-1) translateX(0); } }
       .fighter .dmg-pop {
         position: absolute; top: -14px; left: 50%; transform: translateX(-50%); z-index: 7;
         font-family: "Oswald", sans-serif; font-weight: 700; font-size: 19px; color: #ffd34d;
@@ -357,7 +368,8 @@
         60% { transform: translateX(calc(var(--dir, 8px) * -.4)) rotate(calc(var(--rot, 7deg) * -.4)); }
         100% { transform: translateX(0) rotate(0); }
       }
-      .fighter.flashwhite .fig { filter: brightness(3.2) saturate(.1); }
+      .fighter.flashwhite .fig { filter: brightness(1.5) saturate(.55); }
+      .fighter.flashwhite-big .fig { filter: brightness(1.95) saturate(.3); }
 
       /* 顿帧：冻结所有动画 */
       .ring.frozen .fig { animation-play-state: paused !important; }
@@ -1524,9 +1536,11 @@ body[data-view="match"] #matchView { display: flex !important; }
 #battleView .foe-portrait { display: none; }
 #battleView .fname > span:first-child { min-width: 0; }
 #battleView #foeName, #battleView #meNameLabel {
-  display: inline-block; max-width: 9em; white-space: nowrap; overflow: hidden;
+  display: inline-block; max-width: 12em; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; vertical-align: bottom;
 }
+/* G10 收尾小修：名次移到副标行——对手名次小字（我方名次并入 meSubLabel 文本） */
+.fcard .fsub .frank { margin-left: 6px; }
 #battleView .style-badge { white-space: nowrap; flex: none; }
 @media (max-width: 700px) {
   #battleView .fname { white-space: normal; overflow: visible; }
