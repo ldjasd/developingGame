@@ -140,11 +140,10 @@ def skirt_fill(fg: np.ndarray, out: np.ndarray, dist: np.ndarray) -> np.ndarray:
     """沈墨凛裙面修复：裙摆亮褶与底色距离≈3，靠深色褶线分隔成格，其中接通腿间
     缝隙的一格会被连通去底吃穿，形成向裙摆下方开口的「湾」（补洞补不到）。
     规则：逐行找背景段，若其左右紧邻的前景像素都是裙色（距离<45），则该段是
-    裙面内部——按最近前景色补回。腿间缝两侧紧邻的是皮肤（距离大），不会误补；
+    裙面内部——按两侧裙面原色的线性插值补回（P1-b 前曾用最近前景色，出拳帧
+    拉出黑杠，见函数内注）。腿间缝两侧紧邻的是皮肤（距离大），不会误补；
     倒地帧几何不同，不走此修复。"""
     fg = fg.copy()
-    _, inds = ndimage.distance_transform_edt(~fg, return_indices=True)
-    near = out[inds[0], inds[1]]
     h, w = fg.shape
     # 裙区纵界：含 ≥8 个裙色前景像素的最底行 +4；裙摆下方不补（靴子同为裙色距离，
     # 腿间行段会被两侧靴/长发夹住误判——v3.1 事故：裙下横条纹）
@@ -160,11 +159,42 @@ def skirt_fill(fg: np.ndarray, out: np.ndarray, dist: np.ndarray) -> np.ndarray:
         starts = np.where(d == -1)[0]
         ends = np.where(d == 1)[0]
         for s, e in zip(starts, ends):  # 背景段 [s, e)
-            if s == 0 or e == w or e - s > 80:
+            if s == 0 or e == w:
+                continue
+            # 内容回补（P1-b 追加，先于下方 80px 跳过判定）：亮褶通道——出拳/
+            # 受击帧里亮褶条纹被传播经腿间缝整条吃穿成通道，逐行看是背景段，
+            # 段均值 ≥10（褶色，真背景 ≈0~5）、两侧都是前景且至少一侧是裙色
+            # 邻域或两侧邻居距离都 <45（深色褶线）。相邻两条通道在个别行会
+            # 连成整幅（实测宽达 82＝裙前幅量级），故上限取 100。这类段是
+            # 裙面本体：置 fg、保留原色。夹逼测试（_skirt_flank 要求 ±3 行内
+            # 有亮褶）对深色褶线夹住的通道不成立，故另设此支；腿间真缝段
+            # 均值 ≈0~5、过不了 ≥10 关。
+            if (e - s <= 100 and dist[y, s:e].mean() >= 10 and row[s - 1] and row[e]
+                    and ((_skirt_flank(dist, y, s - 1) or _skirt_flank(dist, y, e))
+                         or (dist[y, s - 1] < 45 and dist[y, e] < 45))):
+                fg[y, s:e] = True
+                row = fg[y]
+                continue
+            if e - s > 80:
                 continue
             if _skirt_flank(dist, y, s - 1) and _skirt_flank(dist, y, e):
                 fg[y, s:e] = True
-                out[y, s:e] = near[y, s:e]
+                # 分两类（P1-b 定因，2026-11-11）：①段像素均值距离 ≥10 的是裙摆
+                # 亮褶本体——抱架帧靠闭合封颈保住，出拳帧腿间缝变宽、传播经缝
+                # 把整格亮褶吃穿（实测段均值 15~21、宽 26~40px）。这类像素本就是
+                # 真实裙面，原色即正解，只置 fg 不动 out。旧版在此处覆写「最近
+                # 前景色」：宽段内每像素的最近前景多为深色褶线，横向拉成一条条
+                # 黑杠——C10 的「裙侧残影虚线」实为此管线伪影，源帧裙面干净。
+                # ②均值 <10 的是真空湾（原色近底色），置 fg 后须覆色：用两侧
+                # 裙面原色的线性插值（out 此前仅被补洞改过小洞像素，夹逼点
+                # 取原色无误），不再引入黑发/肤色等异色。
+                if dist[y, s:e].mean() >= 10:
+                    continue
+                c0 = out[y, s - 1].copy()
+                c1 = out[y, e].copy()
+                seg = e - s
+                t = (np.arange(seg) + 1.0) / (seg + 1.0)
+                out[y, s:e] = c0[None, :] * (1.0 - t[:, None]) + c1[None, :] * t[:, None]
     return fg
 
 
@@ -191,7 +221,7 @@ def resolve_video(name: str) -> Path:
 
 def alpha_of(img: Image.Image, down: bool = False, skirt: bool = False, dim_glow: bool = False,
              purge_pockets: bool = False, down_clean: bool = False, floor_ref: bool = False,
-             carpet_full: bool = False) -> Image.Image:
+             carpet_full: bool = False, dark_restore: bool = False) -> Image.Image:
     """v3 管线：T=30 连通去底 → 清孤岛 → 闭合+补洞 →（伊芙琳）口袋清理 →（倒地帧）辉光毯清理 → 窄带去溢色。
 
     口径（两轮试错定型）：阈值必须停在 30——沈墨凛黑衣/黑发与底色距离仅 35~71，
@@ -295,8 +325,21 @@ def alpha_of(img: Image.Image, down: bool = False, skirt: bool = False, dim_glow
     elif down:
         core = fg & (dist >= 84)
         if core.any():
+            fg_pre = fg
             dmap = ndimage.distance_transform_edt(~core)
             fg = fg & ~((dist < 84) & (dmap > (8 if down_clean else 20)))
+            if dark_restore:
+                # 发梢回补（P1-b，2026-11-11，仅沈墨凛 down）：毯规则按「离核心
+                # >20px」删低距离前景，她铺在地板上的长发末梢（距离≈36、离皮肤
+                # 核心远）被连带削短。被删像素里凡原色为暗色中性（亮度低、饱和
+                # 低、蓝红差小——黑发/黑衣/黑靴的共同特征）的予以恢复；地板辉光
+                # 是亮紫（max 高、B−R 大）与地板暗影（紫调、B−R 大）都过不了
+                # 这三关，毯清理效果不变。恢复范围限 fg_pre（只撤销毯规则的
+                # 误删，不新增任何前景）。
+                mx = a.max(axis=2)
+                mn = a.min(axis=2)
+                dark = (mx < 120) & ((mx - mn) < 40) & ((a[:, :, 2] - a[:, :, 0]) < 28)
+                fg = fg | (fg_pre & dark)
     bg2 = ndimage.binary_erosion(~fg, iterations=1, border_value=1)
     alpha = np.where(bg2, 0.0, 255.0)
     alpha = ndimage.gaussian_filter(alpha, 0.8)
@@ -387,7 +430,8 @@ def main() -> None:
                                purge_pockets=(char == "evelyn"),
                                down_clean=(char in BATCH_CHARS and state == "down"),
                                floor_ref=(char == "champion_domestic" and state == "down"),
-                               carpet_full=(char == "evelyn" and state == "down")) for p in paths]
+                               carpet_full=(char == "evelyn" and state == "down"),
+                               dark_restore=(char == "counter" and state == "down")) for p in paths]
             if (char, state) in FLIP_STATES:
                 frames = [f.transpose(Image.FLIP_LEFT_RIGHT) for f in frames]
             keyed_bbox[state] = [alpha_bbox(f) for f in frames]

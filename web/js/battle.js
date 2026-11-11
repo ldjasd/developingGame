@@ -2182,14 +2182,14 @@
       var ttkFoe = me.hpMax / Math.max(1, simFoe.dps);
       var raceD = ttkFoe - ttkMe;
       var defPen = Math.max(0, foe.attrs.defense - me.attrs.power - 6); // G3-a 拟合后系数归零（新模型已把防守写进单拳净伤，罚项冗余），保留变量备查
-      var winP = clamp(1 / (1 + Math.exp(-4.0 * (raceD - 0.3) / 0.55)) - 0 * defPen + (foe.weakness ? 0.05 : 0), 0.02, 0.98); // G3-a 拟合：k=4.0/平移 0.3/alpha=0.55（fit_sim v2，全环境拟合误差 ≤8.4pp）
-      /* G3-a 记分混合（fit_sim2 拟合，K=0.075）：winP 原式只建模 TTK 竞赛；当对局大概率走点数终局时
+      var winP = clamp(1 / (1 + Math.exp(-1.45 * (raceD - 0.52) / 1.50)) - 0 * defPen + (foe.weakness ? 0.05 : 0), 0.02, 0.98); // P2 再标定（2026-11-11）：k=1.45/平移 0.52/alpha=1.50——G3-a 的 4.0/0.3/0.55 在 G7 对手变招上线后系统性高估（种子化同阵容实测残差 +12~+20pp），按 research/p2_logs 逐场特征拟合改平曲线；池化残差 t6 −1.3/match12 0/tec +14.4/spd +0.2pp
+      /* G3-a 记分混合（fit_sim2 拟合，K=0.075；P2 再标定后 K=0.030，见下方 winPPts 行注）：winP 原式只建模 TTK 竞赛；当对局大概率走点数终局时
          （koP 低），胜负由记分牌决定——scoreOf 的「伤害＋命中×2」口径利好量产型构筑，纯 TTK 会系统性
          低估 spd/tec（G1b 后中盘点数局变多后实测残差 spd 8.3/tec 11.7/br1 17pp）。按 (1-koP)² 为权重
          混合记分胜率 logistic(0.075×记分率差)：拟合样本 spd Δ1.2/tec Δ0.4/pow Δ2.0，br1 实测 31% vs 混合预测 30.7%。 */
-      var koP = clamp(1.90 - 0.425 * Math.min(ttkMe, ttkFoe), 0.02, 0.99);
+      var koP = clamp(1.90 - 0.4125 * Math.min(ttkMe, ttkFoe), 0.02, 0.99); // P2 再标定：斜率 0.425→0.4125（同上拟合）；长局 KO 占比仍高估 12~20pp（与 ptsW 权重结构性冲突），见 p2_logs 记录
       var scoreRateD = (simMe.dps + 2 * simMe.attempts * simMe.hc) - (simFoe.dps + 2 * simFoe.attempts * simFoe.hc);
-      var winPPts = 1 / (1 + Math.exp(-0.075 * scoreRateD));
+      var winPPts = 1 / (1 + Math.exp(-0.030 * scoreRateD)); // P2 再标定：K 0.075→0.030——记分项曾高估 tec/spd 点数局胜率 26~30pp（引擎变招克制未建模、高频低伤构筑最吃亏），压低记分灵敏度吸收
       var ptsW = Math.pow(1 - koP, 2);
       winP = clamp(winP * (1 - ptsW) + winPPts * ptsW, 0.02, 0.98);
       var win = Math.random() < winP;
