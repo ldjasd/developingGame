@@ -7,12 +7,16 @@
 | 格挡 | `designed/block_*.wav` | 速度球拳套实录 + 合成层（`design_punches.py`） |
 | 开场铃 / 终场铃 | `bell/bell_start.wav`、`bell/bell_end.wav` | TRP 真实拳击铃实录；开场 = 单响，终场 = 同一只铃三下真实敲击叠成「铛-铛-铛」；修音：70Hz 以下缓坡去轰鸣、尾部噪声门、短场馆混响、统一音量，不变调（`godot/tools/make_bells.py`） |
 | 倒地 | `kenney/*.ogg` | Kenney Impact Sounds 原样 |
-| 挥空 | `air/whoosh_0~15.wav` | Kinoton「Short Whoosh, 13x」切出 15 条 + ihitokage「Swish 5」；去 120Hz 以下、淡入淡出、统一音量（`godot/tools/make_air_crowd.py`） |
-| 观众 | `crowd/crowd_win / crowd_arena / crowd_fight.wav` | FoolBoyMedia / kyles / craigsmith 欢呼实录各取最响的 3.2 秒，去 80Hz 以下、淡入淡出 |
+| 挥空 | `air_cloth/jacket_00/03/04/07/11/13.wav`、`air_cloth/tshirt_00/07/33.wav` | 衣物挥动实录切出：Nox_Sound 夹克 6 条 + Soundholder T恤 3 条；去 90Hz 以下、淡入淡出、统一音量（`godot/tools/make_air_crowd.py cloth`）。`air/whoosh_*`（竹竿版）已不再使用 |
+| 观众 | `crowd/crowd_win.wav` | FoolBoyMedia 获胜欢呼实录取最响的 3.2 秒，去 80Hz 以下、淡入淡出（另两段 `crowd_arena`/`crowd_fight` 保留未用） |
 
-## 素材来源与授权（全部 CC0 1.0，可商用，不要求署名）
+## 需要署名的素材（CC BY 3.0）——游戏致谢 / 发布页必须保留
+**"swipes and whooshes tshirt fast and short swings"** by **Soundholder** — https://freesound.org/people/Soundholder/sounds/425856/ — licensed under CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). 改动：切成单次挥动、去 90Hz 以下、淡入淡出、统一音量。
+
+## 其余素材来源与授权（CC0 1.0，可商用，不要求署名）
 | 来源 | 作者 | 链接 |
 |---|---|---|
+| Foley_Clothes_Jacket_Whoosh_Sequence | Nox_Sound | https://freesound.org/people/Nox_Sound/sounds/495390/ |
 | Face Punch, Body Impact, 4x | Kinoton | https://freesound.org/people/Kinoton/sounds/503277/ |
 | Power Kick, Body Impact, 7x | Kinoton | https://freesound.org/people/Kinoton/sounds/586841/ |
 | Punching Dough | qubodup | https://freesound.org/people/qubodup/sounds/172489/ |

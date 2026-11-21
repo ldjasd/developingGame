@@ -36,9 +36,11 @@ const SFX_RECORDED := {
 	"block": [["designed/block_0", "designed/block_1", "designed/block_2"], -6.0],
 	"knockdown": [["kenney/impactSoft_heavy_000.ogg", "kenney/impactSoft_heavy_002.ogg", "kenney/impactSoft_heavy_004.ogg"], 2.0],
 	# 拳击铃：TRP 真实拳击铃实录（Freesound 571096，CC0），tools/make_bells.py 修音；开场单响 / 终场三连
-	# 挥空：Kinoton「Short Whoosh, 13x」切出 15 条 + ihitokage「Swish 5」；观众：FoolBoyMedia / kyles / craigsmith 欢呼实录（均 CC0，tools/make_air_crowd.py）
-	"whoosh": [["air/whoosh_0", "air/whoosh_1", "air/whoosh_2", "air/whoosh_3", "air/whoosh_4", "air/whoosh_5", "air/whoosh_6", "air/whoosh_7",
-		"air/whoosh_8", "air/whoosh_9", "air/whoosh_10", "air/whoosh_11", "air/whoosh_12", "air/whoosh_13", "air/whoosh_14", "air/whoosh_15"], -2.0],
+	# 挥空：衣物挥动实录（用户 2026-11-21 试听选 夹克组为主 + T恤组）——Nox_Sound 夹克（CC0）6 条 + Soundholder T恤（CC BY 3.0）3 条
+	# 竹竿版 air/whoosh_*（Kinoton）用户评价「像金属东西挥空」，已不再引用
+	"whoosh": [["air_cloth/jacket_00", "air_cloth/jacket_03", "air_cloth/jacket_04", "air_cloth/jacket_07", "air_cloth/jacket_11", "air_cloth/jacket_13",
+		"air_cloth/tshirt_33", "air_cloth/tshirt_07", "air_cloth/tshirt_00"], -3.0],
+	# 观众：FoolBoyMedia 获胜欢呼实录（CC0，tools/make_air_crowd.py）
 	"crowd": [["crowd/crowd_win"], 0.0], # 用户 2026-11-21 试听：只留第一段（FoolBoyMedia 获胜欢呼）
 	"bell_start": [["bell/bell_start"], 0.0],
 	"bell_end": [["bell/bell_end"], 0.0],
