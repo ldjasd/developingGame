@@ -24,14 +24,16 @@
 
 这些是更早按同一精神已经建起来的话题文档，继续在原地更新：
 
-- `../CHARACTER_RIG.md` — 比赛人物动态化（路线 A/B 实测、主角纸偶试点与扩围记录）
-- `../KO_AUDIT.md` — KO 判定重做专项
-- `../GAME_AUDIT.md` / `../GAME_AUDIT2.md` — 两轮整体审查与各批次修复记录
-- `../DESIGN.md` — 游戏总设计（定稿口径以此为准）
-- `../ROADMAP.md` — 长期阶段计划
-- `../OPEN_ISSUES.md` — 待用户拍板/真机确认清单
-- `../RELEASE_WEB.md` — Web 发布目标与差距清单
-- `../POLISH_PLAN.md` — 完成度打磨清单
+> 2026-11-21 文档重组：下列网页版时期的话题文档已移到 `../archive/web-prototype/`（内容不变，仅作历史参考）。现行设计以 `../design/`、决定以 `../DECISIONS.md`、计划以 `../ROADMAP.md` 为准。
+
+- `../archive/web-prototype/CHARACTER_RIG.md` — 比赛人物动态化（路线 A/B 实测、主角纸偶试点与扩围记录）
+- `../archive/web-prototype/KO_AUDIT.md` — KO 判定重做专项
+- `../archive/web-prototype/GAME_AUDIT.md` / `GAME_AUDIT2.md` — 两轮整体审查与各批次修复记录
+- `../archive/web-prototype/DESIGN.md` — 网页版总设计（硬口径已摘入 `../DECISIONS.md`）
+- `../archive/web-prototype/ROADMAP_web.md` — 网页版长期阶段计划
+- `../archive/web-prototype/OPEN_ISSUES.md` — 网页版待拍板清单
+- `../archive/web-prototype/RELEASE_WEB.md` — Web 发布目标与差距清单
+- `../archive/web-prototype/POLISH_PLAN.md` — 完成度打磨清单
 
 ## 与助手记忆的关系
 
