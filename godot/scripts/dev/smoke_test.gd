@@ -233,6 +233,8 @@ func _init() -> void:
 	var p1 := BattleCore.make("P", true, _attrs(30.0), {"ai": false})
 	var p2 := BattleCore.make("Q", false, _attrs(30.0), {"ai": false, "tell": 0.0})
 	rt2.start(p1, p2, 7)
+	p1["pos"] = Vector2(0, 0.5)  # 回合开始两人相距 2.2 米，测闪避前先站进拳距
+	p2["pos"] = Vector2(0, -0.5)
 	rt2.input_punch(p2, "straight")
 	rt2.input_dodge(p1, "l")
 	for _i in 10:
@@ -244,6 +246,8 @@ func _init() -> void:
 	var q1 := BattleCore.make("P", true, _attrs(30.0), {"ai": false})
 	var q2 := BattleCore.make("Q", false, _attrs(30.0), {"ai": false, "tell": 0.0})
 	rt3.start(q1, q2, 9)
+	q1["pos"] = Vector2(0, 0.45)
+	q2["pos"] = Vector2(0, -0.45)
 	rt3.input_block(q1, true, false)
 	rt3.input_punch(q2, "body")
 	for _i in 30:
