@@ -141,6 +141,7 @@ func _new_match() -> void:
 	Engine.time_scale = 1.0
 	_ko_roar_t = 0.0
 	_crowd_boost = 0.0
+	_flurry = {"a": [], "b": []}
 	_ko_cam_on = false
 	_ko_victim = null
 	cam.cull_mask = 5 if cam_mode == 0 else 3
@@ -189,7 +190,6 @@ func _on_event(ev: Dictionary) -> void:
 			_last_hit_pos = pos
 			var big := bool(ev["counter"]) or bool(ev["knockdown"]) or kind in ["hook", "upper"]
 			if blocked:
-				_crowd_event(0.015)
 				_spark(pos, 0.6, Color(0.5, 0.75, 1.0))
 				_play("block")
 				freeze = 0.03
@@ -198,13 +198,21 @@ func _on_event(ev: Dictionary) -> void:
 				_spark(pos, 1.6 if big else 1.0, Color(1.0, 0.9, 0.4))
 				_play("heavy" if big else ("body" if kind == "body" else "light"))
 				freeze = 0.10 if big else 0.05
-				# 重拳：观众「噢！」；被打的一方越撑不住，每一拳把全场推得越高（KO 前的升温）
-				var vf: Dictionary = core.b if who == "a" else core.a
-				var hurt := clampf(1.0 - float(vf["hp"]) / float(vf["max_hp"]), 0.0, 1.0)
-				var build := 1.0 + maxf(hurt - 0.5, 0.0) * 4.0
-				_crowd_event((0.16 if big else 0.05) * build, big or hurt > 0.7)
-				if bool(ev["counter"]) or int(ev["combo"]) >= 3:
-					_crowd_event(0.08)
+				# 观众只对「连续打中」起反应（用户：不用打一下就有反应）：
+				# 同一方连续打中 ≥3 拳才开始升温，越多越强；第 4 拳「噢！」，之后每 2 拳再一声；
+				# 对方打回一拳就断。被打的一方越撑不住，升得越快（KO 前的升温）。
+				var now := real_t
+				var st: Array = _flurry[who]   # [连中次数, 上一拳时间]
+				var n := 1 if st.is_empty() or now - float(st[1]) > FLURRY_GAP else int(st[0]) + 1
+				_flurry[who] = [n, now]
+				_flurry[_other(who)] = []       # 对方打回一拳就断
+				if bot and OS.get_cmdline_user_args().has("--debug-flurry"):
+					print("HIT %s n=%d at %.2f" % [who, n, now])
+				if n >= 3:
+					var vf: Dictionary = core.b if who == "a" else core.a
+					var hurt := clampf(1.0 - float(vf["hp"]) / float(vf["max_hp"]), 0.0, 1.0)
+					var build := 1.0 + maxf(hurt - 0.5, 0.0) * 3.0
+					_crowd_event(0.035 * float(n - 2) * build, n >= 4 and (n - 4) % 2 == 0)
 				if big:
 					fov_kick = 5.0
 				if who == "b":
@@ -347,6 +355,8 @@ var _oohs: Array[AudioStream] = []
 
 var _crowd_roar: AudioStreamPlayer
 var _ko_roar_t := 0.0   # KO 后持续高位吼叫的剩余时间（真实拳击现场实测 ≥ 20 秒）
+const FLURRY_GAP := 3.0  # 「连续打中」：同一方接连打中、两拳间隔不超过 3 秒、对方没打回来（实测占优方约每 1.3~2.5 秒打中一拳）
+var _flurry := {"a": [], "b": []}
 
 
 func _build_crowd() -> void:
@@ -374,6 +384,8 @@ func _crowd_event(boost: float, ooh: bool = false) -> void:
 	_crowd_boost = minf(_crowd_boost + boost, 0.8)
 	if ooh and _ooh_cd <= 0.0:
 		_ooh_cd = 1.4
+		if bot:
+			print("OOH at %.2f" % real_t)
 		var p := AudioStreamPlayer.new()
 		p.stream = _oohs[randi() % _oohs.size()]
 		p.volume_db = -9.0 + _crowd_i * 4.0
