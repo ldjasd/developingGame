@@ -24,23 +24,27 @@ var _sfx_cache := {}
 var _sfx_players: Array = []
 
 ## 真实录音优先（Kenney「Impact Sounds」CC0，assets/audio/kenney/，每次随机一个变体），没有就用合成版 wav
-## [录音名前缀, 音量修正 dB, 音高倍率]
-## 用户 2026-11-21：变调后听起来「像加了滤镜、不像原声」→ 录音一律原速原调播放，只用音量平衡，不加随机变调
+## [文件列表, 音量修正 dB]——每次在列表里随机挑一个
+## 拳套命中：Freesound CC0 真实拳套实录（assets/audio/freesound/，用 tools/slice_hits.py 只裁剪切出）
+## 倒地、回合铃：Kenney Impact Sounds（CC0）；挥空、观众：合成版
+## 用户 2026-11-21：变调后「像加了滤镜」→ 录音一律原速原调播放，只用音量平衡
 const SFX_RECORDED := {
-	"hit_light": ["impactPunch_medium", -2.0, 1.0],
-	"hit_heavy": ["impactPunch_heavy", 0.0, 1.0],
-	"hit_body": ["impactSoft_heavy", 0.0, 1.0],
-	"block": ["impactSoft_medium", -4.0, 1.0],
-	"knockdown": ["impactSoft_heavy", 2.0, 1.0],
-	"bell": ["impactBell_heavy", -2.0, 1.0],
+	"hit_light": [["freesound/light_0", "freesound/light_1", "freesound/light_2", "freesound/light_3"], -3.0],
+	"hit_heavy": [["freesound/heavy_0", "freesound/heavy_1", "freesound/heavy_2", "freesound/heavy_3", "freesound/heavy_4"], 0.0],
+	"hit_body": [["freesound/body_0", "freesound/body_1", "freesound/body_2"], 0.0],
+	"block": [["freesound/block_0", "freesound/block_1", "freesound/block_2"], -6.0],
+	"knockdown": [["kenney/impactSoft_heavy_000.ogg", "kenney/impactSoft_heavy_002.ogg", "kenney/impactSoft_heavy_004.ogg"], 2.0],
+	"bell": [["kenney/impactBell_heavy_000.ogg", "kenney/impactBell_heavy_001.ogg"], -2.0],
 }
 
 func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	if not _sfx_cache.has(name):
 		var variants: Array = []
 		if SFX_RECORDED.has(name):
-			for i in 5:
-				var rp := "res://assets/audio/kenney/%s_%03d.ogg" % [String(SFX_RECORDED[name][0]), i]
+			for f in SFX_RECORDED[name][0]:
+				var rp := "res://assets/audio/%s" % String(f)
+				if not rp.get_extension() in ["ogg", "wav"]:
+					rp += ".wav"
 				if ResourceLoader.exists(rp):
 					variants.append(load(rp))
 		if variants.is_empty():
