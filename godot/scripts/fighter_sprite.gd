@@ -126,7 +126,8 @@ func _idle_img(s: Spec, t: float) -> void:
 ## 出拳：前摇 → 到顶（换出拳帧）→ 停留 → 收招回抱架
 ## 参考作 60fps 实测（×1.25）：刺拳 到顶 0.06 / 全长 0.28；直拳 0.125/0.6；勾拳 0.27/0.85；上勾 0.23/0.88；击腹 0.35/1.06
 const PUNCH := {
-	"jab": {"peak": 0.06, "len": 0.28, "pose": "jab", "fwd": 18.0, "rot": 2.0, "y": 0.0, "sc": 1.0},
+	# 刺拳到顶后伸直姿势多停 0.12s（参考 Bloom Blow：整帧画需要被「看见」）
+	"jab": {"peak": 0.06, "len": 0.34, "pose": "jab", "fwd": 18.0, "rot": 2.0, "y": 0.0, "sc": 1.0, "stay": 0.12},
 	"straight": {"peak": 0.125, "len": 0.6, "pose": "straight", "fwd": 34.0, "rot": 4.0, "y": 0.0, "sc": 1.02},
 	"hook": {"peak": 0.27, "len": 0.85, "pose": "hook", "fwd": 26.0, "rot": 6.0, "y": 4.0, "sc": 1.02},
 	# upper.webp 稿有缺陷（光脚 + 不透明底块），暂借 hook 姿势 + 明显上冲；muse 重绘后改回 "upper"
@@ -138,7 +139,7 @@ func _punch_spec(key: String) -> Spec:
 	var p: Dictionary = PUNCH[key]
 	var pk: float = p["peak"]
 	var ln: float = p["len"]
-	var hold := pk + 0.06 + ln * 0.08
+	var hold := pk + 0.06 + ln * 0.08 + float(p.get("stay", 0.0))
 	var back := hold + (ln - hold) * 0.45
 	var s := _mk(ln)
 	var wind := pk * 0.45

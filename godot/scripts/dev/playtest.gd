@@ -105,6 +105,10 @@ func _fight() -> void:
 	var foe_rank: int = gs.rank_of(key)
 	var my_rank_before: int = gs.my_rank()
 	var money_before := int(gs.s["money"])
+	if shots and not shot_taken.has("09b_matches"):
+		main._show_matches()
+		await _frames(2)
+		await _shot("09b_matches")
 	main._on_start_battle(key, "manual", false)
 	if main.engine == null or not main.scr_battle.visible:
 		return # 被规则拦下（非比赛日 / 今日已赛）
@@ -112,6 +116,8 @@ func _fight() -> void:
 	await _shot("10_battle_start")
 	var exchanges := 0
 	while not main.battle_over and exchanges < 200:
+		while main._count_busy and not main.battle_over: # 读秒中等它数完
+			await get_tree().create_timer(0.1, true, false, true).timeout
 		exchanges += 1
 		if main.player_turn:
 			var r := randf()

@@ -831,11 +831,55 @@ func _show_matches() -> void:
 		var e := gs.roster_entry(key)
 		var st: Dictionary = DataDB.foe_styles().get(String(e.get("style", "balanced")), {})
 		sub_box.add_child(_mk_label("第 %d 名 · %s（%s）" % [gs.rank_of(key), String(e["name"]), String(st.get("name", ""))], 16))
+		sub_box.add_child(_prediction_bar(_predict(key)))
 		var row := HBoxContainer.new()
 		for mode in [["manual", "手动"], ["auto", "自动观看"], ["sim", "模拟跳过"]]:
 			row.add_child(_mk_button(mode[1], _on_start_battle.bind(key, mode[0], false)))
 		sub_box.add_child(row)
 	sub_box.add_child(_mk_button("返回", _show_sub_main))
+
+## 赛前胜负预测（参考 Bloom Blow 赛前 5 段比例条）：用真实战斗引擎把当前双方模拟 N 场
+func _predict(key: String, n: int = 40) -> Dictionary:
+	var out := {"ko_w": 0, "dec_w": 0, "dec_l": 0, "ko_l": 0}
+	var e := gs.roster_entry(key)
+	var style := String(e.get("style", "balanced"))
+	for i in n:
+		var eng := BattleEngine.new()
+		eng.rng.seed = 9100 + i * 13 + gs.rank_of(key)
+		var fb := BattleEngine.make_fighter(String(e.get("name", key)), false, gs.foe_attrs(key), {"style_key": style})
+		fb["tactic"] = FOE_TACTIC.get(style, "balanced")
+		eng.start(_fighter_for_player(), fb)
+		var r := eng.simulate_all()
+		var dec := String(r.get("how", "")) == "点数判定"
+		if bool(r.get("winner_is_a", false)):
+			out["dec_w" if dec else "ko_w"] += 1
+		else:
+			out["dec_l" if dec else "ko_l"] += 1
+	for k in out.keys():
+		out[k] = float(out[k]) / float(n)
+	return out
+
+func _prediction_bar(p: Dictionary) -> Control:
+	var box := VBoxContainer.new()
+	var win := float(p["ko_w"]) + float(p["dec_w"])
+	box.add_child(_mk_label("胜算 %d%%　（KO 胜 %d%% · 判定胜 %d%% · 判定负 %d%% · KO 负 %d%%）" % [
+		roundi(win * 100), roundi(float(p["ko_w"]) * 100), roundi(float(p["dec_w"]) * 100),
+		roundi(float(p["dec_l"]) * 100), roundi(float(p["ko_l"]) * 100)], 14, Color(0.9, 0.88, 1.0)))
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 0)
+	bar.custom_minimum_size = Vector2(0, 12)
+	var cols := {"ko_w": Color(1.0, 0.45, 0.65), "dec_w": Color(1.0, 0.75, 0.85), "dec_l": Color(0.62, 0.66, 0.85), "ko_l": Color(0.35, 0.38, 0.6)}
+	for k in ["ko_w", "dec_w", "dec_l", "ko_l"]:
+		if float(p[k]) <= 0.0:
+			continue
+		var c := ColorRect.new()
+		c.color = cols[k]
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		c.size_flags_stretch_ratio = float(p[k])
+		c.custom_minimum_size = Vector2(2, 12)
+		bar.add_child(c)
+	box.add_child(bar)
+	return box
 
 func _show_spar() -> void:
 	_clear_sub()
@@ -1260,6 +1304,14 @@ func _start_battle_scene() -> void:
 	scr_battle.position = Vector2.ZERO
 	scr_battle.scale = Vector2.ONE
 	Engine.time_scale = 1.0
+	_count_busy = false
+	for n in _count_nodes:
+		if is_instance_valid(n):
+			n.queue_free()
+	_count_nodes.clear()
+	_combo_chain = {true: [], false: []}
+	if auto_timer:
+		auto_timer.paused = false
 	rig_foe = null
 	foe_portrait = null
 	for c in me_anchor.get_children():
@@ -1318,6 +1370,11 @@ func _setup_tactic_buttons() -> void:
 	b_tactics.add_child(_mk_label("本回合战术：", 15))
 	for t in [["attack", "强攻压制"], ["counter", "稳守反击"], ["points", "游走打点"], ["balanced", "均衡"]]:
 		b_tactics.add_child(_mk_button(t[1], _on_tactic.bind(t[0])))
+	var dmg_btn := _mk_button("伤害数字：%s" % ("开" if show_damage_numbers else "关"), func() -> void: pass)
+	dmg_btn.pressed.connect(func() -> void:
+		show_damage_numbers = not show_damage_numbers
+		dmg_btn.text = "伤害数字：%s" % ("开" if show_damage_numbers else "关"))
+	b_tactics.add_child(dmg_btn)
 
 func _on_tactic(t: String) -> void:
 	if engine:
@@ -1363,10 +1420,23 @@ func _hit_reaction(ev: Dictionary, def: Dictionary) -> String:
 		_:
 			return "hit_face"
 
-## 顿帧时长（秒）：越重停得越久；参考作的打击感主要来自「受击方反应时长和力度对应」，顿帧为配套。
-const HITSTOP := {"hit_light": 0.035, "hit_face": 0.06, "hit_body": 0.07, "hit_side": 0.06, "stagger": 0.11, "block": 0.03}
-const SHAKE := {"hit_light": 2.0, "hit_face": 5.0, "hit_body": 6.0, "hit_side": 5.0, "stagger": 11.0, "block": 1.5}
+## 打击反馈分 4 档（2026-11-21 参考 Bloom Blow 试玩：平时克制、大事件才猛，满屏一直震会削弱大事件）
+## light = 刺拳/被格挡；normal = 普通命中；heavy = 重击踉跄/反击；big = 击倒/KO
+const TIER_HITSTOP := {"light": 0.03, "normal": 0.06, "heavy": 0.09, "big": 0.14}
+const TIER_SHAKE := {"light": 0.0, "normal": 2.0, "heavy": 5.0, "big": 10.0}
+const TIER_POWER := {"light": 0.15, "normal": 0.3, "heavy": 0.65, "big": 1.0}
 var _shake_tw: Tween
+var show_damage_numbers := false # 伤害数字默认隐藏（战斗里可切换）
+var _combo_chain := {true: [], false: []} # 攻方 is_a -> 最近连中的拳种
+
+func _hit_tier(ev: Dictionary, react: String) -> String:
+	if bool(ev.get("knockdown", false)) or bool(ev.get("ko", false)):
+		return "big"
+	if react == "stagger" or bool(ev.get("counter", false)):
+		return "heavy"
+	if react == "block" or react == "hit_light":
+		return "light"
+	return "normal"
 
 func _play_exchange_visuals(ev: Dictionary) -> void:
 	var att_rig: FighterSprite = rig_me if bool(ev["att_is_a"]) else rig_foe
@@ -1375,6 +1445,7 @@ func _play_exchange_visuals(ev: Dictionary) -> void:
 	if att_rig:
 		att_rig.play_anim(PUNCH_ANIM.get(String(ev["punch"]), "straight"))
 	var kind := String(ev["kind"])
+	_update_combo_label(ev, att_rig)
 	if kind == "hit" or kind == "block":
 		var react := _hit_reaction(ev, def) if kind == "hit" else "block"
 		if bool(ev.get("knockdown", false)) or bool(ev.get("ko", false)):
@@ -1383,19 +1454,21 @@ func _play_exchange_visuals(ev: Dictionary) -> void:
 			def_rig.play_anim(react)
 		elif not bool(ev["att_is_a"]) and foe_portrait:
 			_flash(foe_portrait)
-		_hitstop([att_rig, def_rig], float(HITSTOP.get(react, 0.04)))
-		_screen_shake(float(SHAKE.get(react, 3.0)))
+		var tier := _hit_tier(ev, react)
+		_hitstop([att_rig, def_rig], float(TIER_HITSTOP[tier]))
+		_screen_shake(float(TIER_SHAKE[tier]))
 		if def_rig:
-			var power := float(SHAKE.get(react, 3.0)) / 11.0 # 0.15 ~ 1.0
+			var power := float(TIER_POWER[tier])
 			var at := _impact_point(def_rig, String(ev["punch"]), bool(ev["att_is_a"]))
-			_impact_fx(at, power, kind == "block")
-			_flash(def_rig, 1.6 + power if kind == "hit" else 1.3)
-			_damage_pop(at, float(ev["dmg"]), kind == "block", bool(ev.get("counter", false)))
-			if react == "stagger" or bool(ev.get("knockdown", false)):
+			_impact_fx(at, power, kind == "block", tier == "heavy" or tier == "big")
+			_flash(def_rig, 1.4 + power if kind == "hit" else 1.2)
+			if show_damage_numbers:
+				_damage_pop(at, float(ev["dmg"]), kind == "block", bool(ev.get("counter", false)))
+			if tier == "big":
 				_camera_punch(at, 1.06 if not bool(ev.get("ko", false)) else 1.1)
 		if bool(ev.get("ko", false)):
-			_slowmo(0.28, 0.7)
-		_sfx(String(SFX_FOR_REACT.get(react, "hit_light")), -2.0 if react == "hit_light" else 0.0)
+			_slowmo(0.3, 0.5)
+		_sfx(String(SFX_FOR_REACT.get(react, "hit_light")), -2.0 if tier == "light" else 0.0)
 	elif kind == "dodge":
 		if def_rig:
 			def_rig.play_anim("dodge")
@@ -1456,9 +1529,10 @@ func _impact_point(def_rig: Node2D, punch: String, att_is_a: bool) -> Vector2:
 	return def_rig.global_position + Vector2(toward * 55.0, -h)
 
 ## 冲击光：星形闪光 + 扩散圆环 + 火花，越重越大；格挡时偏蓝、偏小
-func _impact_fx(at: Vector2, power: float, blocked: bool) -> void:
+func _impact_fx(at: Vector2, power: float, blocked: bool, full: bool = true) -> void:
 	var col := Color(0.7, 0.85, 1.0) if blocked else Color(1.0, 0.92, 0.55)
-	var size := (40.0 + 90.0 * power) * (0.6 if blocked else 1.0)
+	# 普通命中只留约头部大小的小星爆；圆环 + 火花只给重击 / 反击 / 击倒
+	var size := (34.0 + 80.0 * power) * (0.6 if blocked else 1.0)
 	var star := Polygon2D.new()
 	var pts := PackedVector2Array()
 	var n := 10
@@ -1481,6 +1555,8 @@ func _impact_fx(at: Vector2, power: float, blocked: bool) -> void:
 	tw.tween_property(star, "scale", Vector2(1.0, 1.0), 0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tw.tween_property(star, "modulate:a", 0.0, 0.16).set_delay(0.05)
 	tw.chain().tween_callback(star.queue_free)
+	if not full:
+		return
 	var ring := Line2D.new()
 	var rp := PackedVector2Array()
 	for i in 33:
@@ -1530,6 +1606,40 @@ func _damage_pop(at: Vector2, dmg: float, blocked: bool, counter: bool) -> void:
 	tw.tween_property(l, "modulate:a", 0.0, 0.3).set_delay(0.45)
 	tw.chain().tween_callback(l.queue_free)
 
+## 连招名标签：攻方连续命中 ≥2 时，头顶飘「刺拳 → 直拳 · 2 连击」（参考 Bloom Blow，成本低、可读性高）
+var _combo_labels := {}
+func _update_combo_label(ev: Dictionary, att_rig: FighterSprite) -> void:
+	var side: bool = bool(ev["att_is_a"])
+	var att: Dictionary = engine.a if side else engine.b
+	var kind := String(ev["kind"])
+	var chain: Array = _combo_chain[side]
+	if kind != "hit" and kind != "block":
+		chain.clear()
+		return
+	if int(att.get("combo", 0)) <= 1:
+		chain.clear()
+	chain.append(String(PUNCH_NAME.get(String(ev["punch"]), "")))
+	_combo_chain[side] = chain
+	if chain.size() < 2 or att_rig == null:
+		return
+	var old = _combo_labels.get(side)
+	if old != null and is_instance_valid(old):
+		old.queue_free()
+	var shown: Array = chain.slice(maxi(0, chain.size() - 3))
+	var l := _mk_label(" → ".join(shown) + " · %d 连击 " % chain.size(), 18, Color(1, 1, 1))
+	var st := _style(Color(0.08, 0.04, 0.14, 0.78))
+	st.content_margin_left = 10; st.content_margin_right = 10; st.content_margin_top = 4; st.content_margin_bottom = 4
+	l.add_theme_stylebox_override("normal", st)
+	scr_battle.add_child(l)
+	l.position = att_rig.global_position + Vector2(-110, -500)
+	l.modulate.a = 0.0
+	_combo_labels[side] = l
+	var tw := l.create_tween()
+	tw.tween_property(l, "modulate:a", 1.0, 0.1)
+	tw.tween_interval(1.0)
+	tw.tween_property(l, "modulate:a", 0.0, 0.25)
+	tw.tween_callback(l.queue_free)
+
 ## 镜头冲击：重击时整屏朝命中点瞬间推近再回弹
 var _cam_tw: Tween
 func _camera_punch(at: Vector2, zoom: float) -> void:
@@ -1550,6 +1660,88 @@ func _knockdown_visual(rig: FighterSprite, stay: bool = false) -> void:
 	# 整帧角色自带 down/getup 动画（有帧序列的 8 人播真实倒地帧），补间在角色节点内部，随节点释放。
 	if rig and is_instance_valid(rig):
 		rig.knockdown(stay)
+		_count_sequence(rig, stay)
+
+## 读秒（参考 Bloom Blow：倒地后画面中上方逐个弹出大号数字；数到 10 → KO 标志）
+## 读秒期间锁住操作 / 暂停自动观看计时器，起身后恢复。
+var _count_busy := false
+var _count_nodes: Array = []
+func _count_sequence(rig: FighterSprite, ko: bool) -> void:
+	_count_busy = true
+	for c in b_controls.get_children():
+		if c is Button:
+			(c as Button).disabled = true
+	if auto_timer and not auto_timer.is_stopped():
+		auto_timer.paused = true
+	var down_len := 2.0
+	if rig.player and rig.player.has_animation("down"):
+		down_len = rig.player.get_animation("down").length
+	var n := 10 if ko else clampi(int((0.2 + down_len + 0.8) / 0.5), 3, 9)
+	var step := 0.32 if ko else 0.5
+	var tw := create_tween()
+	tw.tween_interval(0.45)
+	for i in n:
+		tw.tween_callback(_count_pop.bind(i + 1, i + 1 == n and ko))
+		tw.tween_interval(step)
+	if ko:
+		tw.tween_callback(_ko_stamp)
+	tw.tween_callback(_count_done)
+
+func _count_pop(num: int, final: bool) -> void:
+	var l := _mk_label(str(num), 96 if not final else 120, Color(1.0, 0.86, 0.95) if not final else Color(1.0, 0.45, 0.6))
+	l.add_theme_color_override("font_outline_color", Color(0.3, 0.05, 0.25))
+	l.add_theme_constant_override("outline_size", 14)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.custom_minimum_size = Vector2(240, 0)
+	l.position = Vector2(520, 150)
+	l.pivot_offset = Vector2(120, 70)
+	l.scale = Vector2(1.8, 1.8)
+	scr_battle.add_child(l)
+	_count_nodes.append(l)
+	var tw := l.create_tween().set_parallel(true)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "modulate:a", 0.0, 0.2).set_delay(0.3)
+	tw.chain().tween_callback(l.queue_free)
+	_sfx("block", -8.0, 0.7)
+
+func _ko_stamp() -> void:
+	var holder := Node2D.new()
+	holder.position = Vector2(640, 250)
+	scr_battle.add_child(holder)
+	_count_nodes.append(holder)
+	for i in 7: # 墨溅
+		var blob := Polygon2D.new()
+		var pts := PackedVector2Array()
+		var r := rng.randf_range(30, 70)
+		for k in 9:
+			var a := TAU * k / 9.0
+			pts.append(Vector2(cos(a), sin(a)) * r * rng.randf_range(0.6, 1.3))
+		blob.polygon = pts
+		blob.color = Color(0.55, 0.08, 0.3, 0.85)
+		blob.position = Vector2(rng.randf_range(-230, 230), rng.randf_range(-70, 70))
+		holder.add_child(blob)
+	var l := _mk_label("K.O.", 150, Color(1.0, 0.95, 0.98))
+	l.add_theme_color_override("font_outline_color", Color(0.85, 0.2, 0.5))
+	l.add_theme_constant_override("outline_size", 22)
+	l.position = Vector2(-190, -105)
+	holder.add_child(l)
+	holder.scale = Vector2(3, 3)
+	holder.modulate.a = 0.0
+	var tw := holder.create_tween().set_parallel(true)
+	tw.tween_property(holder, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(holder, "modulate:a", 1.0, 0.1)
+	_screen_shake(12.0)
+	_sfx("knockdown", 2.0, 0.8)
+	_sfx("crowd", 0.0)
+
+func _count_done() -> void:
+	_count_busy = false
+	if battle_over:
+		return
+	if battle_mode == "manual":
+		_setup_manual_controls()
+	if auto_timer:
+		auto_timer.paused = false
 
 func _after_exchange(ev: Dictionary) -> void:
 	_battle_log(String(ev["text"]))
@@ -1563,15 +1755,19 @@ func _after_exchange(ev: Dictionary) -> void:
 	player_turn = not player_turn
 	if battle_mode == "manual":
 		_setup_manual_controls()
+		if _count_busy: # 读秒中：按钮先锁住，读秒结束 _count_done 重建
+			for c in b_controls.get_children():
+				if c is Button:
+					(c as Button).disabled = true
 
 func _on_player_punch(punch: String) -> void:
-	if battle_over or not player_turn:
+	if battle_over or not player_turn or _count_busy:
 		return
 	var ev := engine.do_exchange(true, punch)
 	_after_exchange(ev)
 
 func _on_player_defend(action: String) -> void:
-	if battle_over or player_turn:
+	if battle_over or player_turn or _count_busy:
 		return
 	var punch := engine.ai_choose_punch(engine.b, engine.a)
 	var ev := engine.do_exchange(false, punch, action)
