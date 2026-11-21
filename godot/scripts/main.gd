@@ -38,7 +38,12 @@ const SFX_RECORDED := {
 	"bell": [["kenney/impactBell_heavy_000.ogg", "kenney/impactBell_heavy_001.ogg"], -2.0],
 }
 
+## 用户 2026-11-21：挥空与观众声先关掉（合成版不对，找到合适素材前不播）
+const SFX_DISABLED := ["whoosh", "crowd"]
+
 func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
+	if name in SFX_DISABLED:
+		return
 	if not _sfx_cache.has(name):
 		var variants: Array = []
 		if SFX_RECORDED.has(name):
