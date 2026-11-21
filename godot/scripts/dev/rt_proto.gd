@@ -62,6 +62,8 @@ var _ko_victim: Node3D
 var _ko_orbit := 0.0
 var _shake_t := 0.0
 var _aside := 0.0
+var _tap_key := -1
+var _tap_t := -9.0
 # 镜头：0 自动（贴身 = 背后，拉开 / 绕圈 = 斜后方）、1 背后锁定、2 第三人称斜后方、3 转播机位
 const CAM_NAMES := ["自动", "背后锁定", "第三人称斜后方", "转播机位"]
 var _auto_w := 0.0
@@ -404,7 +406,13 @@ func _layout(delta: float) -> void:
 		if is_stander and _aside > 0.0:
 			var right := Vector2(-ax.y, ax.x)
 			off = (right * 0.75 - ax * 0.35) * ease(_aside, -2.0)
-		v.position = Vector3(p.x + off.x, 0.0, p.y + off.y)
+		var newp := Vector3(p.x + off.x, 0.0, p.y + off.y)
+		# 本地移动速度 → 步法动画
+		if delta > 0.0:
+			var vel := (newp - v.position) / delta
+			var right := Vector2(-ax.y, ax.x)
+			v.set("walk", Vector2(vel.x * right.x + vel.z * right.y, vel.x * ax.x + vel.z * ax.y))
+		v.position = newp
 		v.rotation.y = atan2(-ax.x, -ax.y)
 
 
@@ -470,6 +478,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		var dir: String = {KEY_A: "l", KEY_D: "r", KEY_S: "duck"}.get(k, "")
 		if dir != "":
 			core.input_dodge(f, dir)
+		return
+	# 双击 WASD = 垫步
+	var dash_dir := {KEY_W: Vector2(0, 1), KEY_S: Vector2(0, -1), KEY_A: Vector2(-1, 0), KEY_D: Vector2(1, 0)}
+	if dash_dir.has(k) and not Input.is_physical_key_pressed(KEY_SPACE):
+		if k == _tap_key and real_t - _tap_t < 0.28:
+			core.input_dash(f, dash_dir[k])
+			_tap_key = -1
+		else:
+			_tap_key = k
+			_tap_t = real_t
 		return
 	var keymap := {KEY_J: "jab", KEY_K: "straight", KEY_U: "hook", KEY_I: "upper", KEY_L: "body"}
 	if keymap.has(k):
@@ -610,7 +628,7 @@ func _build_hud() -> void:
 	info_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info_lb.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
 	hud.add_child(info_lb)
-	var help := _label("WASD 走位（A/D 绕圈）   J 刺拳 · K 直拳 · U 摆拳 · I 上勾 · L 击腹   空格 格挡（+S 低格挡）   Shift+A/D 闪避 · Shift+S 下潜   C 切镜头", 16)
+	var help := _label("WASD 走位（A/D 绕圈，双击垫步）   J 刺拳 · K 直拳 · U 摆拳 · I 上勾 · L 击腹   空格 格挡（+S 低格挡）   Shift+A/D 闪避 · Shift+S 下潜   C 切镜头", 16)
 	help.position = Vector2(24, 764)
 	hud.add_child(help)
 	cam_lb = _label("", 16)

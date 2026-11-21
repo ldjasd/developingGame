@@ -191,8 +191,12 @@ func _bump(t: float, dur: float) -> float:
 	return clampf(minf(u / 0.25, (1.0 - u) / 0.45), 0.0, 1.0)
 
 
+var _dt := 0.0
+
+
 func update_pose(delta: float) -> void:
 	_idle += delta
+	_dt = delta
 	if action != "":
 		_t += delta
 		if _t > _dur:

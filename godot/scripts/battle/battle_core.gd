@@ -45,7 +45,12 @@ const COUNT_SEC := 1.0         # 读秒每个数字的时长（呈现用；回�
 const ROUND_STAM := 25.0       # 回合间体力回复
 # 擂台走位（米）
 const RING_HALF := 2.55        # 围绳内可站范围（半边长）
-const START_GAP := 1.2
+const START_GAP := 2.2         # 回合开始两人各在自己一侧，先走近
+const DASH_SPEED := 3.2        # 垫步：0.15 秒冲出约 0.48 米
+const DASH_TIME := 0.15
+const DASH_COST := 6.0
+const DASH_CD := 0.45
+const LUNGE := {"jab": 0.9, "straight": 1.1, "hook": 0.6, "upper": 0.5, "body": 0.7}  # 出拳时身体前送（米 / 秒）
 const MIN_GAP := 0.72
 const MOVE_SPEED := 1.5        # 米 / 秒（× (0.7 + 步伐 × 0.01)）
 const CIRCLE_MUL := 0.85
@@ -53,7 +58,7 @@ const CIRCLE_MUL := 0.85
 const REACH := {"jab": 1.30, "straight": 1.30, "hook": 1.08, "upper": 0.98, "body": 1.10}
 
 # —— 标定面 ——
-var HP_SCALE := 2.5            # 实时出拳次数多于交换制，HP 池按比例放大（rt_probe 标定：2.6→3.0；加入走位与射程后 3.0→2.5）
+var HP_SCALE := 1.9            # 实时出拳次数多于交换制，HP 池按比例放大（rt_probe 标定：2.6→3.0；走位与射程 →2.5；步法节奏（试探 / 压上 / 站住 / 后撤）→1.9）
 var TRAUMA_DECAY_SEC := 0.55   # 起点为交换制折算 0.93/秒；标定后 0.55（让重创击倒 / TKO 出现）
 var STAM_REGEN := 2.2          # 每秒（不出拳、不格挡 0.5 秒后）
 var AI_RATE := 1.0             # AI 出拳频率总倍率
@@ -158,9 +163,35 @@ func input_move(f: Dictionary, v: Vector2) -> void:
 	f["move"] = v.limit_length(1.0)
 
 
+## 垫步（双击方向键）：dir 为本地方向（x 右、y 前）
+func input_dash(f: Dictionary, dir: Vector2) -> bool:
+	if not can_act(f) or float(f.get("dash_cd", 0.0)) > 0.0 or float(f["stamina"]) < DASH_COST:
+		return false
+	f["stamina"] = float(f["stamina"]) - DASH_COST
+	f["dash_t"] = DASH_TIME
+	f["dash_dir"] = dir.normalized()
+	f["dash_cd"] = DASH_CD
+	_emit({"type": "dash", "who": _who(f)})
+	return true
+
+
 func _move(f: Dictionary, dt: float) -> void:
+	if phase != "fight":
+		return
+	f["dash_cd"] = maxf(0.0, float(f.get("dash_cd", 0.0)) - dt)
+	if float(f.get("dash_t", 0.0)) > 0.0:
+		f["dash_t"] = float(f["dash_t"]) - dt
+		var dax := axis_of(f)
+		var dd: Vector2 = f["dash_dir"]
+		var dp: Vector2 = (f["pos"] as Vector2) + (dax * dd.y + Vector2(-dax.y, dax.x) * dd.x) * DASH_SPEED * dt
+		_place(f, dp)
+		return
+	# 出拳带着身体往前送（直线拳送得多），拳还没到之前一直往前
+	if String(f["act"]) == "punch" and not bool(f["resolved"]):
+		var lunge := float(LUNGE.get(String(f["punch"]), 0.5))
+		_place(f, (f["pos"] as Vector2) + axis_of(f) * lunge * dt)
 	var mv: Vector2 = f["move"]
-	if mv.length() < 0.01 or phase != "fight":
+	if mv.length() < 0.01:
 		return
 	var act := String(f["act"])
 	var mul := 1.0
@@ -175,6 +206,10 @@ func _move(f: Dictionary, dt: float) -> void:
 	var right := Vector2(-ax.y, ax.x)  # 面朝 ax 时的右手方向
 	var p: Vector2 = f["pos"]
 	p += (ax * mv.y + right * mv.x * CIRCLE_MUL) * spd * dt
+	_place(f, p)
+
+
+func _place(f: Dictionary, p: Vector2) -> void:
 	# 擂台边界（围绳）
 	p.x = clampf(p.x, -RING_HALF, RING_HALF)
 	p.y = clampf(p.y, -RING_HALF, RING_HALF)
@@ -264,12 +299,14 @@ func step(dt: float) -> void:
 	clock -= dt
 	for f in [a, b]:
 		_tick_fighter(f, dt)
-	for f in [a, b]:
+	# 每帧随机先后，避免「同一帧两拳同时到」总是 a 先结算、打断 b 的顺序偏差
+	var order: Array = [a, b] if rng.randf() < 0.5 else [b, a]
+	for f in order:
 		if bool(f["ai"]):
 			_ai(f, foe_of(f), dt)
-	for f in [a, b]:
+	for f in order:
 		_move(f, dt)
-	for f in [a, b]:
+	for f in order:
 		_advance_action(f, dt)
 		if finished or phase != "fight":
 			return
@@ -570,10 +607,14 @@ func _ai(f: Dictionary, o: Dictionary, _dt: float) -> void:
 		if String(f.get("ai_plan", "")) == "":
 			f["ai_plan"] = _pick_punch(f, st)
 		var kind := String(f["ai_plan"])
-		if distance() > float(REACH[kind]) * 0.95:
+		if distance() > float(REACH[kind]) * 0.85:
 			return  # 够不着：先由步法靠近（_ai_footwork 会往前压）
 		f["ai_plan"] = ""
 		input_punch(f, kind)
+		# 打完常常退出来（打了就走），不一直贴着
+		if rng.randf() < 0.4:
+			f["ai_intent"] = "feel" if rng.randf() < 0.7 else "retreat"
+			f["ai_int_t"] = rng.randf_range(0.6, 1.4)
 		var freq := (0.24 + eff_attr(f, "speed") * 0.012) / 0.42 * float(st.get("freqMul", 1.0)) * AI_RATE
 		match String(f["tactic"]):
 			"attack": freq *= 1.2
@@ -587,23 +628,64 @@ func _ai(f: Dictionary, o: Dictionary, _dt: float) -> void:
 
 
 ## AI 步法：按风格保持距离、来回绕圈、被逼到绳边就往外绕；要出拳但够不着时往前压
-func _ai_footwork(f: Dictionary, st: Dictionary, dt: float) -> void:
-	var want := {"power": 0.95, "balanced": 1.05, "guardcounter": 1.15, "speed": 1.22}.get(String(f["style_key"]), 1.05) as float
+## 步法意图（每 0.8~2.2 秒重选一次，不是每帧盯着对手的距离）：
+##   feel 外围试探（远距离、多绕圈）/ press 压上去 / hold 站住不动（对方可以贴上来）/ retreat 后撤（受伤、没体力时多）
+const AI_INTENT_DIST := {"feel": 1.75, "press": 0.0, "hold": -1.0, "retreat": 2.35}
+
+func _ai_pick_intent(f: Dictionary) -> void:
+	var w := {"feel": 0.35, "press": 0.25, "hold": 0.25, "retreat": 0.12}
+	match String(f["style_key"]):
+		"power": w["press"] += 0.25; w["feel"] -= 0.10
+		"speed": w["feel"] += 0.12; w["retreat"] += 0.03; w["hold"] -= 0.10
+		"guardcounter": w["hold"] += 0.12
 	match String(f["tactic"]):
-		"attack": want -= 0.10
-		"counter": want += 0.10
-		"points": want += 0.08
+		"attack": w["press"] += 0.25
+		"counter": w["hold"] += 0.15; w["retreat"] += 0.05
+		"points": w["feel"] += 0.15
+	var hp_r := float(f["hp"]) / float(f["max_hp"])
+	if hp_r < 0.30 or float(f["stamina"]) < 15.0:
+		w["retreat"] += 0.30
+	var o := foe_of(f)
+	if float(o["hp"]) / float(o["max_hp"]) < 0.3:
+		w["press"] += 0.35  # 对手不行了：压上去终结
+	var total := 0.0
+	for k in w:
+		total += maxf(float(w[k]), 0.0)
+	var r := rng.randf() * total
+	for k in w:
+		r -= maxf(float(w[k]), 0.0)
+		if r <= 0.0:
+			f["ai_intent"] = k
+			break
+	f["ai_int_t"] = rng.randf_range(0.8, 2.2)
+
+
+func _ai_footwork(f: Dictionary, st: Dictionary, dt: float) -> void:
+	f["ai_int_t"] = float(f.get("ai_int_t", 0.0)) - dt
+	if float(f["ai_int_t"]) <= 0.0 or String(f.get("ai_intent", "")) == "":
+		_ai_pick_intent(f)
+	var intent := String(f["ai_intent"])
 	var plan := String(f.get("ai_plan", ""))
-	if plan != "" or t > float(f["ai_next"]) - 0.35:
+	var fwd := 0.0
+	if plan != "" or intent == "press":
 		var k := plan if plan != "" else "straight"
-		want = minf(want, float(REACH[k]) * 0.85)
-	var fwd := clampf((distance() - want) * 3.0, -1.0, 1.0)
+		fwd = clampf((distance() - float(REACH[k]) * 0.82) * 2.5, -0.6, 1.0)
+	elif intent == "hold":
+		fwd = 0.0
+	elif intent == "feel":
+		# 试探：太远就走近、太近才退，中间只绕圈（不会对方一进你就退，距离才会真的变）
+		var d0 := distance()
+		fwd = 0.6 if d0 > 2.05 else (-0.7 if d0 < 1.2 else 0.0)
+	else:
+		fwd = -0.9 if distance() < float(AI_INTENT_DIST[intent]) else 0.0
 	f["ai_circle_t"] = float(f["ai_circle_t"]) - dt
 	if float(f["ai_circle_t"]) <= 0.0:
 		f["ai_circle_t"] = rng.randf_range(1.0, 2.6)
 		var r := rng.randf()
 		f["ai_circle"] = 0.0 if r < 0.3 else (1.0 if r < 0.65 else -1.0)
-	var circ := float(f["ai_circle"]) * 0.55 * float(st.get("moveMul", 1.0))
+	var circ := float(f["ai_circle"]) * (0.75 if intent == "feel" else 0.4) * float(st.get("moveMul", 1.0))
+	if intent == "hold":
+		circ *= 0.3
 	var rp := rope_pressure(f)
 	if rp > 0.3:
 		# 被逼到绳边：往场中方向绕出去
@@ -613,6 +695,12 @@ func _ai_footwork(f: Dictionary, st: Dictionary, dt: float) -> void:
 		circ = (1.0 if right.dot(-p) > 0.0 else -1.0) * (0.6 + rp * 0.4)
 		fwd = maxf(fwd, 0.0)
 	input_move(f, Vector2(circ, fwd))
+	# 远距离要压上去时偶尔垫步冲进；被压到太近时偶尔垫步后撤
+	var d := distance()
+	if (plan != "" or intent == "press") and d > 1.55 and rng.randf() < 1.2 * dt:
+		input_dash(f, Vector2(0, 1))
+	elif intent == "retreat" and d < 1.1 and rng.randf() < 1.5 * dt:
+		input_dash(f, Vector2(rng.randf_range(-0.6, 0.6), -1))
 
 
 func _pick_punch(f: Dictionary, st: Dictionary) -> String:

@@ -113,7 +113,19 @@ func _aim(sk: Skeleton3D, bone: String, child: String, target: Vector3) -> void:
 	sk.force_update_all_bone_transforms()
 
 
+var walk := Vector2.ZERO   # 呈现层每帧给：本地移动速度（x 右、y 前，米 / 秒）
+var _walk_ph := 0.0
+var _step_k := 0.0
+var _step_dir := Vector3.ZERO
+
+
 func _apply(off: Vector3, pitch: float, yaw: float, roll: float, gl: Vector3, gr: Vector3, glow: float) -> bool:
+	var spd := walk.length()
+	_step_k = move_toward(_step_k, clampf(spd / 1.2, 0.0, 1.0), _dt * 6.0)
+	if spd > 0.05:
+		_step_dir = Vector3(walk.x, 0.0, -walk.y).normalized()  # 模型面朝 -Z
+		_walk_ph += _dt * (5.0 + spd * 5.0)
+	off.y -= absf(sin(_walk_ph)) * 0.015 * _step_k
 	for gi in 2:
 		var hand_glow := glow if PUNCH.has(action) and HAND[action] == ("l" if gi == 0 else "r") else 0.0
 		_glove_mats[gi].emission_enabled = hand_glow > 0.01
@@ -146,6 +158,11 @@ func _apply(off: Vector3, pitch: float, yaw: float, roll: float, gl: Vector3, gr
 			var hp := sk.get_bone_global_pose(_b[pre + "UpperLeg"]).origin
 			var rest_foot: Vector3 = _rest_feet[s]
 			var foot := rest_foot + Vector3(0.03 * sx, 0.0, -0.15 if s == "l" else 0.17)
+			# 步法：按移动方向（本地）左右脚交替迈步、抬脚，身体移动时脚不再在地上滑
+			if _step_k > 0.01:
+				var ph := _walk_ph if s == "l" else _walk_ph + PI
+				foot += _step_dir * sin(ph) * 0.11 * _step_k
+				foot.y += maxf(0.0, cos(ph)) * 0.06 * _step_k
 			var kn := _ik(hp, foot, _len["leg1"], _len["leg2"], Vector3(0.1 * sx, 0.0, -1.0))
 			_aim(sk, pre + "UpperLeg", pre + "LowerLeg", kn)
 			_aim(sk, pre + "LowerLeg", pre + "Foot", foot)
