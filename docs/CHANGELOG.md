@@ -16,3 +16,4 @@
 - **修复**：正式赛限定每周第 7 天 1 场；心态系统生效；倒地回调落在已释放角色上的报错；第 4 回合显示；剧情弹窗内部 id；弹窗点击穿透；长文案截断。
 
 更早的 Godot 版记录见 `proposals/godot-desktop-2d.md` §9 与 `playtests/GODOT_PLAYTEST_20261121.md`。
+
