@@ -79,6 +79,44 @@ def analyze():
         print('  跳升点（秒）:', jumps[:20])
 
 
+def clap_profile(x):
+    """每秒：响度 dB、高频（2~8kHz）占比、掌声式瞬态次数（高频能量 25ms 内跳升 3 倍）。
+    2026-11-21 用真实拳击 KO 现场视频（看台手机录像）实测参照：高频占比 0.05~0.10，掌声式瞬态 0。"""
+    hop = int(SR * 0.025); n = 2048
+    f = np.fft.rfftfreq(n, 1 / SR)
+    mlo = (f > 100) & (f < 500); mmid = (f > 500) & (f < 2000); mhi = (f > 2000) & (f < 8000)
+    prev = 0.0
+    sec = {}
+    for i in range(0, len(x) - n, hop):
+        seg = x[i:i + n]
+        P = np.abs(np.fft.rfft(seg * np.hanning(n))) ** 2
+        lo, mid, hi = P[mlo].sum(), P[mmid].sum(), P[mhi].sum()
+        s = i // SR
+        d = sec.setdefault(s, [0.0, 0.0, 0, 0])
+        d[0] += float((seg ** 2).mean()); d[1] += hi / (lo + mid + hi + 1e-12); d[3] += 1
+        if prev > 0 and hi / prev > 3:
+            d[2] += 1
+        prev = hi
+    out = []
+    for s in sorted(sec):
+        e, h, j, k = sec[s]
+        out.append((s, 10 * np.log10(e / k + 1e-12), h / k, j))
+    return out
+
+
+def scan_clean(name, win, want='loud'):
+    """找没有掌声的窗口：窗口内每秒瞬态 ≤ 1、高频占比 ≤ 0.11；按响度排序"""
+    prof = clap_profile(load(name))
+    res = []
+    for s in range(0, len(prof) - win):
+        w = prof[s:s + win]
+        if max(r[3] for r in w) <= 1 and max(r[2] for r in w) <= 0.11:
+            db = np.array([r[1] for r in w])
+            res.append((s, db.mean(), db.std(), db.max()))
+    res.sort(key=lambda r: -r[1] if want == 'loud' else r[2])
+    return res, prof
+
+
 def wr(name, x):
     os.makedirs(OUT, exist_ok=True)
     x = np.clip(x, -1, 1)
@@ -120,14 +158,15 @@ def loop_seg(x, start, dur, xf=2.0):
 
 # ---- 选定的时间点（秒），由 analyze 的结果挑 ----
 PICK = {
-    # 2026-11-21 analyze 结果：低声嘈杂取最平稳的 25:21；激动持续取 20:34（波动最小）
-    'bed_low': (1521.0, 24.0),
-    'bed_high': (1234.0, 16.0),
-    # 爆发取平坦度最高（最像人声、最少喇叭 / 风琴）的两段：7:28、12:11
-    # 7:28 那段频谱里 4.5~5.5kHz 有持续横线（疑似口哨 / 场馆喇叭），换成拳击现场呼喊最响的 0:29
-    'roar': [(MSG, 730.5, 5.0), (FIGHT, 28.5, 4.5)],
-    # 「噢」：反应合集里响度跳升的位置，往前留 0.25 秒
-    'ooh': [(OOHS, 29.75, 2.4), (OOHS, 44.75, 2.4), (OOHS, 59.75, 2.4), (OOHS, 85.75, 2.4), (OOHS, 100.75, 2.4)],
+    # 第二版（2026-11-21 用户：「不需要鼓掌，找真实拳击比赛」）：
+    # 对照真实拳击 KO 现场视频实测——全程没有掌声、全是人声吼叫，KO 后持续高位 20 秒以上。
+    # 所以所有素材只从 scan_clean()（无掌声）窗口里取；「噢」不用观众反应合集（里面有鼓掌和笑声），
+    # 改为从无掌声的吼叫声里切片、塑成「猛地冲上来再落下」的形状。
+    'bed_low': (1511.0, 16.0),    # MSG 25:11 低声嘈杂
+    'bed_high': (491.0, 16.0),    # MSG 8:11 激动呼喊
+    'bed_roar': (481.0, 8.0),     # MSG 8:01 最响且平稳的持续吼叫（KO 后循环 20 秒以上）
+    'roar': [(MSG, 445.0, 6.0), (FIGHT, 23.0, 6.0)],   # KO / 击倒那一下的爆发（MSG 7:25、拳击现场 0:23）
+    'ooh': [(MSG, 482.0), (MSG, 485.5), (MSG, 446.5), (FIGHT, 24.0), (FIGHT, 43.0)],  # 「噢」的取材起点
 }
 
 
@@ -138,15 +177,33 @@ def export(pick):
     wr('bed_low.wav', norm_rms(highpass(loop_seg(xs, s, d), 70), -24))
     s, d = pick['bed_high']
     wr('bed_high.wav', norm_rms(highpass(loop_seg(xs, s, d), 70), -18))
+    s, d = pick['bed_roar']
+    wr('bed_roar.wav', norm_rms(highpass(loop_seg(xs, s, d, 1.5), 70), -14))
     for k, (src, s, d) in enumerate(pick['roar']):
         x = load(src, stereo=True) if src == MSG else load(src)
         seg = x[int(s * SR):int((s + d) * SR)].copy()
-        wr(f'roar_{k}.wav', norm_rms(fade(highpass(seg, 70), 0.05, 1.8), -14))
-    for k, (src, s, d) in enumerate(pick['ooh']):
+        wr(f'roar_{k}.wav', norm_rms(fade(highpass(seg, 70), 0.04, 2.5), -14))
+    # 「噢」：一群人同时「噢——」= 0.12 秒冲上来、0.25 秒顶住、约 1.3 秒落下
+    for f in glob.glob(os.path.join(OUT, 'ooh_*.wav')):
+        os.remove(f)
+    for k, (src, s) in enumerate(pick['ooh']):
         x = load(src)
-        seg = x[int(s * SR):int((s + d) * SR)].copy()
-        wr(f'ooh_{k}.wav', norm_rms(fade(highpass(seg, 90), 0.03, 0.6), -17))
+        seg = x[int(s * SR):int((s + 1.8) * SR)].copy()
+        t = np.arange(len(seg)) / SR
+        env = np.clip(t / 0.12, 0, 1) * np.where(t < 0.37, 1.0, np.exp(-(t - 0.37) / 0.45))
+        wr(f'ooh_{k}.wav', norm_rms(fade(highpass(seg, 90) * env, 0.0, 0.2), -16))
     print('exported to', OUT)
+    check()
+
+
+def check():
+    """出货检查：每个文件的高频占比、掌声式瞬态（真实拳击 KO 现场参照：0.05~0.10 / 0）"""
+    for p in sorted(glob.glob(os.path.join(OUT, '*.wav'))):
+        x = _rd(p)
+        prof = clap_profile(x)
+        h = np.mean([r[2] for r in prof]) if prof else 0
+        j = np.mean([r[3] for r in prof]) if prof else 0
+        print(f'  {os.path.basename(p):14s} {len(x) / SR:5.1f}s  高频占比 {h:.2f}  掌声式瞬态 {j:.2f} 次/秒  {"OK" if h <= 0.11 and j <= 1.0 else "有掌声嫌疑"}')
     audition()
 
 
@@ -164,9 +221,12 @@ def audition():
     gap = np.zeros(int(SR * 0.4))
     low = _rd(os.path.join(OUT, 'bed_low.wav'))[:SR * 8]
     high = _rd(os.path.join(OUT, 'bed_high.wav'))[:SR * 8]
+    roar_bed = np.tile(_rd(os.path.join(OUT, 'bed_roar.wav')), 3)[:SR * 12]
     ramp = np.linspace(0, 1, SR * 8)
     build = low * (1 - ramp) + high * ramp  # 8 秒从嘈杂过渡到激动
-    parts = [low[:SR * 5], build, gap]
+    r2 = np.linspace(0, 1, SR * 3)
+    to_roar = np.concatenate([high[:SR * 3] * (1 - r2) + roar_bed[:SR * 3] * r2, roar_bed[SR * 3:]])  # 再冲到持续吼叫 12 秒
+    parts = [low[:SR * 5], build, to_roar, gap]
     for f in sorted(glob.glob(os.path.join(OUT, 'ooh_*.wav'))):
         parts += [beep, gap, _rd(f), gap]
     for f in sorted(glob.glob(os.path.join(OUT, 'roar_*.wav'))):

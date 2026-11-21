@@ -139,6 +139,8 @@ func _new_match() -> void:
 	count_lb.text = ""
 	count_lb.add_theme_font_size_override("font_size", 96)
 	Engine.time_scale = 1.0
+	_ko_roar_t = 0.0
+	_crowd_boost = 0.0
 	_ko_cam_on = false
 	_ko_victim = null
 	cam.cull_mask = 5 if cam_mode == 0 else 3
@@ -196,7 +198,11 @@ func _on_event(ev: Dictionary) -> void:
 				_spark(pos, 1.6 if big else 1.0, Color(1.0, 0.9, 0.4))
 				_play("heavy" if big else ("body" if kind == "body" else "light"))
 				freeze = 0.10 if big else 0.05
-				_crowd_event(0.16 if big else 0.05, big)  # 重拳：观众「噢！」
+				# 重拳：观众「噢！」；被打的一方越撑不住，每一拳把全场推得越高（KO 前的升温）
+				var vf: Dictionary = core.b if who == "a" else core.a
+				var hurt := clampf(1.0 - float(vf["hp"]) / float(vf["max_hp"]), 0.0, 1.0)
+				var build := 1.0 + maxf(hurt - 0.5, 0.0) * 4.0
+				_crowd_event((0.16 if big else 0.05) * build, big or hurt > 0.7)
 				if bool(ev["counter"]) or int(ev["combo"]) >= 3:
 					_crowd_event(0.08)
 				if big:
@@ -262,8 +268,10 @@ func _impact(who: String, ko: bool) -> void:
 	_burst(pos, ko)
 	_play("heavy")
 	_play("heavy2")
-	_play("roar0" if ko else "roar1", -3.0 if ko else -9.0)
-	_crowd_event(1.0 if ko else 0.5)
+	_play("roar0" if ko else "roar1", -3.0 if ko else -7.0)
+	_crowd_event(1.0 if ko else 0.55)
+	if ko:
+		_ko_roar_t = 22.0
 	fov_kick = 9.0 if ko else 6.0
 	# 顿帧结束后进慢动作（计时不受慢动作影响）
 	var slow := 0.25 if ko else 0.5
@@ -337,9 +345,14 @@ var _ooh_cd := 0.0
 var _oohs: Array[AudioStream] = []
 
 
+var _crowd_roar: AudioStreamPlayer
+var _ko_roar_t := 0.0   # KO 后持续高位吼叫的剩余时间（真实拳击现场实测 ≥ 20 秒）
+
+
 func _build_crowd() -> void:
 	_crowd_low = _loop_player("res://assets/audio/crowd_dyn/bed_low.wav")
 	_crowd_high = _loop_player("res://assets/audio/crowd_dyn/bed_high.wav")
+	_crowd_roar = _loop_player("res://assets/audio/crowd_dyn/bed_roar.wav")
 	for i in 5:
 		_oohs.append(load("res://assets/audio/crowd_dyn/ooh_%d.wav" % i))
 
@@ -382,14 +395,25 @@ func _update_crowd(delta: float) -> void:
 		base = 0.08                            # 回合间：回到低声嘈杂
 	if _count_on and _count_t > 0.0:
 		var shown := float(mini(int(_count_t / _count_step) + 1, _count_n))
-		base = maxf(base, 0.5 + shown * 0.05)  # 读秒：越数越响
-	if core.finished:
-		base = maxf(base, 0.75)
+		base = maxf(base, 0.6 + shown * 0.045)  # 读秒：越数越响（数到 8、9 接近顶）
+	_ko_roar_t -= delta
+	if _ko_roar_t > 0.0:
+		base = 1.0                             # KO：全场持续吼叫，不是喊一声就停
+	elif core.finished:
+		base = maxf(base, 0.7)                 # 之后慢慢变成激动的议论
 	var target := clampf(base + _crowd_boost, 0.0, 1.0)
-	_crowd_i = move_toward(_crowd_i, target, delta * (1.6 if target > _crowd_i else 0.22))
-	var master := lerpf(-15.0, -5.0, _crowd_i)
-	_crowd_low.volume_db = master + linear_to_db(maxf(cos(_crowd_i * PI * 0.5), 0.001))
-	_crowd_high.volume_db = master + linear_to_db(maxf(sin(_crowd_i * PI * 0.5), 0.001))
+	_crowd_i = move_toward(_crowd_i, target, delta * (1.8 if target > _crowd_i else 0.2))
+	# 三层：0~0.55 低声嘈杂 → 激动呼喊，0.55~1 激动呼喊 → 持续吼叫（等功率交叉）
+	var i := _crowd_i
+	var a := clampf(i / 0.55, 0.0, 1.0)
+	var r := clampf((i - 0.55) / 0.45, 0.0, 1.0)
+	var g_low := cos(a * PI * 0.5)
+	var g_high := sin(a * PI * 0.5) * cos(r * PI * 0.5)
+	var g_roar := sin(r * PI * 0.5)
+	var master := lerpf(-15.0, -4.0, i)
+	_crowd_low.volume_db = master + linear_to_db(maxf(g_low, 0.001))
+	_crowd_high.volume_db = master + linear_to_db(maxf(g_high, 0.001))
+	_crowd_roar.volume_db = master + linear_to_db(maxf(g_roar, 0.001))
 
 
 func _spark(pos: Vector3, k: float, c: Color) -> void:
@@ -442,7 +466,7 @@ func _process(delta: float) -> void:
 		_next_shot += 4.0
 		_snap("t%02d" % _shot_i)
 		_shot_i += 1
-	if real_t > max_t or (_end_t > 0.0 and bot and real_t - _end_t > 3.0):
+	if real_t > max_t or (_end_t > 0.0 and bot and real_t - _end_t > 9.0):
 		if out_dir != "":
 			_snap("end")
 		get_tree().quit()
