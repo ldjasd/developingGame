@@ -1189,23 +1189,80 @@ func _battle_log(text: String) -> void:
 	b_log.append_text(text + "\n")
 	b_log.scroll_to_line(b_log.get_line_count())
 
+## 受击反应选择（参考作：轻拳 6 帧小顿、打脸后仰、打腹前屈、勾拳侧甩、重击 60 帧踉跄）。
+## 只决定表现，不碰引擎数值。heavy = 单发净伤害 ≥ 守方最大 HP 的 9%，或打出击倒。
+func _hit_reaction(ev: Dictionary, def: Dictionary) -> String:
+	var punch := String(ev["punch"])
+	var heavy := float(ev["dmg"]) >= float(def["max_hp"]) * 0.09 or bool(ev.get("knockdown", false))
+	if heavy and punch != "jab":
+		return "stagger"
+	match punch:
+		"jab":
+			return "hit_light"
+		"body":
+			return "hit_body"
+		"hook":
+			return "hit_side"
+		_:
+			return "hit_face"
+
+## 顿帧时长（秒）：越重停得越久；参考作的打击感主要来自「受击方反应时长和力度对应」，顿帧为配套。
+const HITSTOP := {"hit_light": 0.035, "hit_face": 0.06, "hit_body": 0.07, "hit_side": 0.06, "stagger": 0.11, "block": 0.03}
+const SHAKE := {"hit_light": 2.0, "hit_face": 5.0, "hit_body": 6.0, "hit_side": 5.0, "stagger": 11.0, "block": 1.5}
+var _shake_tw: Tween
+
 func _play_exchange_visuals(ev: Dictionary) -> void:
 	var att_rig: FighterRig = rig_me if bool(ev["att_is_a"]) else rig_foe
 	var def_rig: FighterRig = rig_foe if bool(ev["att_is_a"]) else rig_me
+	var def: Dictionary = engine.b if bool(ev["att_is_a"]) else engine.a
 	if att_rig:
 		att_rig.play_anim(PUNCH_ANIM.get(String(ev["punch"]), "straight"))
-	if String(ev["kind"]) == "hit" or String(ev["kind"]) == "block":
+	var kind := String(ev["kind"])
+	if kind == "hit" or kind == "block":
+		var react := _hit_reaction(ev, def) if kind == "hit" else "block"
+		if bool(ev.get("knockdown", false)) or bool(ev.get("ko", false)):
+			react = "stagger"
 		if def_rig:
-			def_rig.play_anim("hit" if String(ev["kind"]) == "hit" else "block")
+			def_rig.play_anim(react)
 		elif not bool(ev["att_is_a"]) and foe_portrait:
 			_flash(foe_portrait)
-	elif String(ev["kind"]) == "dodge":
+		_hitstop([att_rig, def_rig], float(HITSTOP.get(react, 0.04)))
+		_screen_shake(float(SHAKE.get(react, 3.0)))
+	elif kind == "dodge":
 		if def_rig:
 			def_rig.play_anim("dodge")
-	if bool(ev.get("knockdown", false)) and def_rig:
-		_knockdown_visual(def_rig)
 	if bool(ev.get("ko", false)) and def_rig:
 		_knockdown_visual(def_rig, true)
+	elif bool(ev.get("knockdown", false)) and def_rig:
+		_knockdown_visual(def_rig)
+
+## 顿帧：命中瞬间双方动画同时停住一小下，再继续（不影响逻辑与计时器）。
+func _hitstop(rigs: Array, secs: float) -> void:
+	var paused: Array = []
+	for r in rigs:
+		if r and is_instance_valid(r) and r.player:
+			r.player.speed_scale = 0.0
+			paused.append(r)
+	if paused.is_empty():
+		return
+	get_tree().create_timer(secs, true, false, true).timeout.connect(func() -> void:
+		for r in paused:
+			if is_instance_valid(r) and r.player:
+				r.player.speed_scale = 1.0)
+
+## 震屏：整个比赛画面按衰减抖动，幅度随打击档位。
+func _screen_shake(amp: float) -> void:
+	if amp <= 0.0 or scr_battle == null:
+		return
+	if _shake_tw and _shake_tw.is_valid():
+		_shake_tw.kill()
+	scr_battle.position = Vector2.ZERO
+	_shake_tw = create_tween()
+	var steps := 6
+	for i in steps:
+		var k := amp * (1.0 - float(i) / steps)
+		_shake_tw.tween_property(scr_battle, "position", Vector2(rng.randf_range(-k, k), rng.randf_range(-k * 0.6, k * 0.6)), 0.025)
+	_shake_tw.tween_property(scr_battle, "position", Vector2.ZERO, 0.03)
 
 func _flash(tr: CanvasItem) -> void:
 	tr.modulate = Color(2.0, 1.6, 1.6)
@@ -1216,12 +1273,18 @@ func _knockdown_visual(rig: FighterRig, stay: bool = false) -> void:
 	var old: Tween = _rig_tweens.get(rig)
 	if old and old.is_valid():
 		old.kill()
+	# 参考作：先踉跄（stagger 已在播）→ 倒地 → 躺着 → 挣扎起身（KO 则留在地上）。
 	var tw := create_tween()
 	_rig_tweens[rig] = tw
-	tw.tween_property(rig, "rotation", -1.35, 0.3)
+	tw.tween_interval(0.22) # 踉跄前段
+	tw.tween_property(rig, "rotation", -1.42, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(rig, "rotation", -1.30, 0.08) # 落地回弹
+	tw.tween_property(rig, "rotation", -1.38, 0.08)
 	if not stay:
-		tw.tween_interval(0.7)
-		tw.tween_property(rig, "rotation", 0.0, 0.4)
+		tw.tween_interval(0.9) # 读秒中
+		tw.tween_property(rig, "rotation", -0.7, 0.35).set_trans(Tween.TRANS_SINE) # 撑起
+		tw.tween_property(rig, "rotation", -0.85, 0.12) # 晃一下
+		tw.tween_property(rig, "rotation", 0.0, 0.38).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		tw.tween_callback(func() -> void: rig.play_anim("idle"))
 
 func _after_exchange(ev: Dictionary) -> void:

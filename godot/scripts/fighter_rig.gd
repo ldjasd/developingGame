@@ -312,54 +312,105 @@ const ANIM_DEFS := {
 			[2.4, {}],
 		],
 	},
-	"straight": {
-		"len": 0.62, "loop": false,
+	# ---- 出拳（2026-11-21 按参考作实测帧数重排时间轴）----
+	# 参考（60fps）：刺拳 3 帧到顶/全长 13；直拳 6/29；勾拳 13/41；上勾 11/42；击腹 16~18/51。
+	# 规律：轻拳几乎无前摇，轻重差距主要在收招；这里整体 ×1.25 放慢以便 2D 看清。
+	# 重拳整体位移（@root/Spine）约为刺拳的 2~3 倍——重量感来自身体压上去。
+	"jab": {
+		"len": 0.28, "loop": false,
 		"keys": [
 			[0.0, {}],
-			[0.10, {"@root": Vector2(5, 1), "UpperArmNear": -10.0, "ForeArmNear": 10.0, "Spine": -3.0, "Head": 2.0}],
-			[0.24, {"@root": Vector2(-17, 0), "UpperArmNear": 60.0, "ForeArmNear": -120.0, "Spine": 9.0, "Head": -6.0, "UpperArmFar": -14.0, "ForeArmFar": -18.0, "ThighNear": 4.0, "ThighFar": -4.0}],
-			[0.36, {"@root": Vector2(-16, 0), "UpperArmNear": 59.0, "ForeArmNear": -119.0, "Spine": 8.5, "Head": -5.5}],
-			[0.62, {}],
+			[0.025, {"@root": Vector2(2, 1), "UpperArmFar": -6.0, "ForeArmFar": 6.0}],
+			[0.06, {"@root": Vector2(-11, 0), "UpperArmFar": 40.0, "ForeArmFar": -94.0, "Spine": 6.0, "Head": -4.0, "UpperArmNear": -10.0, "ForeArmNear": -12.0}],
+			[0.11, {"@root": Vector2(-10, 0), "UpperArmFar": 39.0, "ForeArmFar": -93.0, "Spine": 5.5, "Head": -3.5}],
+			[0.28, {}],
 		],
 	},
-	"jab": {
-		"len": 0.5, "loop": false,
+	"straight": {
+		"len": 0.6, "loop": false,
 		"keys": [
 			[0.0, {}],
-			[0.08, {"@root": Vector2(4, 1), "UpperArmFar": -8.0, "ForeArmFar": 8.0}],
-			[0.19, {"@root": Vector2(-11, 0), "UpperArmFar": 40.0, "ForeArmFar": -94.0, "Spine": 6.0, "Head": -4.0, "UpperArmNear": -10.0, "ForeArmNear": -12.0}],
-			[0.28, {"@root": Vector2(-10, 0), "UpperArmFar": 39.0, "ForeArmFar": -93.0, "Spine": 5.5, "Head": -3.5}],
-			[0.5, {}],
+			[0.05, {"@root": Vector2(5, 1), "UpperArmNear": -10.0, "ForeArmNear": 10.0, "Spine": -3.0, "Head": 2.0}],
+			[0.125, {"@root": Vector2(-20, 0), "UpperArmNear": 60.0, "ForeArmNear": -120.0, "Spine": 11.0, "Head": -6.0, "UpperArmFar": -14.0, "ForeArmFar": -18.0, "ThighNear": 5.0, "ThighFar": -5.0}],
+			[0.2, {"@root": Vector2(-19, 0), "UpperArmNear": 59.0, "ForeArmNear": -119.0, "Spine": 10.5, "Head": -5.5}],
+			[0.6, {}],
 		],
 	},
 	"hook": {
-		"len": 0.6, "loop": false,
+		"len": 0.85, "loop": false,
 		"keys": [
 			[0.0, {}],
-			[0.12, {"@root": Vector2(6, 2), "UpperArmNear": -16.0, "ForeArmNear": 14.0, "Spine": -6.0}],
-			[0.27, {"@root": Vector2(-13, 1), "UpperArmNear": 38.0, "ForeArmNear": -52.0, "Spine": 13.0, "Head": -7.0}],
-			[0.38, {"@root": Vector2(-12, 1), "UpperArmNear": 37.0, "ForeArmNear": -51.0, "Spine": 12.0, "Head": -6.0}],
-			[0.6, {}],
+			[0.13, {"@root": Vector2(8, 2), "UpperArmNear": -18.0, "ForeArmNear": 14.0, "Spine": -8.0}],
+			[0.27, {"@root": Vector2(-22, 2), "UpperArmNear": 38.0, "ForeArmNear": -52.0, "Spine": 17.0, "Head": -8.0, "ThighNear": 5.0, "ThighFar": -5.0}],
+			[0.36, {"@root": Vector2(-21, 2), "UpperArmNear": 37.0, "ForeArmNear": -51.0, "Spine": 16.0, "Head": -7.0}],
+			[0.85, {}],
 		],
 	},
 	"upper": {
-		"len": 0.62, "loop": false,
+		"len": 0.88, "loop": false,
 		"keys": [
 			[0.0, {}],
-			[0.13, {"@root": Vector2(3, 12), "UpperArmNear": -6.0, "ForeArmNear": 6.0, "Spine": 7.0, "Head": 4.0}],
-			[0.28, {"@root": Vector2(-11, -7), "UpperArmNear": 22.0, "ForeArmNear": -78.0, "Spine": -4.0, "Head": -8.0}],
-			[0.4, {"@root": Vector2(-10, -6), "UpperArmNear": 21.0, "ForeArmNear": -77.0, "Spine": -3.5, "Head": -7.0}],
-			[0.62, {}],
+			[0.11, {"@root": Vector2(4, 18), "UpperArmNear": -6.0, "ForeArmNear": 6.0, "Spine": 9.0, "Head": 5.0, "ThighNear": 6.0, "ShinNear": -6.0}],
+			[0.23, {"@root": Vector2(-16, -12), "UpperArmNear": 22.0, "ForeArmNear": -78.0, "Spine": -6.0, "Head": -10.0}],
+			[0.32, {"@root": Vector2(-15, -11), "UpperArmNear": 21.0, "ForeArmNear": -77.0, "Spine": -5.5, "Head": -9.0}],
+			[0.88, {}],
 		],
 	},
 	"body": {
-		"len": 0.6, "loop": false,
+		"len": 1.06, "loop": false,
 		"keys": [
 			[0.0, {}],
-			[0.11, {"@root": Vector2(4, 8), "Spine": 8.0, "UpperArmNear": -8.0, "ForeArmNear": 8.0}],
-			[0.25, {"@root": Vector2(-14, 20), "UpperArmNear": 78.0, "ForeArmNear": -98.0, "Spine": 17.0, "Head": 6.0}],
-			[0.36, {"@root": Vector2(-13, 19), "UpperArmNear": 77.0, "ForeArmNear": -97.0, "Spine": 16.0, "Head": 5.5}],
-			[0.6, {}],
+			[0.16, {"@root": Vector2(5, 12), "Spine": 10.0, "UpperArmNear": -8.0, "ForeArmNear": 8.0, "ThighNear": 5.0}],
+			[0.35, {"@root": Vector2(-20, 26), "UpperArmNear": 78.0, "ForeArmNear": -98.0, "Spine": 20.0, "Head": 7.0, "ThighNear": 8.0, "ShinNear": -8.0}],
+			[0.44, {"@root": Vector2(-19, 25), "UpperArmNear": 77.0, "ForeArmNear": -97.0, "Spine": 19.0, "Head": 6.5}],
+			[1.06, {}],
+		],
+	},
+	# ---- 受击（参考作分 5 档时长：6 / 9~14 / 19~25 帧短硬直，60 帧踉跄；方向区分打脸 / 打腹 / 侧面）----
+	"hit_light": {
+		"len": 0.13, "loop": false,
+		"keys": [
+			[0.0, {}],
+			[0.03, {"@root": Vector2(6, 0), "Spine": -4.0, "Head": -8.0}],
+			[0.13, {}],
+		],
+	},
+	"hit_face": {
+		"len": 0.4, "loop": false,
+		"keys": [
+			[0.0, {}],
+			[0.05, {"@root": Vector2(14, 1), "Spine": -12.0, "Head": -20.0, "UpperArmNear": -12.0, "ForeArmNear": 16.0, "UpperArmFar": -10.0, "ForeArmFar": 14.0, "ThighNear": -4.0, "ThighFar": 4.0}],
+			[0.16, {"@root": Vector2(12, 1), "Spine": -9.0, "Head": -14.0, "UpperArmNear": -8.0, "ForeArmNear": 10.0}],
+			[0.4, {}],
+		],
+	},
+	"hit_body": {
+		"len": 0.42, "loop": false,
+		"keys": [
+			[0.0, {}],
+			[0.05, {"@root": Vector2(8, 10), "Spine": 16.0, "Head": 12.0, "UpperArmNear": 14.0, "ForeArmNear": 20.0, "UpperArmFar": 12.0, "ForeArmFar": 18.0, "ThighNear": 6.0, "ShinNear": -6.0}],
+			[0.2, {"@root": Vector2(7, 9), "Spine": 13.0, "Head": 9.0, "UpperArmNear": 10.0, "ForeArmNear": 14.0}],
+			[0.42, {}],
+		],
+	},
+	"hit_side": {
+		"len": 0.36, "loop": false,
+		"keys": [
+			[0.0, {}],
+			[0.05, {"@root": Vector2(10, 3), "Spine": -6.0, "Head": -28.0, "UpperArmNear": -8.0, "UpperArmFar": -14.0, "ForeArmFar": 18.0}],
+			[0.15, {"@root": Vector2(9, 3), "Spine": -4.0, "Head": -20.0}],
+			[0.36, {}],
+		],
+	},
+	"stagger": {
+		"len": 1.05, "loop": false,
+		"keys": [
+			[0.0, {}],
+			[0.06, {"@root": Vector2(22, 2), "Spine": -16.0, "Head": -24.0, "UpperArmNear": -20.0, "ForeArmNear": 24.0, "UpperArmFar": -18.0, "ForeArmFar": 22.0, "ThighNear": -8.0, "ThighFar": 8.0}],
+			[0.3, {"@root": Vector2(34, 10), "Spine": 10.0, "Head": 8.0, "UpperArmNear": 10.0, "ForeArmNear": 16.0, "UpperArmFar": 8.0, "ForeArmFar": 14.0, "ThighNear": 6.0, "ThighFar": -10.0, "ShinFar": 8.0}],
+			[0.55, {"@root": Vector2(30, 6), "Spine": 4.0, "Head": -4.0, "ThighNear": -4.0, "ThighFar": 5.0}],
+			[0.8, {"@root": Vector2(18, 3), "Spine": 6.0, "Head": 3.0}],
+			[1.05, {}],
 		],
 	},
 	"block": {
