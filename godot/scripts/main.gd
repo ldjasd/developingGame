@@ -101,6 +101,7 @@ var modal_text: RichTextLabel
 var modal_choices: VBoxContainer
 var hub_info: Label
 var hub_attrs: Label
+var hub_attr_grid: GridContainer
 var hub_log: RichTextLabel
 var hub_actions: VBoxContainer
 var sub_panel: PanelContainer
@@ -153,8 +154,71 @@ var pro_advance: Timer
 func _ready() -> void:
 	rng.randomize()
 	gs = GameState.new()
+	theme = _build_theme()
 	_build_ui()
 	_show_title()
+
+# ================= 背景音乐（muse 2026-11-21 提供：标题 / 日常 / 战斗）=================
+const BGM := {"title": "res://assets/audio/bgm_title.ogg", "daily": "res://assets/audio/bgm_daily.ogg", "battle": "res://assets/audio/bgm_battle.ogg"}
+const BGM_DB := -14.0
+var _bgm_players: Array = []
+var _bgm_cur := ""
+var _bgm_idx := 0
+
+## 切换背景音乐：0.8s 交叉淡入淡出；同一首不重启
+func _play_bgm(key: String) -> void:
+	if key == _bgm_cur or not BGM.has(key) or not ResourceLoader.exists(BGM[key]):
+		return
+	if _bgm_players.is_empty():
+		for i in 2:
+			var p := AudioStreamPlayer.new()
+			p.volume_db = -80.0
+			add_child(p)
+			_bgm_players.append(p)
+	var old: AudioStreamPlayer = _bgm_players[_bgm_idx]
+	_bgm_idx = 1 - _bgm_idx
+	var nxt: AudioStreamPlayer = _bgm_players[_bgm_idx]
+	var st: AudioStream = load(BGM[key])
+	if st is AudioStreamOggVorbis:
+		(st as AudioStreamOggVorbis).loop = true
+	nxt.stream = st
+	nxt.volume_db = -40.0
+	nxt.play()
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(nxt, "volume_db", BGM_DB, 0.8)
+	if old.playing:
+		tw.tween_property(old, "volume_db", -60.0, 0.8)
+		tw.chain().tween_callback(old.stop)
+	_bgm_cur = key
+
+# ================= UI 主题（muse 的 UI 素材套，godot/assets/ui/UI_KIT_NOTES.md）=================
+func _tex_box(path: String, margin: int, cl: int, ct: int) -> StyleBoxTexture:
+	var sb := StyleBoxTexture.new()
+	sb.texture = load(path)
+	sb.texture_margin_left = margin; sb.texture_margin_right = margin
+	sb.texture_margin_top = margin; sb.texture_margin_bottom = margin
+	sb.content_margin_left = cl; sb.content_margin_right = cl
+	sb.content_margin_top = ct; sb.content_margin_bottom = ct
+	return sb
+
+func _build_theme() -> Theme:
+	var th := Theme.new()
+	if not ResourceLoader.exists("res://assets/ui/btn_normal.png"):
+		return th
+	th.set_stylebox("normal", "Button", _tex_box("res://assets/ui/btn_normal.png", 24, 16, 8))
+	th.set_stylebox("hover", "Button", _tex_box("res://assets/ui/btn_hover.png", 24, 16, 8))
+	th.set_stylebox("pressed", "Button", _tex_box("res://assets/ui/btn_pressed.png", 24, 16, 8))
+	th.set_stylebox("disabled", "Button", _tex_box("res://assets/ui/btn_disabled.png", 24, 16, 8))
+	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	th.set_color("font_color", "Button", Color(1, 0.96, 1))
+	th.set_color("font_hover_color", "Button", Color(1, 1, 1))
+	th.set_color("font_pressed_color", "Button", Color(1, 0.85, 0.95))
+	th.set_color("font_disabled_color", "Button", Color(0.75, 0.7, 0.8, 0.7))
+	th.set_constant("outline_size", "Button", 3)
+	th.set_color("font_outline_color", "Button", Color(0.22, 0.08, 0.32, 0.8))
+	th.set_stylebox("panel", "PanelContainer", _tex_box("res://assets/ui/panel.png", 36, 22, 18))
+	th.set_font_size("font_size", "Button", 16)
+	return th
 
 # ================= UI 构建 =================
 
@@ -168,8 +232,8 @@ func _mk_label(text: String, size: int = 16, color: Color = Color(0.95, 0.92, 1.
 func _mk_button(text: String, callable: Callable, min_w: float = 0.0) -> Button:
 	var b := Button.new()
 	b.text = text
-	if min_w > 0.0:
-		b.custom_minimum_size.x = min_w
+	# muse 按钮框四角有星形装饰（9 宫格边距 24）：按钮太小时星会压字，统一给最小尺寸
+	b.custom_minimum_size = Vector2(maxf(min_w, 84.0), 40.0)
 	b.pressed.connect(callable)
 	return b
 
@@ -235,16 +299,30 @@ func _build_ui() -> void:
 	var mid := HBoxContainer.new()
 	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hub_root.add_child(mid)
-	hub_attrs = _mk_label("", 15)
-	hub_attrs.custom_minimum_size = Vector2(300, 0)
+	# 中枢左侧：主角立绘（muse ui/hub_me.webp）+ 属性面板（8 项带图标）+ 其余信息
+	if ResourceLoader.exists("res://assets/ui/hub_me.webp"):
+		var me_img := TextureRect.new()
+		me_img.texture = load("res://assets/ui/hub_me.webp")
+		me_img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		me_img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		me_img.custom_minimum_size = Vector2(210, 0)
+		me_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mid.add_child(me_img)
+	var left_panel := PanelContainer.new()
+	left_panel.custom_minimum_size = Vector2(310, 0)
+	mid.add_child(left_panel)
+	var left_col := VBoxContainer.new()
+	left_col.add_theme_constant_override("separation", 6)
+	left_panel.add_child(left_col)
+	hub_attr_grid = GridContainer.new()
+	hub_attr_grid.columns = 2
+	hub_attr_grid.add_theme_constant_override("h_separation", 10)
+	hub_attr_grid.add_theme_constant_override("v_separation", 4)
+	left_col.add_child(hub_attr_grid)
+	hub_attrs = _mk_label("", 14)
 	hub_attrs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var at_style := _style(Color(0.05, 0.03, 0.10, 0.6))
-	at_style.content_margin_left = 10
-	at_style.content_margin_right = 10
-	at_style.content_margin_top = 8
-	at_style.content_margin_bottom = 8
-	hub_attrs.add_theme_stylebox_override("normal", at_style)
-	mid.add_child(hub_attrs)
+	hub_attrs.custom_minimum_size = Vector2(260, 0)
+	left_col.add_child(hub_attrs)
 	hub_actions = VBoxContainer.new()
 	hub_actions.custom_minimum_size = Vector2(230, 0)
 	mid.add_child(hub_actions)
@@ -468,11 +546,13 @@ func _show_title() -> void:
 	scr_title.show()
 	scr_hub.hide()
 	scr_battle.hide()
+	_play_bgm("title")
 
 func _show_hub() -> void:
 	scr_title.hide()
 	scr_battle.hide()
 	scr_hub.show()
+	_play_bgm("daily")
 	_refresh_hub()
 	_show_sub_main()
 
@@ -497,9 +577,26 @@ func _refresh_hub() -> void:
 		int(gs.s["win_streak"]), int(gs.s["defenses"])]
 	var lines := ""
 	var names := {"power": "力量", "endurance": "耐久", "will": "意志", "speed": "出拳速度", "accuracy": "精准度", "footwork": "步伐速度", "defense": "防守技术", "technique": "技术"}
+	# 8 项属性：图标 + 名称 + 数值（muse ui/attr_*.png）
+	for c in hub_attr_grid.get_children():
+		c.queue_free()
 	for k in GameState.ATTR_KEYS:
-		lines += "%s %d\n" % [names[k], int(float(gs.s["attrs"][k]))]
-	lines += "\n拳种经验："
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 6)
+		var ip := "res://assets/ui/attr_%s.png" % k
+		if ResourceLoader.exists(ip):
+			var ic := TextureRect.new()
+			ic.texture = load(ip)
+			ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			ic.custom_minimum_size = Vector2(30, 30)
+			cell.add_child(ic)
+		var nl := _mk_label(String(names[k]), 14, Color(0.88, 0.84, 1.0))
+		nl.custom_minimum_size = Vector2(62, 0)
+		cell.add_child(nl)
+		cell.add_child(_mk_label(str(int(float(gs.s["attrs"][k]))), 17, Color(1.0, 0.86, 0.95)))
+		hub_attr_grid.add_child(cell)
+	lines += "拳种经验："
 	for k in ["jab", "straight", "hook", "upper", "body"]:
 		lines += "%s %d · " % [PUNCH_NAME[k], int(float(gs.s["punch_exp"][k]))]
 	lines += "\n\n已装备："
@@ -1335,6 +1432,7 @@ func _start_battle_scene() -> void:
 	scr_hub.hide()
 	scr_title.hide()
 	scr_battle.show()
+	_play_bgm("battle")
 	battle_over = false
 	player_turn = true
 	# 上一场残留的倒地 / 震屏补间先停掉（否则回调会落在已释放的角色上）
@@ -1431,7 +1529,12 @@ func _setup_manual_controls() -> void:
 		return
 	if player_turn:
 		for k in ["jab", "straight", "hook", "upper", "body"]:
-			b_controls.add_child(_mk_button(PUNCH_NAME[k], _on_player_punch.bind(k)))
+			var pb := _mk_button(PUNCH_NAME[k], _on_player_punch.bind(k))
+			var ip := "res://assets/ui/punch_%s.png" % k
+			if ResourceLoader.exists(ip):
+				pb.icon = load(ip) # muse ui/punch_*.png 拳种图标
+				pb.add_theme_constant_override("icon_max_width", 34)
+			b_controls.add_child(pb)
 	else:
 		b_controls.add_child(_mk_button("格挡", _on_player_defend.bind("block")))
 		b_controls.add_child(_mk_button("闪避（反击窗口）", _on_player_defend.bind("dodge")))

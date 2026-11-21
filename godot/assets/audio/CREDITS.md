@@ -10,6 +10,15 @@
 | 挥空 | `air_cloth/jacket_00/03/04/07/11/13.wav`、`air_cloth/tshirt_00/07/33.wav` | 衣物挥动实录切出：Nox_Sound 夹克 6 条 + Soundholder T恤 3 条；去 90Hz 以下、淡入淡出、统一音量（`godot/tools/make_air_crowd.py cloth`）。`air/whoosh_*`（竹竿版）已不再使用 |
 | 观众 | `crowd/crowd_win.wav` | FoolBoyMedia 获胜欢呼实录取最响的 3.2 秒，去 80Hz 以下、淡入淡出（另两段 `crowd_arena`/`crowd_fight` 保留未用） |
 
+## 背景音乐（BGM）
+| 场景 | 文件 | 来源 |
+|---|---|---|
+| 标题 | `bgm_title.ogg` | muse 提供（2026-11-21） |
+| 日常中枢 | `bgm_daily.ogg` | muse 提供 |
+| 比赛 | `bgm_battle.ogg` | muse 提供 |
+
+**来源与授权待确认**：文件内无标签（仅 libvorbis 编码信息），仓库里也没有出处说明。发布前须由 muse 补上作者 / 链接 / 许可证；若无法确认，换成可查证的 CC0 曲目。游戏内音量 −14dB，场景切换 0.8 秒交叉淡化、循环播放。
+
 ## 需要署名的素材（CC BY 3.0）——游戏致谢 / 发布页必须保留
 **"swipes and whooshes tshirt fast and short swings"** by **Soundholder** — https://freesound.org/people/Soundholder/sounds/425856/ — licensed under CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). 改动：切成单次挥动、去 90Hz 以下、淡入淡出、统一音量。
 
