@@ -23,13 +23,37 @@ const SFX_FOR_REACT := {"hit_light": "hit_light", "hit_face": "hit_heavy", "hit_
 var _sfx_cache := {}
 var _sfx_players: Array = []
 
+## 真实录音优先（Kenney「Impact Sounds」CC0，assets/audio/kenney/，每次随机一个变体），没有就用合成版 wav
+## [录音名前缀, 音量修正 dB, 音高倍率]
+const SFX_RECORDED := {
+	"hit_light": ["impactPunch_medium", -2.0, 1.08],
+	"hit_heavy": ["impactPunch_heavy", 0.0, 1.0],
+	"hit_body": ["impactSoft_heavy", 1.0, 0.92],
+	"block": ["impactSoft_medium", -3.0, 1.05],
+	"knockdown": ["impactSoft_heavy", 3.0, 0.62],
+	"bell": ["impactBell_heavy", -2.0, 1.0],
+}
+
 func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	if not _sfx_cache.has(name):
-		var path := "res://assets/audio/%s.wav" % name
-		_sfx_cache[name] = load(path) if ResourceLoader.exists(path) else null
-	var stream: AudioStream = _sfx_cache[name]
-	if stream == null:
+		var variants: Array = []
+		if SFX_RECORDED.has(name):
+			for i in 5:
+				var rp := "res://assets/audio/kenney/%s_%03d.ogg" % [String(SFX_RECORDED[name][0]), i]
+				if ResourceLoader.exists(rp):
+					variants.append(load(rp))
+		if variants.is_empty():
+			var path := "res://assets/audio/%s.wav" % name
+			if ResourceLoader.exists(path):
+				variants.append(load(path))
+		_sfx_cache[name] = variants
+	var vs: Array = _sfx_cache[name]
+	if vs.is_empty():
 		return
+	var stream: AudioStream = vs[rng.randi_range(0, vs.size() - 1)]
+	if SFX_RECORDED.has(name) and vs.size() > 1:
+		vol_db += float(SFX_RECORDED[name][1])
+		pitch *= float(SFX_RECORDED[name][2])
 	if _sfx_players.is_empty():
 		for i in 8:
 			var p := AudioStreamPlayer.new()
