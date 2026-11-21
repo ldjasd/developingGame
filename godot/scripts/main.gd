@@ -25,12 +25,13 @@ var _sfx_players: Array = []
 
 ## 真实录音优先（Kenney「Impact Sounds」CC0，assets/audio/kenney/，每次随机一个变体），没有就用合成版 wav
 ## [录音名前缀, 音量修正 dB, 音高倍率]
+## 用户 2026-11-21：变调后听起来「像加了滤镜、不像原声」→ 录音一律原速原调播放，只用音量平衡，不加随机变调
 const SFX_RECORDED := {
-	"hit_light": ["impactPunch_medium", -2.0, 1.08],
+	"hit_light": ["impactPunch_medium", -2.0, 1.0],
 	"hit_heavy": ["impactPunch_heavy", 0.0, 1.0],
-	"hit_body": ["impactSoft_heavy", 1.0, 0.92],
-	"block": ["impactSoft_medium", -3.0, 1.05],
-	"knockdown": ["impactSoft_heavy", 3.0, 0.62],
+	"hit_body": ["impactSoft_heavy", 0.0, 1.0],
+	"block": ["impactSoft_medium", -4.0, 1.0],
+	"knockdown": ["impactSoft_heavy", 2.0, 1.0],
 	"bell": ["impactBell_heavy", -2.0, 1.0],
 }
 
@@ -53,7 +54,6 @@ func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	var stream: AudioStream = vs[rng.randi_range(0, vs.size() - 1)]
 	if SFX_RECORDED.has(name) and vs.size() > 1:
 		vol_db += float(SFX_RECORDED[name][1])
-		pitch *= float(SFX_RECORDED[name][2])
 	if _sfx_players.is_empty():
 		for i in 8:
 			var p := AudioStreamPlayer.new()
@@ -66,7 +66,8 @@ func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 			break
 	pl.stream = stream
 	pl.volume_db = vol_db
-	pl.pitch_scale = pitch * rng.randf_range(0.95, 1.05)
+	# 录音：原速原调（调用方传的 pitch 也忽略），只靠 5 个变体避免重复感；合成音效才允许调音高
+	pl.pitch_scale = 1.0 if SFX_RECORDED.has(name) and vs.size() > 1 else pitch
 	pl.play()
 
 var gs: GameState
