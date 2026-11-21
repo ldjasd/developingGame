@@ -28,11 +28,12 @@ var _sfx_players: Array = []
 ## 拳套命中：Freesound CC0 真实拳套实录（assets/audio/freesound/，用 tools/slice_hits.py 只裁剪切出）
 ## 倒地、回合铃：Kenney Impact Sounds（CC0）；挥空、观众：合成版
 ## 用户 2026-11-21：变调后「像加了滤镜」→ 录音一律原速原调播放，只用音量平衡
+## 2026-11-21 用户试听定稿：命中音用「打人版」降脆版（tools/design_punches.py person），格挡用去毛刺版拳套对拳套
 const SFX_RECORDED := {
-	"hit_light": [["freesound/light_0", "freesound/light_1", "freesound/light_2", "freesound/light_3"], -3.0],
-	"hit_heavy": [["freesound/heavy_0", "freesound/heavy_1", "freesound/heavy_2", "freesound/heavy_3", "freesound/heavy_4"], 0.0],
-	"hit_body": [["freesound/body_0", "freesound/body_1", "freesound/body_2"], 0.0],
-	"block": [["freesound/block_0", "freesound/block_1", "freesound/block_2"], -6.0],
+	"hit_light": [["designed_person/light_0", "designed_person/light_1", "designed_person/light_2", "designed_person/light_3"], -3.0],
+	"hit_heavy": [["designed_person/heavy_0", "designed_person/heavy_1", "designed_person/heavy_2", "designed_person/heavy_3", "designed_person/heavy_4"], 0.0],
+	"hit_body": [["designed_person/body_0", "designed_person/body_1", "designed_person/body_2", "designed_person/body_3"], 0.0],
+	"block": [["designed/block_0", "designed/block_1", "designed/block_2"], -6.0],
 	"knockdown": [["kenney/impactSoft_heavy_000.ogg", "kenney/impactSoft_heavy_002.ogg", "kenney/impactSoft_heavy_004.ogg"], 2.0],
 	"bell": [["kenney/impactBell_heavy_000.ogg", "kenney/impactBell_heavy_001.ogg"], -2.0],
 }

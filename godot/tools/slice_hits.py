@@ -6,7 +6,8 @@
 import os, glob, subprocess, csv
 import numpy as np
 
-SRC = r'D:\gamemake\third_party_dl\freesound'
+import sys
+SRC = sys.argv[1] if len(sys.argv) > 1 else r'D:\gamemake\third_party_dl\freesound'
 OUT = os.path.join(SRC, 'slices')
 FF = glob.glob(os.path.expandvars(r'%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\**\ffmpeg.exe'), recursive=True)[0]
 SR = 48000
@@ -39,7 +40,8 @@ def main():
     rows = []
     for f in sorted(glob.glob(os.path.join(SRC, '*.*'))):
         if os.path.isdir(f): continue
-        tag = os.path.basename(f).split('__')[1] if '__' in f else os.path.basename(f)
+        parts = os.path.basename(f).split('__')
+        tag = (parts[1] + parts[0]) if len(parts) > 1 else os.path.basename(f)  # 作者 + 音效 id，避免同作者多条重名
         x = load(f)
         ons = onsets(x)
         for k, o in enumerate(ons):

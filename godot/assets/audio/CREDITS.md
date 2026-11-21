@@ -1,15 +1,26 @@
 # 音效来源
 
-| 文件 | 来源 | 授权 |
+## 游戏里实际使用的
+| 游戏音效 | 文件 | 由什么做成 |
 |---|---|---|
-| `freesound/heavy_*.wav`、`freesound/body_*.wav` | 「boxing glove punches big various」by **kyles** — https://freesound.org/people/kyles/sounds/637255/ | CC0 1.0 |
-| `freesound/light_0~1.wav` | 「Punching Bag」by **aidansamuel** — https://freesound.org/people/aidansamuel/sounds/540131/ | CC0 1.0 |
-| `freesound/light_2~3.wav`、`freesound/block_*.wav` | 「boxing speed bag practice」by **21100495** — https://freesound.org/people/21100495/sounds/655326/ | CC0 1.0 |
-| `kenney/*.ogg` | Kenney「Impact Sounds」1.0 — https://kenney.nl/assets/impact-sounds（授权原文 `kenney/License.txt`） | CC0 1.0 |
-| `*.wav`（本目录） | 本项目原创合成（`godot/tools/gen_sfx.py`） | 本项目自有 |
+| 刺拳 / 重拳 / 击腹 | `designed_person/*.wav` | 「打在人身上」实录为主体 + 拳套实录最前 9ms 皮革声 + 合成低频与肉感层（`godot/tools/design_punches.py person`） |
+| 格挡 | `designed/block_*.wav` | 速度球拳套实录 + 合成层（`design_punches.py`） |
+| 倒地、回合铃 | `kenney/*.ogg` | Kenney Impact Sounds 原样 |
+| 挥空、观众 | `whoosh.wav`、`crowd.wav` | 本项目合成（`gen_sfx.py`） |
 
-处理方式：Freesound 录音只做裁剪（`godot/tools/slice_hits.py`：按起音切单发、2ms 淡入 / 25ms 淡出防爆音、统一峰值音量），**不变调、不滤波、不压缩**。2026-11-21 下载，原始文件不入仓库。
+## 素材来源与授权（全部 CC0 1.0，可商用，不要求署名）
+| 来源 | 作者 | 链接 |
+|---|---|---|
+| Face Punch, Body Impact, 4x | Kinoton | https://freesound.org/people/Kinoton/sounds/503277/ |
+| Power Kick, Body Impact, 7x | Kinoton | https://freesound.org/people/Kinoton/sounds/586841/ |
+| Punching Dough | qubodup | https://freesound.org/people/qubodup/sounds/172489/ |
+| boxing glove punches big various | kyles | https://freesound.org/people/kyles/sounds/637255/ |
+| Punching Bag | aidansamuel | https://freesound.org/people/aidansamuel/sounds/540131/ |
+| boxing speed bag practice | 21100495 | https://freesound.org/people/21100495/sounds/655326/ |
+| Impact Sounds 1.0 | Kenney | https://kenney.nl/assets/impact-sounds（原文 `kenney/License.txt`） |
 
-游戏内用法（`main.gd` `SFX_RECORDED`）：刺拳 / 重拳 / 击腹 / 格挡用 Freesound 实录，倒地与回合铃用 Kenney，挥空与观众用合成版；每次随机挑一个变体，原速原调播放。
+另下载但未进游戏：Face/Body Being Punched、Face Being Punched 2（elynch0901）、Punch in the face（Huminaatio）、Punches/hits（Wigglesworth），均为 CC0。
+`freesound/*.wav` 是上一版（直接用实录切片），保留作对照，游戏已不再引用。
 
-致谢（CC0 不要求署名，自愿注明）：kyles、aidansamuel、21100495（freesound.org），Kenney（www.kenney.nl）。
+处理原则：实录**不变调**（用户反馈变调像加滤镜）；只做裁剪、尾部淡出去底噪、11kHz 以上缓坡去嘶声、4kHz 以上约 −3dB 缓坡、轻限幅；分量来自叠加层。原始下载在仓库外 `D:\gamemake\third_party_dl\`，不入仓库。
+自愿致谢：Kinoton、qubodup、kyles、aidansamuel、21100495（freesound.org），Kenney（www.kenney.nl）。
