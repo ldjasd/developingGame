@@ -34,12 +34,16 @@ def fades(x, fi, fo):
 def norm(x, peak=0.89):
     return x / (np.abs(x).max() + 1e-9) * peak
 
-def whooshes():
-    """Kinoton 13 下：按包络找每一下的能量块，取块前 60ms ~ 块后 120ms"""
-    x = load('427979__kinoton__short-whoosh-13x.wav')
+def whooshes(name='427979__kinoton__short-whoosh-13x.wav', src=None, thr_db=-24):
+    """按包络找每一下的能量块，取块前 60ms ~ 块后 120ms"""
+    global SRC
+    old = SRC
+    if src: SRC = src
+    x = load(name)
+    SRC = old
     hop = int(SR * 0.01)
     env = np.array([np.sqrt((x[i:i + hop] ** 2).mean()) for i in range(0, len(x) - hop, hop)])
-    thr = env.max() * 10 ** (-24 / 20)
+    thr = env.max() * 10 ** (thr_db / 20)
     on = env > thr
     segs, i = [], 0
     while i < len(on):
@@ -75,5 +79,24 @@ def main():
         wr(OUT_CROWD, nm + '.wav', norm(fades(highpass(seg, 80), 0.15, 1.2), 0.8))
         print(nm, 'from', round(best / SR, 1), 's')
 
+## 衣物挥动版（用户 2026-11-21：竹竿挥空「像金属东西挥空，不像拳击」）
+## 真实出拳的破风主要是手臂和袖子划过空气：更低、更闷、带布料摩擦
+CLOTH_SRC = r'D:\gamemake\third_party_dl\freesound_cloth'
+CLOTH = [('495390__nox_sound__jacket-whoosh-sequence.wav', 'jacket'), ('391448__saturdaysoundguy__shirt-whoosh-1.wav', 'shirt'),
+         ('767407__vrymaa__woosh-collection-01.wav', 'vrymaa'), ('425856__soundholder__tshirt-fast-short-swings.wav', 'tshirt')]
+
+def main_cloth():
+    out = os.path.join(HERE, '..', 'assets', 'audio', 'air_cloth')
+    for f, tag in CLOTH:
+        ws = whooshes(f, CLOTH_SRC, -22)
+        ws = [w for w in ws if 0.12 * SR <= len(w) <= 0.7 * SR]
+        for k, w in enumerate(ws):
+            wr(out, f'{tag}_{k:02d}.wav', norm(fades(highpass(w, 90), 0.008, 0.06)))
+        print(tag, len(ws))
+
 if __name__ == '__main__':
-    main()
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == 'cloth':
+        main_cloth()
+    else:
+        main()

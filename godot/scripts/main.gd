@@ -39,7 +39,7 @@ const SFX_RECORDED := {
 	# 挥空：Kinoton「Short Whoosh, 13x」切出 15 条 + ihitokage「Swish 5」；观众：FoolBoyMedia / kyles / craigsmith 欢呼实录（均 CC0，tools/make_air_crowd.py）
 	"whoosh": [["air/whoosh_0", "air/whoosh_1", "air/whoosh_2", "air/whoosh_3", "air/whoosh_4", "air/whoosh_5", "air/whoosh_6", "air/whoosh_7",
 		"air/whoosh_8", "air/whoosh_9", "air/whoosh_10", "air/whoosh_11", "air/whoosh_12", "air/whoosh_13", "air/whoosh_14", "air/whoosh_15"], -2.0],
-	"crowd": [["crowd/crowd_win", "crowd/crowd_arena", "crowd/crowd_fight"], 0.0],
+	"crowd": [["crowd/crowd_win"], 0.0], # 用户 2026-11-21 试听：只留第一段（FoolBoyMedia 获胜欢呼）
 	"bell_start": [["bell/bell_start"], 0.0],
 	"bell_end": [["bell/bell_end"], 0.0],
 }
