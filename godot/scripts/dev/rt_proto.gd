@@ -61,6 +61,14 @@ var _ko_cam_on := false
 var _ko_victim: Node3D
 var _ko_orbit := 0.0
 var _shake_t := 0.0
+var _aside := 0.0
+# 镜头：0 自动（贴身 = 背后，拉开 / 绕圈 = 斜后方）、1 背后锁定、2 第三人称斜后方、3 转播机位
+const CAM_NAMES := ["自动", "背后锁定", "第三人称斜后方", "转播机位"]
+var _auto_w := 0.0
+var _cam_xf := Transform3D.IDENTITY
+var _cam_fov := 40.0
+var _cam_init := false
+var cam_lb: Label
 
 
 func _ready() -> void:
@@ -79,6 +87,8 @@ func _ready() -> void:
 			foe_attr = float(a.substr(6))
 		elif a.begins_with("--seed="):
 			seed_v = int(a.substr(7))
+		elif a.begins_with("--cam="):
+			cam_mode = clampi(int(a.substr(6)), 0, 3)
 	var ring: Node3D = Ring.new()
 	add_child(ring)
 	cam = Camera3D.new()
@@ -360,19 +370,7 @@ func _process(delta: float) -> void:
 			_snap("end")
 		get_tree().quit()
 		return
-	# 读秒时站着的一方退回中立角（背后视角下也不会挡住倒地的人）
-	if core.phase == "down" or core.finished:
-		var down_is_b := float(core.b["hp"]) <= float(core.a["hp"]) if core.finished else (String(foe_v.get("action")) == "down")
-		var stander := me_v if down_is_b else foe_v
-		var base_z := GAP if stander == me_v else -GAP
-		var back := 0.25 if stander == me_v else -0.9
-		stander.position.z = move_toward(stander.position.z, base_z + back, delta * 1.0)
-		stander.position.x = move_toward(stander.position.x, 0.75 if stander == me_v else -0.55, delta * 1.2)
-	else:
-		for v in [me_v, foe_v]:
-			var bz := GAP if v == me_v else -GAP
-			v.position.z = move_toward(v.position.z, bz, delta * 2.0)
-			v.position.x = move_toward(v.position.x, 0.0, delta * 1.5)
+	_layout(delta)
 	if freeze > 0.0:
 		freeze -= delta
 		return
@@ -384,10 +382,40 @@ func _process(delta: float) -> void:
 		return
 	if not bot:
 		_poll_block()
+		_poll_move()
 	core.step(delta)
 	_sync_guard()
 	me_v.call("update_pose", delta)
 	foe_v.call("update_pose", delta)
+
+
+## 角色站位跟规则内核走；读秒时站着的一方让到一边（不挡倒地的人）
+func _layout(delta: float) -> void:
+	var down := core.phase == "down" or core.finished
+	var downed_is_b := String(foe_v.get("action")) in ["knock", "ko_fall", "down"]
+	_aside = move_toward(_aside, 1.0 if down else 0.0, delta * 1.2)
+	for pair in [[core.a, me_v], [core.b, foe_v]]:
+		var f: Dictionary = pair[0]
+		var v: Node3D = pair[1]
+		var p: Vector2 = f["pos"]
+		var ax := core.axis_of(f)
+		var off := Vector2.ZERO
+		var is_stander := (v == me_v) == downed_is_b
+		if is_stander and _aside > 0.0:
+			var right := Vector2(-ax.y, ax.x)
+			off = (right * 0.75 - ax * 0.35) * ease(_aside, -2.0)
+		v.position = Vector3(p.x + off.x, 0.0, p.y + off.y)
+		v.rotation.y = atan2(-ax.x, -ax.y)
+
+
+func _p3(f: Dictionary) -> Vector3:
+	var p: Vector2 = f["pos"]
+	return Vector3(p.x, 0.0, p.y)
+
+
+func _ax3(f: Dictionary) -> Vector3:
+	var ax := core.axis_of(f)
+	return Vector3(ax.x, 0.0, ax.y)
 
 
 func _sync_guard() -> void:
@@ -398,6 +426,17 @@ func _sync_guard() -> void:
 		if String(f["act"]) == "block":
 			g = 2 if bool(f["block_low"]) else 1
 		v.set("guard_hold", g)
+
+
+## WASD：W 前压 / S 后退 / A D 绕圈（按住 Shift 时是闪避，按住空格时 S 是低格挡，都不移动）
+func _poll_move() -> void:
+	var v := Vector2.ZERO
+	if not Input.is_physical_key_pressed(KEY_SHIFT):
+		if Input.is_physical_key_pressed(KEY_W): v.y += 1.0
+		if Input.is_physical_key_pressed(KEY_S) and not Input.is_physical_key_pressed(KEY_SPACE): v.y -= 1.0
+		if Input.is_physical_key_pressed(KEY_D): v.x += 1.0
+		if Input.is_physical_key_pressed(KEY_A): v.x -= 1.0
+	core.input_move(core.a, v)
 
 
 func _poll_block() -> void:
@@ -419,8 +458,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().quit()
 		return
 	if k == KEY_C:
-		cam_mode = 1 - cam_mode
-		cam.cull_mask = 5 if cam_mode == 0 else 3
+		cam_mode = (cam_mode + 1) % CAM_NAMES.size()
 		return
 	if k == KEY_ENTER and core.finished:
 		_new_match()
@@ -433,31 +471,64 @@ func _unhandled_input(event: InputEvent) -> void:
 		if dir != "":
 			core.input_dodge(f, dir)
 		return
-	if k == KEY_J or k == KEY_K:
-		var kind := "jab" if k == KEY_J else "straight"
-		if Input.is_physical_key_pressed(KEY_W):
-			kind = "upper"
-		elif Input.is_physical_key_pressed(KEY_S):
-			kind = "body"
-		elif Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_D):
-			kind = "hook"
+	var keymap := {KEY_J: "jab", KEY_K: "straight", KEY_U: "hook", KEY_I: "upper", KEY_L: "body"}
+	if keymap.has(k):
 		if String(f["act"]) == "block":
 			core.input_block(f, false)
-		core.input_punch(f, kind)
+		core.input_punch(f, String(keymap[k]))
 
 
 func _place_cam(delta: float) -> void:
 	fov_kick = move_toward(fov_kick, 0.0, delta * 25.0)
-	var me_p := Vector3(0, 0, GAP)  # 镜头不跟主角退角：主角往侧边让开，倒地的人露出来
-	if cam_mode == 0:
-		cam.position = me_p + Vector3(0, 2.7, 1.75)
-		cam.look_at(Vector3(0, 0.95, -GAP))
-		cam.fov = 40.0 - fov_kick
-	else:
-		var mid := Vector3(0, 1.2, 0)
-		cam.position = mid + Vector3(sin(deg_to_rad(38.0)) * 3.0, 0.7, cos(deg_to_rad(38.0)) * 3.0)
-		cam.look_at(mid + Vector3(0, -0.1, 0))
-		cam.fov = 45.0 - fov_kick
+	var me3 := _p3(core.a)
+	var foe3 := _p3(core.b)
+	var ax3 := _ax3(core.a)
+	var mid := (me3 + foe3) * 0.5
+	# ① 背后锁定：永远在主角身后、沿两人连线
+	var back_xf := Transform3D(Basis.IDENTITY, me3 - ax3 * 1.75 + Vector3(0, 2.7, 0)).looking_at(foe3 + Vector3(0, 0.95, 0), Vector3.UP)
+	# ② 第三人称斜后方：连线后方转 40°，看两人中点
+	var side_dir := (-ax3).rotated(Vector3.UP, deg_to_rad(40.0))
+	var dist := core.distance()
+	var tp_xf := Transform3D(Basis.IDENTITY, mid + side_dir * (2.6 + dist * 0.6) + Vector3(0, 1.9, 0)).looking_at(mid + Vector3(0, 1.0, 0), Vector3.UP)
+	# ③ 转播机位：擂台边固定位置，只转头跟两人中点
+	var bc_xf := Transform3D(Basis.IDENTITY, Vector3(4.6, 2.4, 1.2)).looking_at(mid + Vector3(0, 0.9, 0), Vector3.UP)
+	var target := back_xf
+	var fov := 40.0
+	var ghost := true
+	match cam_mode:
+		0:
+			# 自动：贴身对打时背后；拉开距离或在绕圈时拉到斜后方
+			var mv: Vector2 = core.a["move"]
+			var want := clampf((dist - 1.15) / 0.45, 0.0, 1.0)
+			want = maxf(want, clampf(absf(mv.x) * 1.2, 0.0, 1.0) * 0.8)
+			_auto_w = move_toward(_auto_w, want, delta * (1.6 if want > _auto_w else 0.9))
+			var w := ease(_auto_w, -1.8)
+			target = back_xf.interpolate_with(tp_xf, w)
+			fov = lerpf(40.0, 45.0, w)
+			ghost = w < 0.8
+		1:
+			pass
+		2:
+			target = tp_xf
+			fov = 45.0
+			ghost = false
+		3:
+			target = bc_xf
+			fov = clampf(24.0 + dist * 6.0, 26.0, 40.0)
+			ghost = false
+	# 镜头平滑跟随（避免绕圈时抖）
+	if not _cam_init:
+		_cam_xf = target
+		_cam_fov = fov
+		_cam_init = true
+	var k := clampf(delta * 7.0, 0.0, 1.0)
+	_cam_xf = _cam_xf.interpolate_with(target, k)
+	_cam_fov = lerpf(_cam_fov, fov, k)
+	cam.global_transform = _cam_xf
+	cam.fov = _cam_fov - fov_kick
+	cam.cull_mask = 5 if ghost else 3
+	if cam_lb:
+		cam_lb.text = "镜头：" + CAM_NAMES[cam_mode] + "（C 切换）"
 	# KO 镜头：从侧前方推近倒地的人，然后像转播一样慢慢绕
 	_ko_cam_w = move_toward(_ko_cam_w, 1.0 if _ko_cam_on else 0.0, delta * 2.5)
 	if _ko_cam_w > 0.0 and _ko_victim:
@@ -472,7 +543,8 @@ func _place_cam(delta: float) -> void:
 		var w := ease(_ko_cam_w, -2.0)
 		cam.global_transform = cam.global_transform.interpolate_with(ko_xf, w)
 		cam.fov = lerpf(cam.fov, 38.0 - fov_kick, w)
-		cam.cull_mask = 3 if w > 0.5 else (5 if cam_mode == 0 else 3)  # KO 镜头里主角显示实体
+		if w > 0.5:
+			cam.cull_mask = 3  # KO 镜头里主角显示实体
 	# 落地小震（只给击倒 / KO，3px 量级）
 	if _shake_t > 0.0:
 		_shake_t -= delta
@@ -538,9 +610,12 @@ func _build_hud() -> void:
 	info_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info_lb.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
 	hud.add_child(info_lb)
-	var help := _label("J 左手 / K 右手（+W 上勾 · +S 击腹 · +A/D 摆拳）   空格 格挡（+S 低格挡）   Shift+A/D 闪避 · Shift+S 下潜   C 切镜头", 16)
+	var help := _label("WASD 走位（A/D 绕圈）   J 刺拳 · K 直拳 · U 摆拳 · I 上勾 · L 击腹   空格 格挡（+S 低格挡）   Shift+A/D 闪避 · Shift+S 下潜   C 切镜头", 16)
 	help.position = Vector2(24, 764)
 	hud.add_child(help)
+	cam_lb = _label("", 16)
+	cam_lb.position = Vector2(24, 120)
+	hud.add_child(cam_lb)
 
 
 func _label(t: String, size: int) -> Label:

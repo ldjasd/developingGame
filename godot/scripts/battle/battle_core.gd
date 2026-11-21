@@ -43,9 +43,17 @@ const ROUND_SEC := 60.0
 const ROUNDS := 3
 const COUNT_SEC := 1.0         # 读秒每个数字的时长（呈现用；回合钟在读秒时暂停）
 const ROUND_STAM := 25.0       # 回合间体力回复
+# 擂台走位（米）
+const RING_HALF := 2.55        # 围绳内可站范围（半边长）
+const START_GAP := 1.2
+const MIN_GAP := 0.72
+const MOVE_SPEED := 1.5        # 米 / 秒（× (0.7 + 步伐 × 0.01)）
+const CIRCLE_MUL := 0.85
+# 出拳射程（两人中心距离，超过就打空）：直线拳远，弧线拳近
+const REACH := {"jab": 1.30, "straight": 1.30, "hook": 1.08, "upper": 0.98, "body": 1.10}
 
 # —— 标定面 ——
-var HP_SCALE := 3.0            # 实时出拳次数多于交换制，HP 池按比例放大（2026-11-21 rt_probe 标定：2.6→3.0）
+var HP_SCALE := 2.5            # 实时出拳次数多于交换制，HP 池按比例放大（rt_probe 标定：2.6→3.0；加入走位与射程后 3.0→2.5）
 var TRAUMA_DECAY_SEC := 0.55   # 起点为交换制折算 0.93/秒；标定后 0.55（让重创击倒 / TKO 出现）
 var STAM_REGEN := 2.2          # 每秒（不出拳、不格挡 0.5 秒后）
 var AI_RATE := 1.0             # AI 出拳频率总倍率
@@ -98,6 +106,11 @@ static func make(name: String, is_player: bool, attrs: Dictionary, opts: Diction
 	f["ai_next"] = 0.8
 	f["ai_seen"] = 0
 	f["ai_hold"] = 0.0
+	# 擂台站位（米，擂台平面 x/z，中心为原点）；move = 本地输入（x 绕圈 右为正，y 前进为正）
+	f["pos"] = Vector2.ZERO
+	f["move"] = Vector2.ZERO
+	f["ai_circle"] = 1.0
+	f["ai_circle_t"] = 0.0
 	return f
 
 
@@ -111,6 +124,7 @@ func start(pa: Dictionary, pb: Dictionary, seed_v: int = -1) -> void:
 	for f in [a, b]:
 		f["max_hp"] = float(f["max_hp"]) * HP_SCALE
 		f["hp"] = f["max_hp"]
+	_reset_positions()
 	round_no = 1
 	clock = round_sec
 	t = 0.0
@@ -122,6 +136,61 @@ func start(pa: Dictionary, pb: Dictionary, seed_v: int = -1) -> void:
 
 func foe_of(f: Dictionary) -> Dictionary:
 	return b if f == a else a
+
+
+func _reset_positions() -> void:
+	a["pos"] = Vector2(0.0, START_GAP * 0.5)
+	b["pos"] = Vector2(0.0, -START_GAP * 0.5)
+
+
+func distance() -> float:
+	return (a["pos"] as Vector2).distance_to(b["pos"])
+
+
+## f 指向对手的单位向量（擂台平面）
+func axis_of(f: Dictionary) -> Vector2:
+	var d: Vector2 = (foe_of(f)["pos"] as Vector2) - (f["pos"] as Vector2)
+	return d.normalized() if d.length() > 0.001 else Vector2(0, -1)
+
+
+## 玩家 / AI 设置移动输入：x = 绕圈（右为正），y = 前进（正）/ 后退（负），各 -1~1
+func input_move(f: Dictionary, v: Vector2) -> void:
+	f["move"] = v.limit_length(1.0)
+
+
+func _move(f: Dictionary, dt: float) -> void:
+	var mv: Vector2 = f["move"]
+	if mv.length() < 0.01 or phase != "fight":
+		return
+	var act := String(f["act"])
+	var mul := 1.0
+	if float(f["stun"]) > 0.0 or act == "dodge":
+		return
+	if act == "block":
+		mul = 0.35
+	elif act == "punch":
+		mul = 0.45
+	var spd := MOVE_SPEED * (0.7 + eff_attr(f, "footwork") * 0.01) * mul
+	var ax := axis_of(f)
+	var right := Vector2(-ax.y, ax.x)  # 面朝 ax 时的右手方向
+	var p: Vector2 = f["pos"]
+	p += (ax * mv.y + right * mv.x * CIRCLE_MUL) * spd * dt
+	# 擂台边界（围绳）
+	p.x = clampf(p.x, -RING_HALF, RING_HALF)
+	p.y = clampf(p.y, -RING_HALF, RING_HALF)
+	# 不能穿过对手
+	var o: Vector2 = foe_of(f)["pos"]
+	if p.distance_to(o) < MIN_GAP:
+		p = o + (p - o).normalized() * MIN_GAP
+	f["pos"] = p
+
+
+## 背后有没有围绳（离边界多近）：0 = 场中，1 = 贴绳
+func rope_pressure(f: Dictionary) -> float:
+	var p: Vector2 = f["pos"]
+	var back := p - axis_of(f) * 0.6
+	var over := maxf(absf(back.x), absf(back.y)) - (RING_HALF - 0.4)
+	return clampf(over / 0.4, 0.0, 1.0)
 
 
 # ---------------- 输入（玩家或 AI 共用） ----------------
@@ -199,6 +268,8 @@ func step(dt: float) -> void:
 		if bool(f["ai"]):
 			_ai(f, foe_of(f), dt)
 	for f in [a, b]:
+		_move(f, dt)
+	for f in [a, b]:
 		_advance_action(f, dt)
 		if finished or phase != "fight":
 			return
@@ -213,7 +284,8 @@ func _tick_fighter(f: Dictionary, dt: float) -> void:
 	if String(f["act"]) == "":
 		f["idle_t"] = float(f["idle_t"]) + dt
 		if float(f["idle_t"]) > 0.5:
-			f["stamina"] = minf(100.0, float(f["stamina"]) + STAM_REGEN * dt)
+			var moving := (f["move"] as Vector2).length() > 0.1
+			f["stamina"] = minf(100.0, float(f["stamina"]) + STAM_REGEN * (0.6 if moving else 1.0) * dt)
 	if t - float(f["last_hit_t"]) > COMBO_GAP:
 		f["combo"] = 0
 
@@ -247,6 +319,7 @@ func _end_round() -> void:
 		f["combo"] = 0
 		f["act"] = ""
 		f["stun"] = 0.0
+	_reset_positions()
 	_emit({"type": "round_start", "round": round_no})
 
 
@@ -283,6 +356,15 @@ func _resolve(att: Dictionary, def: Dictionary) -> void:
 	var kind := String(att["punch"])
 	var who := _who(att)
 	var pdef: Dictionary = DataDB.punches()[kind]
+	# 0) 射程：够不着就打空；打空大拳（摆 / 上勾）露破绽，对方得到反击窗口
+	if distance() > float(REACH[kind]):
+		att["combo"] = 0
+		att["dur"] = float(att["dur"]) + float(WHIFF_EXTRA[kind])
+		if kind in ["hook", "upper"]:
+			def["counter_t"] = COUNTER_WIN
+			def["counter_kind"] = "straight"
+		_emit({"type": "whiff", "who": who, "punch": kind, "dodged": false, "range": true})
+		return
 	# 1) 闪避
 	if String(def["act"]) == "dodge":
 		var dir := String(def["dodge_dir"])
@@ -447,6 +529,7 @@ func _emit(ev: Dictionary) -> void:
 func _ai(f: Dictionary, o: Dictionary, _dt: float) -> void:
 	var styles: Dictionary = DataDB.foe_styles()
 	var st: Dictionary = styles.get(String(f["style_key"]), styles.get("balanced", {}))
+	_ai_footwork(f, st, _dt)
 	# 1) 看到对方出拳：按防守能力决定要不要、怎么反应（每一拳只判一次）
 	if String(o["act"]) == "punch" and not bool(o["resolved"]) and int(o["punch_id"]) != int(f["ai_seen"]):
 		f["ai_seen"] = o["punch_id"]
@@ -484,7 +567,12 @@ func _ai(f: Dictionary, o: Dictionary, _dt: float) -> void:
 		if float(f["stamina"]) < 8.0:
 			f["ai_next"] = t + 0.6
 			return
-		var kind := _pick_punch(f, st)
+		if String(f.get("ai_plan", "")) == "":
+			f["ai_plan"] = _pick_punch(f, st)
+		var kind := String(f["ai_plan"])
+		if distance() > float(REACH[kind]) * 0.95:
+			return  # 够不着：先由步法靠近（_ai_footwork 会往前压）
+		f["ai_plan"] = ""
 		input_punch(f, kind)
 		var freq := (0.24 + eff_attr(f, "speed") * 0.012) / 0.42 * float(st.get("freqMul", 1.0)) * AI_RATE
 		match String(f["tactic"]):
@@ -496,6 +584,35 @@ func _ai(f: Dictionary, o: Dictionary, _dt: float) -> void:
 		if rng.randf() < 0.35:
 			gap = rng.randf_range(0.05, 0.2)  # 连打：紧接下一拳
 		f["ai_next"] = t + float(f["dur"]) + gap
+
+
+## AI 步法：按风格保持距离、来回绕圈、被逼到绳边就往外绕；要出拳但够不着时往前压
+func _ai_footwork(f: Dictionary, st: Dictionary, dt: float) -> void:
+	var want := {"power": 0.95, "balanced": 1.05, "guardcounter": 1.15, "speed": 1.22}.get(String(f["style_key"]), 1.05) as float
+	match String(f["tactic"]):
+		"attack": want -= 0.10
+		"counter": want += 0.10
+		"points": want += 0.08
+	var plan := String(f.get("ai_plan", ""))
+	if plan != "" or t > float(f["ai_next"]) - 0.35:
+		var k := plan if plan != "" else "straight"
+		want = minf(want, float(REACH[k]) * 0.85)
+	var fwd := clampf((distance() - want) * 3.0, -1.0, 1.0)
+	f["ai_circle_t"] = float(f["ai_circle_t"]) - dt
+	if float(f["ai_circle_t"]) <= 0.0:
+		f["ai_circle_t"] = rng.randf_range(1.0, 2.6)
+		var r := rng.randf()
+		f["ai_circle"] = 0.0 if r < 0.3 else (1.0 if r < 0.65 else -1.0)
+	var circ := float(f["ai_circle"]) * 0.55 * float(st.get("moveMul", 1.0))
+	var rp := rope_pressure(f)
+	if rp > 0.3:
+		# 被逼到绳边：往场中方向绕出去
+		var p: Vector2 = f["pos"]
+		var ax := axis_of(f)
+		var right := Vector2(-ax.y, ax.x)
+		circ = (1.0 if right.dot(-p) > 0.0 else -1.0) * (0.6 + rp * 0.4)
+		fwd = maxf(fwd, 0.0)
+	input_move(f, Vector2(circ, fwd))
 
 
 func _pick_punch(f: Dictionary, st: Dictionary) -> String:
