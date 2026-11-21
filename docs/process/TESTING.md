@@ -15,7 +15,8 @@
 | 脚本 | 测什么 | 跑法示例 |
 |---|---|---|
 | `dev/playtest.gd` | 生涯：normal / grind 策略跑 N 周，记录胜负、名次、资金 | `--weeks=20 --policy=normal --out=<目录> [--shots]` |
-| `dev/ko_probe.gd` | 战斗终结分布（判定 / KO / TKO、回合、击倒数） | 720 场阵容矩阵 |
+| `dev/rt_probe.gd` | **实时内核** BattleCore 终结分布、势均 / +6 胜率（双方 AI） | `-- --n=167`（约 1000 场、2.5 分钟） |
+| `dev/ko_probe.gd` | 旧回合制引擎的终结分布（实时版落地后退役） | 720 场阵容矩阵 |
 | `dev/balance_probe.gd` | 势均 / 强弱对局胜率 | — |
 
 通过线写在各设计文档的「验收标准」节：`design/battle.md` §11、`design/career.md` §3、`design/equipment.md` §6。每次跑完把关键数字记进 `../CHANGELOG.md` 那一行。

@@ -32,9 +32,10 @@
 **要写 / 更新的文档**：`VISION.md`、`DECISIONS.md`、`design/battle.md`（视角和路线结论）、`design/characters_art.md`（生产流程）、试点报告 `playtests/`。
 
 **出口标准**
-- [ ] 待定区 6 项全部有结论；
-- [ ] 试点评估表两份（你和我）已填，路线已定；
-- [ ] `BattleCore` 无画面跑 1000 场不报错，终结分布达 `battle.md` §11 数据线。
+- [ ] 待定区 6 项全部有结论（已定：视角＝背后、渲染＝3D；剩生涯终点、装备、发布渠道、命名）；
+- [x] 试点已做、路线已定（3D，2026-11-21）；
+- [x] `BattleCore` 无画面跑 1000 场不报错，终结分布达 `battle.md` §11 数据线（2026-11-21，`playtests/RT_CORE_20261121.md`）；
+- [ ] 主角 + 林小葵 VRoid 模型（`tech/VROID_GUIDE.md`）。
 
 ---
 

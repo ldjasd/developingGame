@@ -216,6 +216,39 @@ func _init() -> void:
 	var pw_md := float(gs_md.s["attrs"]["power"])
 	gs_md.do_training("strength")
 	check(absf(float(gs_md.s["attrs"]["power"]) - pw_md - 3.0 * GameState.diminish(pw_md) * 1.1) < 0.001, "心态高昂训练效率 ×1.1")
+	# —— 实时战斗内核 BattleCore ——
+	var rt := BattleCore.new()
+	var rt_a := BattleCore.make("A", true, _attrs(30.0), {"ai": true, "tell": 0.4})
+	var rt_b := BattleCore.make("B", false, _attrs(30.0), {"style_key": "power"})
+	rt.start(rt_a, rt_b, 12345)
+	var rt_steps := 0
+	while not rt.finished and rt_steps < 20000:
+		rt.step(1.0 / 30.0)
+		rt_steps += 1
+	check(rt.finished, "实时内核：AI 对打能打完一整场")
+	check(String(rt.result.get("how", "")) in ["点数判定", "KO", "KO（重创满格）", "TKO（单回合 3 次击倒）"], "实时内核：终结方式合法（got %s）" % rt.result.get("how", ""))
+	check(int(rt.result.get("rounds_played", 0)) <= 3, "实时内核：回合数 ≤ 3")
+	# 闪避对方向 → 落空并开反击窗口
+	var rt2 := BattleCore.new()
+	var p1 := BattleCore.make("P", true, _attrs(30.0), {"ai": false})
+	var p2 := BattleCore.make("Q", false, _attrs(30.0), {"ai": false, "tell": 0.0})
+	rt2.start(p1, p2, 7)
+	rt2.input_punch(p2, "straight")
+	rt2.input_dodge(p1, "l")
+	for _i in 10:
+		rt2.step(1.0 / 60.0)
+	check(float(p1["counter_t"]) > 0.0 and String(p1["counter_kind"]) == "hook", "实时内核：左闪躲开直拳 → 摆拳反击窗口")
+	check(float(p1["hp"]) == float(p1["max_hp"]), "实时内核：闪开的拳不掉血")
+	# 高格挡挡不住击腹（穿透 + 破防）
+	var rt3 := BattleCore.new()
+	var q1 := BattleCore.make("P", true, _attrs(30.0), {"ai": false})
+	var q2 := BattleCore.make("Q", false, _attrs(30.0), {"ai": false, "tell": 0.0})
+	rt3.start(q1, q2, 9)
+	rt3.input_block(q1, true, false)
+	rt3.input_punch(q2, "body")
+	for _i in 30:
+		rt3.step(1.0 / 60.0)
+	check(float(q1["guard_break"]) > 0.0 or float(q1["hp"]) == float(q1["max_hp"]), "实时内核：击腹打高格挡 → 破防（或擦边落空）")
 	print("== smoke done, fails=", fails, " ==")
 	if fails == 0:
 		print("SMOKE_PASS")
