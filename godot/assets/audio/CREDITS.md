@@ -8,7 +8,8 @@
 | 开场铃 / 终场铃 | `bell/bell_start.wav`、`bell/bell_end.wav` | TRP 真实拳击铃实录；开场 = 单响，终场 = 同一只铃三下真实敲击叠成「铛-铛-铛」；修音：70Hz 以下缓坡去轰鸣、尾部噪声门、短场馆混响、统一音量，不变调（`godot/tools/make_bells.py`） |
 | 倒地 | `kenney/*.ogg` | Kenney Impact Sounds 原样 |
 | 挥空 | `air_cloth/jacket_00/03/04/07/11/13.wav`、`air_cloth/tshirt_00/07/33.wav` | 衣物挥动实录切出：Nox_Sound 夹克 6 条 + Soundholder T恤 3 条；去 90Hz 以下、淡入淡出、统一音量（`godot/tools/make_air_crowd.py cloth`）。`air/whoosh_*`（竹竿版）已不再使用 |
-| 观众 | `crowd/crowd_win.wav` | FoolBoyMedia 获胜欢呼实录取最响的 3.2 秒，去 80Hz 以下、淡入淡出（另两段 `crowd_arena`/`crowd_fight` 保留未用） |
+| 观众（随局势变化，实时战斗原型用） | `crowd_dyn/bed_low.wav`、`bed_high.wav`、`ooh_0~4.wav`、`roar_0~1.wav` | 场馆低声嘈杂 / 激动呼喊两条可循环底层（Madison Square Garden 实录 25:21、20:34 两段，首尾交叉淡化成无缝循环）＋重拳「噢」5 声（craigsmith 观众反应合集）＋爆发 2 段（MSG 12:11、craigsmith 拳击现场呼喊 0:29）；去 70~90Hz 以下、统一响度，不变调（`godot/tools/make_crowd_layers.py`） |
+| 观众（旧，回合制版中枢 / 结算用） | `crowd/crowd_win.wav` | FoolBoyMedia 获胜欢呼实录取最响的 3.2 秒，去 80Hz 以下、淡入淡出（另两段 `crowd_arena`/`crowd_fight` 保留未用） |
 
 ## 背景音乐（BGM）
 | 场景 | 文件 | 来源 |
@@ -36,6 +37,9 @@
 | Short Whoosh, 13x | Kinoton | https://freesound.org/people/Kinoton/sounds/427979/ |
 | Swish 5 | ihitokage | https://freesound.org/people/ihitokage/sounds/395368/ |
 | Crowd Cheer | FoolBoyMedia | https://freesound.org/people/FoolBoyMedia/sounds/397434/ |
+| Madison Square Garden New York Rangers Atmosphere 2010 | nyseagull | https://freesound.org/people/nyseagull/sounds/398258/ |
+| G29-44-Fight Crowd Yelling | craigsmith | https://freesound.org/people/craigsmith/sounds/438404/ |
+| S12-01 Crowd reactions; oohs; ahh; cheering; laughing; moderate emotion; exterior | craigsmith | https://freesound.org/people/craigsmith/sounds/675056/ |
 | crowd large cheer arena stadium hockey game Montreal | kyles | https://freesound.org/people/kyles/sounds/629884/ |
 | R07-27-Sporting Event with Steady Cheers | craigsmith | https://freesound.org/people/craigsmith/sounds/486214/ |
 | Impact Sounds 1.0 | Kenney | https://kenney.nl/assets/impact-sounds（原文 `kenney/License.txt`） |

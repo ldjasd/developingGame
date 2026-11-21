@@ -101,7 +101,8 @@ func _ready() -> void:
 		"light": load("res://assets/audio/designed_person/light_0.wav"),
 		"heavy": load("res://assets/audio/designed_person/heavy_0.wav"),
 		"heavy2": load("res://assets/audio/designed_person/heavy_3.wav"),
-		"crowd": load("res://assets/audio/crowd/crowd_win.wav"),
+		"roar0": load("res://assets/audio/crowd_dyn/roar_0.wav"),
+		"roar1": load("res://assets/audio/crowd_dyn/roar_1.wav"),
 		"body": load("res://assets/audio/designed_person/body_0.wav"),
 		"block": load("res://assets/audio/designed/block_0.wav"),
 		"whoosh": load("res://assets/audio/air_cloth/jacket_00.wav"),
@@ -109,6 +110,7 @@ func _ready() -> void:
 		"bell_end": load("res://assets/audio/bell/bell_end.wav"),
 		"down": load("res://assets/audio/kenney/impactSoft_heavy_000.ogg"),
 	}
+	_build_crowd()
 	_build_hud()
 	_new_match()
 
@@ -185,6 +187,7 @@ func _on_event(ev: Dictionary) -> void:
 			_last_hit_pos = pos
 			var big := bool(ev["counter"]) or bool(ev["knockdown"]) or kind in ["hook", "upper"]
 			if blocked:
+				_crowd_event(0.015)
 				_spark(pos, 0.6, Color(0.5, 0.75, 1.0))
 				_play("block")
 				freeze = 0.03
@@ -193,6 +196,9 @@ func _on_event(ev: Dictionary) -> void:
 				_spark(pos, 1.6 if big else 1.0, Color(1.0, 0.9, 0.4))
 				_play("heavy" if big else ("body" if kind == "body" else "light"))
 				freeze = 0.10 if big else 0.05
+				_crowd_event(0.16 if big else 0.05, big)  # 重拳：观众「噢！」
+				if bool(ev["counter"]) or int(ev["combo"]) >= 3:
+					_crowd_event(0.08)
 				if big:
 					fov_kick = 5.0
 				if who == "b":
@@ -226,6 +232,8 @@ func _on_event(ev: Dictionary) -> void:
 			_ko_popped = false
 			count_lb.text = ""
 		"getup":
+			_crowd_event(0.35)  # 站起来了：全场欢呼
+			_play("roar1", -10.0)
 			count_lb.text = "站起来了！"
 			_count_on = false
 			get_tree().create_timer(0.8).timeout.connect(func() -> void: count_lb.text = "")
@@ -254,7 +262,8 @@ func _impact(who: String, ko: bool) -> void:
 	_burst(pos, ko)
 	_play("heavy")
 	_play("heavy2")
-	_play("crowd", -2.0 if ko else -8.0)
+	_play("roar0" if ko else "roar1", -3.0 if ko else -9.0)
+	_crowd_event(1.0 if ko else 0.5)
 	fov_kick = 9.0 if ko else 6.0
 	# 顿帧结束后进慢动作（计时不受慢动作影响）
 	var slow := 0.25 if ko else 0.5
@@ -318,6 +327,71 @@ func _burst(pos: Vector3, ko: bool) -> void:
 		dt.chain().tween_callback(d.queue_free)
 
 
+# ---------------- 观众：随局势变化 ----------------
+# 两条循环底层（低声嘈杂 / 激动呼喊）按「紧张度」交叉混合；重拳出「噢」，读秒越数越响，KO 爆发。
+var _crowd_low: AudioStreamPlayer
+var _crowd_high: AudioStreamPlayer
+var _crowd_i := 0.12      # 当前紧张度 0~1
+var _crowd_boost := 0.0   # 事件带来的临时抬升，慢慢回落
+var _ooh_cd := 0.0
+var _oohs: Array[AudioStream] = []
+
+
+func _build_crowd() -> void:
+	_crowd_low = _loop_player("res://assets/audio/crowd_dyn/bed_low.wav")
+	_crowd_high = _loop_player("res://assets/audio/crowd_dyn/bed_high.wav")
+	for i in 5:
+		_oohs.append(load("res://assets/audio/crowd_dyn/ooh_%d.wav" % i))
+
+
+func _loop_player(path: String) -> AudioStreamPlayer:
+	var s: AudioStreamWAV = (load(path) as AudioStreamWAV).duplicate()
+	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	s.loop_begin = 0
+	s.loop_end = int(s.get_length() * s.mix_rate)
+	var p := AudioStreamPlayer.new()
+	p.stream = s
+	p.volume_db = -40.0
+	add_child(p)
+	p.play()
+	return p
+
+
+func _crowd_event(boost: float, ooh: bool = false) -> void:
+	_crowd_boost = minf(_crowd_boost + boost, 0.8)
+	if ooh and _ooh_cd <= 0.0:
+		_ooh_cd = 1.4
+		var p := AudioStreamPlayer.new()
+		p.stream = _oohs[randi() % _oohs.size()]
+		p.volume_db = -9.0 + _crowd_i * 4.0
+		add_child(p)
+		p.play()
+		p.finished.connect(p.queue_free)
+
+
+func _update_crowd(delta: float) -> void:
+	_ooh_cd -= delta
+	_crowd_boost = move_toward(_crowd_boost, 0.0, delta * 0.18)
+	var base := 0.12
+	var low_hp := minf(float(core.a["hp"]) / float(core.a["max_hp"]), float(core.b["hp"]) / float(core.b["max_hp"]))
+	if low_hp < 0.4:
+		base += (0.4 - low_hp) * 0.8          # 有人快撑不住了：全场紧张起来
+	if core.round_no == BattleCore.ROUNDS and core.clock < 20.0 and not core.finished:
+		base += 0.12                           # 最后 20 秒
+	if pause_left > 0.0:
+		base = 0.08                            # 回合间：回到低声嘈杂
+	if _count_on and _count_t > 0.0:
+		var shown := float(mini(int(_count_t / _count_step) + 1, _count_n))
+		base = maxf(base, 0.5 + shown * 0.05)  # 读秒：越数越响
+	if core.finished:
+		base = maxf(base, 0.75)
+	var target := clampf(base + _crowd_boost, 0.0, 1.0)
+	_crowd_i = move_toward(_crowd_i, target, delta * (1.6 if target > _crowd_i else 0.22))
+	var master := lerpf(-15.0, -5.0, _crowd_i)
+	_crowd_low.volume_db = master + linear_to_db(maxf(cos(_crowd_i * PI * 0.5), 0.001))
+	_crowd_high.volume_db = master + linear_to_db(maxf(sin(_crowd_i * PI * 0.5), 0.001))
+
+
 func _spark(pos: Vector3, k: float, c: Color) -> void:
 	var mi := MeshInstance3D.new()
 	var s := SphereMesh.new()
@@ -362,6 +436,7 @@ func _process(delta: float) -> void:
 			_play("bell_end")
 			_end_t = real_t
 	_update_hud(delta)
+	_update_crowd(delta)
 	_place_cam(delta)
 	if out_dir != "" and real_t >= _next_shot:
 		_next_shot += 4.0
@@ -685,7 +760,7 @@ func _update_hud(delta: float) -> void:
 				var tw := create_tween()
 				tw.tween_property(count_lb, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 				_play("heavy", 0.0)
-				_play("crowd", 0.0)
+				_play("roar1", -4.0)
 				white_rect.color.a = 0.35
 		else:
 			var shown := mini(int(_count_t / _count_step) + 1, _count_n)
