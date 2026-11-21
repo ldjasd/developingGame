@@ -34,6 +34,7 @@ var ghost_layer := 0  # >0 时额外生成半透明副本放在该渲染层（�
 var _meshes := {}  # 名字 -> Array[MeshInstance3D]
 var _glove_mats: Array[StandardMaterial3D] = []
 var action := ""
+var guard_hold := 0
 var _t := 0.0
 var _dur := 0.0
 var _tele := 0.0
@@ -279,6 +280,22 @@ func update_pose(delta: float) -> void:
 				roll += 0.18 * b
 				gl = gl.lerp(Vector3(-0.22, 0.40, -0.10), b)
 				gr = gr.lerp(Vector3(0.22, 0.38, -0.08), b)
+			"down":
+				# 单膝跪地：0.4 秒崩下去，最后 0.6 秒站起来
+				var k := clampf(_t / 0.4, 0.0, 1.0) * (1.0 - clampf((_t - (_dur - 0.6)) / 0.6, 0.0, 1.0))
+				off.y -= 0.42 * k
+				off.z += 0.10 * k
+				pitch -= 0.55 * k
+				roll += 0.10 * k
+				gl = gl.lerp(Vector3(-0.20, 0.10, -0.32), k)
+				gr = gr.lerp(Vector3(0.20, 0.05, -0.30), k)
+	# 按住格挡（呈现层每帧同步规则内核的状态）：1 = 高格挡，2 = 低格挡
+	if guard_hold > 0 and not PUNCH.has(action) and action != "down":
+		var low := guard_hold == 2
+		gl = BLOCK_L + (Vector3(0.02, -0.30, -0.06) if low else Vector3.ZERO)
+		gr = BLOCK_R + (Vector3(-0.02, -0.30, -0.06) if low else Vector3.ZERO)
+		pitch -= 0.12
+		off.y -= 0.05
 
 	if _apply(off, pitch, yaw, roll, gl, gr, glow):
 		return

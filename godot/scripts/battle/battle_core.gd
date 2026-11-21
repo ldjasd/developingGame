@@ -49,6 +49,7 @@ var HP_SCALE := 3.0            # 实时出拳次数多于交换制，HP 池按�
 var TRAUMA_DECAY_SEC := 0.55   # 起点为交换制折算 0.93/秒；标定后 0.55（让重创击倒 / TKO 出现）
 var STAM_REGEN := 2.2          # 每秒（不出拳、不格挡 0.5 秒后）
 var AI_RATE := 1.0             # AI 出拳频率总倍率
+var round_sec := ROUND_SEC      # 回合时长（原型录像可缩短）
 
 # 规则口径常量（与 BattleEngine 同值）
 const TRAUMA_K := BattleEngine.TRAUMA_K
@@ -111,7 +112,7 @@ func start(pa: Dictionary, pb: Dictionary, seed_v: int = -1) -> void:
 		f["max_hp"] = float(f["max_hp"]) * HP_SCALE
 		f["hp"] = f["max_hp"]
 	round_no = 1
-	clock = ROUND_SEC
+	clock = round_sec
 	t = 0.0
 	phase = "fight"
 	finished = false
@@ -238,7 +239,7 @@ func _end_round() -> void:
 		_finish_by_decision()
 		return
 	round_no += 1
-	clock = ROUND_SEC
+	clock = round_sec
 	for f in [a, b]:
 		f["knockdowns_round"] = 0
 		f["crossed"] = {}

@@ -6,6 +6,7 @@
 ## 未发布
 
 ### 2026-11-21
+- **功能**：实时战斗可玩原型 `scenes/dev/rt_proto.tscn`——BattleCore 判定 + 3D VRM 角色 + 键盘操作 + HUD（HP / 体力 / 重创、回合钟）+ 读秒 / K.O. / 结果；读秒时站立方让到一边。记录 `playtests/RT_PROTO_20261121.md`。
 - **功能**：实时战斗规则内核 `scripts/battle/battle_core.gd`（规则层沿用回合制口径；新增出拳节拍、预兆、打断、方向闪避反击、高低格挡、AI 大脑）。标定 HP ×3.0、重创衰减 0.55/秒；1002 场：判定 47% / KO 51% / TKO 2%，势均 51%，+6 胜率 93%，平均 2.91 回合。冒烟 +6 项。
 - **决定**：战斗角色用 3D（用户）；VRoid 建模指引 `tech/VROID_GUIDE.md`。
 - **工程**：战斗渲染试点——接入 Godot VRM 插件（v2.6.1，MIT；未装原生物理库）、VRoid CC0 样例模型（不入库）；`dev/vrm_fighter`（IK 驱动人形骨骼）、`dev/sprite_fighter`（单张立绘基线）；记录 `playtests/RENDER_PROTO_20261121.md`。冒烟 SMOKE_PASS。
