@@ -1,0 +1,19 @@
+{
+ "mode": "poses",
+ "poses": [
+  "block",
+  "body",
+  "dodge",
+  "guard",
+  "hit",
+  "hook",
+  "jab",
+  "straight",
+  "upper",
+  "victory"
+ ],
+ "size": [
+  700,
+  1004
+ ]
+}

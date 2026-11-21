@@ -72,8 +72,8 @@ var battle_mode := "manual" # manual / auto / sim
 var is_spar := false
 var player_turn := true
 var battle_over := false
-var rig_me: FighterRig
-var rig_foe: FighterRig
+var rig_me: FighterSprite
+var rig_foe: FighterSprite
 var foe_portrait: Sprite2D
 var foe_anchor: Node2D
 var me_anchor: Node2D
@@ -1258,32 +1258,25 @@ func _start_battle_scene() -> void:
 	if _shake_tw and _shake_tw.is_valid():
 		_shake_tw.kill()
 	scr_battle.position = Vector2.ZERO
+	scr_battle.scale = Vector2.ONE
+	Engine.time_scale = 1.0
 	rig_foe = null
 	foe_portrait = null
 	for c in me_anchor.get_children():
 		c.queue_free()
 	for c in foe_anchor.get_children():
 		c.queue_free()
-	rig_me = RigFactory.build_rig("me")
-	rig_me.scale = Vector2(-0.44, 0.44) # 主角在左、镜像朝右
-	rig_me.position = Vector2(452, 0)
+	# 整帧角色（FighterSprite）替换切件骨骼：原点 = 双脚中点。舞台脚线 y≈672（锚点局部 437）
+	rig_me = FighterSprite.create_me()
+	rig_me.position = Vector2(300, 437) # 绝对 ≈ (450, 672)
 	me_anchor.add_child(rig_me)
+	rig_me.set_facing(1)
 	rig_me.play_anim("idle")
-	var rig_id := DataDB.rig_char_for(foe_key)
-	if rig_id != "":
-		rig_foe = RigFactory.build_rig(rig_id)
-		rig_foe.scale = Vector2(0.235, 0.235)
-		rig_foe.position = Vector2(30, 0)
-		foe_anchor.add_child(rig_foe)
-		rig_foe.play_anim("idle")
-	else:
-		foe_portrait = Sprite2D.new()
-		foe_portrait.texture = load("res://assets/portraits/" + foe_key + ".webp")
-		var th := float(foe_portrait.texture.get_height())
-		var sc := 400.0 / th
-		foe_portrait.scale = Vector2(sc, sc)
-		foe_portrait.position = Vector2(215, 215)
-		foe_anchor.add_child(foe_portrait)
+	rig_foe = FighterSprite.create_foe(foe_key)
+	rig_foe.position = Vector2(205, 437) # 绝对 ≈ (965, 672)
+	foe_anchor.add_child(rig_foe)
+	rig_foe.set_facing(-1)
+	rig_foe.play_anim("idle")
 	engine = BattleEngine.new()
 	var fa := _fighter_for_player()
 	var fb := _fighter_for_foe()
@@ -1376,8 +1369,8 @@ const SHAKE := {"hit_light": 2.0, "hit_face": 5.0, "hit_body": 6.0, "hit_side": 
 var _shake_tw: Tween
 
 func _play_exchange_visuals(ev: Dictionary) -> void:
-	var att_rig: FighterRig = rig_me if bool(ev["att_is_a"]) else rig_foe
-	var def_rig: FighterRig = rig_foe if bool(ev["att_is_a"]) else rig_me
+	var att_rig: FighterSprite = rig_me if bool(ev["att_is_a"]) else rig_foe
+	var def_rig: FighterSprite = rig_foe if bool(ev["att_is_a"]) else rig_me
 	var def: Dictionary = engine.b if bool(ev["att_is_a"]) else engine.a
 	if att_rig:
 		att_rig.play_anim(PUNCH_ANIM.get(String(ev["punch"]), "straight"))
@@ -1392,6 +1385,16 @@ func _play_exchange_visuals(ev: Dictionary) -> void:
 			_flash(foe_portrait)
 		_hitstop([att_rig, def_rig], float(HITSTOP.get(react, 0.04)))
 		_screen_shake(float(SHAKE.get(react, 3.0)))
+		if def_rig:
+			var power := float(SHAKE.get(react, 3.0)) / 11.0 # 0.15 ~ 1.0
+			var at := _impact_point(def_rig, String(ev["punch"]), bool(ev["att_is_a"]))
+			_impact_fx(at, power, kind == "block")
+			_flash(def_rig, 1.6 + power if kind == "hit" else 1.3)
+			_damage_pop(at, float(ev["dmg"]), kind == "block", bool(ev.get("counter", false)))
+			if react == "stagger" or bool(ev.get("knockdown", false)):
+				_camera_punch(at, 1.06 if not bool(ev.get("ko", false)) else 1.1)
+		if bool(ev.get("ko", false)):
+			_slowmo(0.28, 0.7)
 		_sfx(String(SFX_FOR_REACT.get(react, "hit_light")), -2.0 if react == "hit_light" else 0.0)
 	elif kind == "dodge":
 		if def_rig:
@@ -1440,32 +1443,113 @@ func _screen_shake(amp: float) -> void:
 		_shake_tw.tween_property(scr_battle, "position", Vector2(rng.randf_range(-k, k), rng.randf_range(-k * 0.6, k * 0.6)), 0.025)
 	_shake_tw.tween_property(scr_battle, "position", Vector2.ZERO, 0.03)
 
-func _flash(tr: CanvasItem) -> void:
-	tr.modulate = Color(2.0, 1.6, 1.6)
-	var tw := create_tween()
-	tw.tween_property(tr, "modulate", Color.WHITE, 0.25)
+func _flash(tr: CanvasItem, k: float = 2.0) -> void:
+	tr.modulate = Color(k, k * 0.85, k * 0.85)
+	var tw := tr.create_tween()
+	tw.tween_property(tr, "modulate", Color.WHITE, 0.14)
 
-func _knockdown_visual(rig: FighterRig, stay: bool = false) -> void:
-	var old: Tween = _rig_tweens.get(rig)
-	if old and old.is_valid():
-		old.kill()
-	# 参考作：先踉跄（stagger 已在播）→ 倒地 → 躺着 → 挣扎起身（KO 则留在地上）。
-	var tw := create_tween()
-	_rig_tweens[rig] = tw
-	tw.tween_interval(0.22) # 踉跄前段
-	tw.tween_property(rig, "rotation", -1.42, 0.24).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_property(rig, "rotation", -1.30, 0.08) # 落地回弹
-	tw.tween_property(rig, "rotation", -1.38, 0.08)
-	if not stay:
-		tw.tween_interval(0.9) # 读秒中
-		tw.tween_property(rig, "rotation", -0.7, 0.35).set_trans(Tween.TRANS_SINE) # 撑起
-		tw.tween_property(rig, "rotation", -0.85, 0.12) # 晃一下
-		tw.tween_property(rig, "rotation", 0.0, 0.38).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		var wr: WeakRef = weakref(rig)
-		tw.tween_callback(func() -> void:
-			var r: FighterRig = wr.get_ref()
-			if r and is_instance_valid(r):
-				r.play_anim("idle"))
+# ================= 打击特效（2026-11-21）=================
+## 命中点：守方脸部或腹部高度、朝攻方一侧（角色原点 = 双脚中点，身高约 440）
+func _impact_point(def_rig: Node2D, punch: String, att_is_a: bool) -> Vector2:
+	var h := 250.0 if punch == "body" else 345.0
+	var toward := -1.0 if att_is_a else 1.0 # 守方在右 → 命中点偏左
+	return def_rig.global_position + Vector2(toward * 55.0, -h)
+
+## 冲击光：星形闪光 + 扩散圆环 + 火花，越重越大；格挡时偏蓝、偏小
+func _impact_fx(at: Vector2, power: float, blocked: bool) -> void:
+	var col := Color(0.7, 0.85, 1.0) if blocked else Color(1.0, 0.92, 0.55)
+	var size := (40.0 + 90.0 * power) * (0.6 if blocked else 1.0)
+	var star := Polygon2D.new()
+	var pts := PackedVector2Array()
+	var n := 10
+	for i in n * 2:
+		var r := size if i % 2 == 0 else size * 0.32
+		var ang := TAU * float(i) / float(n * 2) + rng.randf_range(-0.08, 0.08)
+		pts.append(Vector2(cos(ang), sin(ang)) * r * rng.randf_range(0.75, 1.15))
+	star.polygon = pts
+	star.color = Color(1, 1, 1, 0.95)
+	star.position = at
+	star.rotation = rng.randf() * TAU
+	star.scale = Vector2(0.25, 0.25)
+	scr_battle.add_child(star)
+	var core := Polygon2D.new()
+	core.polygon = pts
+	core.color = col
+	core.scale = Vector2(0.55, 0.55)
+	star.add_child(core)
+	var tw := star.create_tween().set_parallel(true)
+	tw.tween_property(star, "scale", Vector2(1.0, 1.0), 0.06).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(star, "modulate:a", 0.0, 0.16).set_delay(0.05)
+	tw.chain().tween_callback(star.queue_free)
+	var ring := Line2D.new()
+	var rp := PackedVector2Array()
+	for i in 33:
+		rp.append(Vector2(cos(TAU * i / 32.0), sin(TAU * i / 32.0)) * size * 0.6)
+	ring.points = rp
+	ring.width = 6.0 + 6.0 * power
+	ring.default_color = col
+	ring.position = at
+	ring.scale = Vector2(0.3, 0.3)
+	scr_battle.add_child(ring)
+	var tw2 := ring.create_tween().set_parallel(true)
+	tw2.tween_property(ring, "scale", Vector2(1.5, 1.5), 0.22).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw2.tween_property(ring, "modulate:a", 0.0, 0.22)
+	tw2.chain().tween_callback(ring.queue_free)
+	var sp := CPUParticles2D.new()
+	sp.position = at
+	sp.one_shot = true
+	sp.explosiveness = 1.0
+	sp.amount = int(8 + 18 * power)
+	sp.lifetime = 0.35
+	sp.spread = 180.0
+	sp.initial_velocity_min = 220.0 + 300.0 * power
+	sp.initial_velocity_max = 420.0 + 500.0 * power
+	sp.gravity = Vector2(0, 900)
+	sp.scale_amount_min = 3.0
+	sp.scale_amount_max = 6.0 + 4.0 * power
+	sp.color = col
+	scr_battle.add_child(sp)
+	sp.emitting = true
+	get_tree().create_timer(0.6).timeout.connect(sp.queue_free)
+
+## 伤害数字：从命中点弹出上飘；反击标金色
+func _damage_pop(at: Vector2, dmg: float, blocked: bool, counter: bool) -> void:
+	if dmg <= 0.0:
+		return
+	var l := _mk_label(("反击 " if counter else "") + "%d" % int(round(dmg)), 26 if not blocked else 18,
+		Color(1.0, 0.82, 0.3) if counter else (Color(0.75, 0.85, 1.0) if blocked else Color(1.0, 1.0, 1.0)))
+	l.add_theme_color_override("font_outline_color", Color(0.25, 0.05, 0.2))
+	l.add_theme_constant_override("outline_size", 6)
+	l.position = at + Vector2(rng.randf_range(-20, 20), -30)
+	l.pivot_offset = Vector2(20, 14)
+	l.scale = Vector2(1.6, 1.6)
+	scr_battle.add_child(l)
+	var tw := l.create_tween().set_parallel(true)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "position:y", l.position.y - 60.0, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "modulate:a", 0.0, 0.3).set_delay(0.45)
+	tw.chain().tween_callback(l.queue_free)
+
+## 镜头冲击：重击时整屏朝命中点瞬间推近再回弹
+var _cam_tw: Tween
+func _camera_punch(at: Vector2, zoom: float) -> void:
+	if _cam_tw and _cam_tw.is_valid():
+		_cam_tw.kill()
+	scr_battle.pivot_offset = at
+	_cam_tw = create_tween()
+	_cam_tw.tween_property(scr_battle, "scale", Vector2(zoom, zoom), 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_cam_tw.tween_property(scr_battle, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+## KO 慢动作：全局时间放慢一小段（计时器按真实时间）
+func _slowmo(scale: float, real_secs: float) -> void:
+	Engine.time_scale = scale
+	get_tree().create_timer(real_secs, true, false, true).timeout.connect(func() -> void: Engine.time_scale = 1.0)
+
+func _knockdown_visual(rig: FighterSprite, stay: bool = false) -> void:
+	# 参考作：先踉跄（stagger 已在播）→ 倒地 → 读秒 → 挣扎起身（KO 则留在地上）。
+	# 整帧角色自带 down/getup 动画（有帧序列的 8 人播真实倒地帧），补间在角色节点内部，随节点释放。
+	if rig and is_instance_valid(rig):
+		rig.knockdown(stay)
 
 func _after_exchange(ev: Dictionary) -> void:
 	_battle_log(String(ev["text"]))
@@ -1560,6 +1644,8 @@ func _on_battle_finished() -> void:
 		b_controls.add_child(_mk_button("返回中枢", _on_battle_exit))
 
 func _on_battle_exit() -> void:
+	Engine.time_scale = 1.0
+	scr_battle.scale = Vector2.ONE
 	_show_hub()
 	if _hub_pending_result != "":
 		_hub_log_add(_hub_pending_result)

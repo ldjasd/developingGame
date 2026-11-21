@@ -1,0 +1,45 @@
+{
+ "cell": [
+  352,
+  505
+ ],
+ "cols": 6,
+ "states": {
+  "idle": {
+   "file": "idle.webp",
+   "frames": 29,
+   "fps": 12,
+   "loop": true,
+   "src": "batch:shy_idle_v1.mp4 [7.17~9.59s]",
+   "face": 1
+  },
+  "attack": {
+   "file": "attack.webp",
+   "frames": 8,
+   "fps": 18,
+   "loop": false,
+   "src": "batch:shy_straight_v1.mp4 [pick 24fps from 4.17s: [2, 3, 4, 26, 26, 27, 28, 29]]",
+   "face": 1
+  },
+  "hit": {
+   "file": "hit.webp",
+   "frames": 42,
+   "fps": 22,
+   "loop": false,
+   "src": "batch:shy_hit_v1.mp4 [1.50~5.00s]",
+   "face": 1
+  },
+  "down": {
+   "file": "down.webp",
+   "frames": 35,
+   "fps": 12,
+   "loop": false,
+   "src": "batch:shy_down_v1.mp4 [1.50~4.42s]",
+   "downK": 1.291,
+   "downOX": 49.9,
+   "downOY": 86.3,
+   "downGY": 99.8,
+   "face": 1
+  }
+ }
+}

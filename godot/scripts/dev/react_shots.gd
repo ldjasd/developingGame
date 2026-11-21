@@ -22,14 +22,15 @@ func _ready() -> void:
 	await get_tree().create_timer(0.6).timeout
 	var imgs: Array[Image] = []
 	for s in SHOTS:
-		var rig: FighterRig = main.rig_me if s[0] == "me" else main.rig_foe
-		var other: FighterRig = main.rig_foe if s[0] == "me" else main.rig_me
+		var rig: FighterSprite = main.rig_me if s[0] == "me" else main.rig_foe
+		var other: FighterSprite = main.rig_foe if s[0] == "me" else main.rig_me
 		other.seek_anim("idle", 0.0)
 		rig.seek_anim(s[1], float(s[2]))
 		await RenderingServer.frame_post_draw
 		await RenderingServer.frame_post_draw
-		var im := get_viewport().get_texture().get_image()
-		im.resize(im.get_width() / 2, im.get_height() / 2)
+		var full := get_viewport().get_texture().get_image()
+		var im := full.get_region(Rect2i(250, 200, 900, 500)) # 只截两人所在区域，看清细节
+		im.resize(450, 250)
 		imgs.append(im)
 		print("shot ", s[1])
 	var w := imgs[0].get_width(); var h := imgs[0].get_height()
