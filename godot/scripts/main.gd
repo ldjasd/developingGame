@@ -1423,7 +1423,8 @@ func _hit_reaction(ev: Dictionary, def: Dictionary) -> String:
 ## 打击反馈分 4 档（2026-11-21 参考 Bloom Blow 试玩：平时克制、大事件才猛，满屏一直震会削弱大事件）
 ## light = 刺拳/被格挡；normal = 普通命中；heavy = 重击踉跄/反击；big = 击倒/KO
 const TIER_HITSTOP := {"light": 0.03, "normal": 0.06, "heavy": 0.09, "big": 0.14}
-const TIER_SHAKE := {"light": 0.0, "normal": 2.0, "heavy": 5.0, "big": 10.0}
+# 震屏只当点缀（用户 2026-11-21：之前太严重，打击感不该靠震屏）——打击感主要来自顿帧、受击姿势、闪白和音效
+const TIER_SHAKE := {"light": 0.0, "normal": 0.0, "heavy": 1.5, "big": 3.0}
 const TIER_POWER := {"light": 0.15, "normal": 0.3, "heavy": 0.65, "big": 1.0}
 var _shake_tw: Tween
 var show_damage_numbers := false # 伤害数字默认隐藏（战斗里可切换）
@@ -1479,12 +1480,12 @@ func _play_exchange_visuals(ev: Dictionary) -> void:
 		_sfx("knockdown")
 		_sfx("crowd", -3.0)
 		if def_rig:
-			_knockdown_visual(def_rig, true)
+			_knockdown_visual(def_rig, true, int(ev.get("count", 10)))
 	elif bool(ev.get("knockdown", false)):
 		_sfx("knockdown", -2.0)
 		_sfx("crowd", -8.0)
 		if def_rig:
-			_knockdown_visual(def_rig)
+			_knockdown_visual(def_rig, false, int(ev.get("count", -1)))
 	if ev.has("new_round"):
 		_sfx("bell", -4.0)
 
@@ -1655,18 +1656,19 @@ func _slowmo(scale: float, real_secs: float) -> void:
 	Engine.time_scale = scale
 	get_tree().create_timer(real_secs, true, false, true).timeout.connect(func() -> void: Engine.time_scale = 1.0)
 
-func _knockdown_visual(rig: FighterSprite, stay: bool = false) -> void:
+func _knockdown_visual(rig: FighterSprite, stay: bool = false, count: int = -1) -> void:
 	# 参考作：先踉跄（stagger 已在播）→ 倒地 → 读秒 → 挣扎起身（KO 则留在地上）。
 	# 整帧角色自带 down/getup 动画（有帧序列的 8 人播真实倒地帧），补间在角色节点内部，随节点释放。
 	if rig and is_instance_valid(rig):
 		rig.knockdown(stay)
-		_count_sequence(rig, stay)
+		_count_sequence(rig, stay, count)
 
 ## 读秒（参考 Bloom Blow：倒地后画面中上方逐个弹出大号数字；数到 10 → KO 标志）
 ## 读秒期间锁住操作 / 暂停自动观看计时器，起身后恢复。
 var _count_busy := false
 var _count_nodes: Array = []
-func _count_sequence(rig: FighterSprite, ko: bool) -> void:
+## count：引擎给的读秒结果（方案 B：起身时的读数 / KO=10）；-1 = 重创刻度击倒，没有判定数，按倒地动画长度数
+func _count_sequence(rig: FighterSprite, ko: bool, count: int = -1) -> void:
 	_count_busy = true
 	for c in b_controls.get_children():
 		if c is Button:
@@ -1676,8 +1678,11 @@ func _count_sequence(rig: FighterSprite, ko: bool) -> void:
 	var down_len := 2.0
 	if rig.player and rig.player.has_animation("down"):
 		down_len = rig.player.get_animation("down").length
-	var n := 10 if ko else clampi(int((0.2 + down_len + 0.8) / 0.5), 3, 9)
+	var n := 10 if ko else (count if count > 0 else clampi(int((0.2 + down_len + 0.8) / 0.5), 3, 9))
 	var step := 0.32 if ko else 0.5
+	# 起身时刻跟读秒对齐：数到 n 时角色正好站起来
+	if not ko and rig.has_method("set_getup_delay"):
+		rig.set_getup_delay(0.45 + step * float(n) - 0.2)
 	var tw := create_tween()
 	tw.tween_interval(0.45)
 	for i in n:
@@ -1730,7 +1735,7 @@ func _ko_stamp() -> void:
 	var tw := holder.create_tween().set_parallel(true)
 	tw.tween_property(holder, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(holder, "modulate:a", 1.0, 0.1)
-	_screen_shake(12.0)
+	_screen_shake(3.0)
 	_sfx("knockdown", 2.0, 0.8)
 	_sfx("crowd", 0.0)
 

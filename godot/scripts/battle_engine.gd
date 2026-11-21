@@ -15,8 +15,15 @@ signal exchange_done(ev: Dictionary)
 signal battle_done(result: Dictionary)
 
 const PUNCH_KEYS := ["jab", "straight", "hook", "upper", "body"]
-const TRAUMA_K := 70.0
-const TRAUMA_DECAY_PER_EXCHANGE := 1.5 # 回合制折算（web 为 6/秒；实测标定：使重创 KO 与 HP KO 量级相当）
+## 2026-11-21 用户选定方案 B（让判定成为常态）：重创积累放慢、消退加快；HP 归零改为「击倒 + 读秒」
+const TRAUMA_K := 40.0 # 原 70（方案 B 标定：见 docs/GODOT_PLAYTEST_20261121.md 三·七）
+const TRAUMA_DECAY_PER_EXCHANGE := 4.0 # 原 1.5（回合制折算）
+## HP 归零后的读秒起身：概率 = 基础 + 意志 + 剩余体力 − 已倒次数；起身后恢复部分 HP
+const GETUP_BASE := 0.40
+const GETUP_WILL := 0.007
+const GETUP_STAM := 0.003
+const GETUP_PER_KD := 0.10
+const GETUP_HP := 0.35
 const TRAUMA_HP_FLOOR := 0.40
 const THRESHOLDS := [25.0, 50.0, 75.0]
 const EXCHANGES_PER_ROUND := 14
@@ -249,8 +256,27 @@ func _check_finish(ev: Dictionary) -> void:
 			ev["ko"] = true
 			return
 		if float(def["hp"]) <= 0.0:
-			_finish(att, def, "KO")
-			ev["ko"] = true
+			# 方案 B：HP 归零 = 击倒 → 读秒。站起来就恢复部分 HP 继续打，站不起来才 KO
+			def["knockdowns_round"] = int(def["knockdowns_round"]) + 1
+			def["knockdowns_total"] = int(def["knockdowns_total"]) + 1
+			att["score"] = float(att["score"]) + 10.0
+			ev["knockdown"] = true
+			if int(def["knockdowns_round"]) >= 3:
+				ev["count"] = 10
+				_finish(att, def, "TKO（单回合 3 次击倒）")
+				ev["ko"] = true
+				return
+			var p := clampf(GETUP_BASE + eff_attr(def, "will") * GETUP_WILL + float(def["stamina"]) * GETUP_STAM
+				- float(int(def["knockdowns_total"]) - 1) * GETUP_PER_KD, 0.05, 0.92)
+			if rng.randf() < p:
+				def["hp"] = float(def["max_hp"]) * GETUP_HP
+				ev["count"] = clampi(int(round(9.0 - p * 6.0)) + rng.randi_range(-1, 1), 3, 9)
+				ev["text"] += " %s 倒地！读秒到 %d，她站起来了！" % [def["name"], int(ev["count"])]
+			else:
+				ev["count"] = 10
+				_finish(att, def, "KO")
+				ev["ko"] = true
+				ev["text"] += " %s 倒地……读秒到 10，KO！" % def["name"]
 			return
 		if int(def["knockdowns_round"]) >= 3:
 			_finish(att, def, "TKO（单回合 3 次击倒）")

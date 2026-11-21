@@ -358,3 +358,13 @@ func knockdown(stay: bool) -> void:
 	if not stay:
 		_kd_tween.tween_interval(player.get_animation("down").length + 0.8)
 		_kd_tween.tween_callback(func() -> void: play_anim("getup"))
+
+## 读秒对齐：从倒地开始算，secs 秒后起身（main 按引擎给的读数调用，刚 knockdown 后立刻调）
+func set_getup_delay(secs: float) -> void:
+	if _kd_tween and _kd_tween.is_valid():
+		_kd_tween.kill()
+	_kd_tween = create_tween()
+	_kd_tween.tween_interval(0.2)
+	_kd_tween.tween_callback(func() -> void: play_anim("down"))
+	_kd_tween.tween_interval(maxf(player.get_animation("down").length, secs - 0.2))
+	_kd_tween.tween_callback(func() -> void: play_anim("getup"))
