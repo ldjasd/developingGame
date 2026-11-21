@@ -38,6 +38,7 @@ static func default_state() -> Dictionary:
 		"aff": {}, # 好感（剧情角色）
 		"seen_story": [], "seen_daily": [],
 		"champ_beaten": false,
+		"last_match_day": 0, # 上次打正式赛的日子（每个比赛日只能打 1 场正式赛）
 		"log": [],
 	}
 
@@ -101,9 +102,39 @@ static func diminish(current: float) -> float:
 		return 0.12
 	return 0.06
 
+var _train_eff := 1.0 # 训练时由 do_training 置为心态效率，其余来源（事件等）恒为 1
+
+# ================= 心态（web game.js 口径移植，2026-11-21 补） =================
+static func mind_tier_name(v: int) -> String:
+	if v >= 80: return "高昂"
+	if v >= 60: return "良好"
+	if v >= 40: return "平稳"
+	if v >= 20: return "紧张"
+	return "疲劳"
+
+func mind_train_eff() -> float:
+	var m := int(s["mind"])
+	if m >= 80: return 1.1
+	if m < 20: return 0.85
+	return 1.0
+
+func change_mind(delta: int) -> void:
+	s["mind"] = clampi(int(s["mind"]) + delta, 0, 100)
+
+## 正式赛日：每周第 7 天（web isMatchDay：day % 7 == 0）
+func is_match_day() -> bool:
+	return int(s["day"]) % 7 == 0
+
+func days_to_match() -> int:
+	return (7 - int(s["day"]) % 7) % 7
+
+## 今天还能不能打正式赛（比赛日且今天尚未打过）
+func can_fight_official() -> bool:
+	return is_match_day() and int(s.get("last_match_day", 0)) != int(s["day"])
+
 func gain_attr(key: String, amount: float) -> float:
 	var cur := float(s["attrs"][key])
-	var real := amount * diminish(cur)
+	var real := amount * diminish(cur) * _train_eff
 	s["attrs"][key] = minf(100.0, cur + real)
 	return real
 
@@ -128,6 +159,14 @@ func do_training(id: String) -> String:
 	s["ap"] = int(s["ap"]) - int(t["pts"])
 	s["fatigue"] = int(s["fatigue"]) + int(t.get("stam", 0))
 	_rng.randomize()
+	_train_eff = mind_train_eff()
+	var msg := _training_effect(id)
+	_train_eff = 1.0
+	if msg != "" and mind_train_eff() != 1.0:
+		msg += "（心态%s，训练效率 ×%.2f）" % [mind_tier_name(int(s["mind"])), mind_train_eff()]
+	return msg
+
+func _training_effect(id: String) -> String:
 	match id:
 		"spar":
 			gain_attr("will", 1)
@@ -202,6 +241,14 @@ func sleep() -> Array:
 	s["day"] = int(s["day"]) + 1
 	s["ap"] = AP_PER_DAY
 	s["fatigue"] = maxi(0, int(s["fatigue"]) - 60)
+	# 睡觉时心态向 60 缓慢回归（±5，web doSleep 口径）
+	var m := int(s["mind"])
+	if m < 60:
+		change_mind(mini(5, 60 - m))
+	elif m > 60:
+		change_mind(-mini(5, m - 60))
+	if is_match_day():
+		notes.append("今天是比赛日！去「比赛」报名正式赛。")
 	if (int(s["day"]) - 1) % 7 == 0 and int(s["day"]) > 1:
 		s["week"] = int(s["week"]) + 1
 		_week_rollover()
@@ -243,8 +290,11 @@ func _week_rollover() -> void:
 # 比赛结算：foe_key 对手、win 胜负、is_defense 是否卫冕战（web G9：卫冕战走正式赛全结算，
 # 只多一段卫冕记账——胜 → defenses+1 并清挑战；无论胜负都记 defense_week，每周至多 1 场。
 # 注：普通正式赛在第 1 名获胜不再自动计卫冕（旧简化口径已替换，web 仅卫冕战计 defenses））
-func settle_match(foe_key: String, win: bool, is_defense: bool = false) -> Dictionary:
+func settle_match(foe_key: String, win: bool, is_defense: bool = false, ko_loss: bool = false) -> Dictionary:
 	var foe_rank := rank_of(foe_key)
+	s["last_match_day"] = int(s["day"])
+	# 心态结算（web 口径）：胜 +15 / 负 −10 / 被 KO −25
+	change_mind(15 if win else (-25 if ko_loss else -10))
 	var prize := 0
 	var inf_levels := DataDB.influence_levels()
 	var bonus := 0

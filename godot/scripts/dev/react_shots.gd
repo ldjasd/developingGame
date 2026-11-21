@@ -17,6 +17,7 @@ func _ready() -> void:
 	add_child(main)
 	main._on_new_game()
 	main._finish_prologue(true)
+	main.gs.s["day"] = 7 # 正式赛只在比赛日开打
 	main._on_start_battle("opp_rookie", "manual", false)
 	await get_tree().create_timer(0.6).timeout
 	var imgs: Array[Image] = []

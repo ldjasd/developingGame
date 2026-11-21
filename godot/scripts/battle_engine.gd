@@ -262,7 +262,7 @@ func _finish(winner: Dictionary, loser: Dictionary, how: String) -> void:
 	result = {"winner_is_a": winner == a, "how": how,
 		"a_score": a["score"], "b_score": b["score"],
 		"a_kd": a["knockdowns_total"], "b_kd": b["knockdowns_total"],
-		"rounds_played": round_no}
+		"rounds_played": mini(round_no, ROUNDS)} # 点数判定时 round_no 已越过最后一回合，记录封顶
 	battle_done.emit(result)
 
 func _finish_by_decision() -> void:

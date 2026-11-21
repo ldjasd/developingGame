@@ -9,6 +9,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.5).timeout
 	main._on_new_game()
 	main._finish_prologue(true) # 新档先走序章：自动验证跳过序章直入中枢（顺带验跳过路径）
+	main.gs.s["day"] = 7 # 正式赛只在比赛日开打
 	main._on_start_battle("opp_rookie", "auto", false)
 	var waited := 0.0
 	while not main.battle_over and waited < 120.0:

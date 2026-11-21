@@ -6,6 +6,44 @@ extends Control
 const PUNCH_ANIM := {"jab": "jab", "straight": "straight", "hook": "hook", "upper": "upper", "body": "body"}
 const PUNCH_NAME := {"jab": "刺拳", "straight": "直拳", "hook": "摆拳", "upper": "上勾拳", "body": "击腹拳"}
 const FOE_TACTIC := {"power": "attack", "guardcounter": "counter", "speed": "points", "balanced": "balanced", "technique": "counter"}
+## 剧情说话人（web story.js CHARS 口径）：事件 JSON 里的 w 字段是 id，显示时换成名字 + 立绘
+const SPEAKERS := {
+	"senior": {"name": "藤原梢", "img": "res://assets/story/senior.webp"},
+	"manager": {"name": "栗原真纪", "img": "res://assets/story/manager.webp"},
+	"rival": {"name": "沈墨凛", "img": "res://assets/story/rival.webp"},
+	"teammate": {"name": "林小葵", "img": "res://assets/story/teammate.webp"},
+	"me": {"name": "你"},
+	"narr": {"name": ""},
+}
+var modal_dim: ColorRect
+var modal_portrait: TextureRect
+
+# ---- 音效（godot/tools/gen_sfx.py 合成的原创音效）----
+const SFX_FOR_REACT := {"hit_light": "hit_light", "hit_face": "hit_heavy", "hit_side": "hit_heavy", "hit_body": "hit_body", "stagger": "hit_heavy", "block": "block"}
+var _sfx_cache := {}
+var _sfx_players: Array = []
+
+func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
+	if not _sfx_cache.has(name):
+		var path := "res://assets/audio/%s.wav" % name
+		_sfx_cache[name] = load(path) if ResourceLoader.exists(path) else null
+	var stream: AudioStream = _sfx_cache[name]
+	if stream == null:
+		return
+	if _sfx_players.is_empty():
+		for i in 8:
+			var p := AudioStreamPlayer.new()
+			add_child(p)
+			_sfx_players.append(p)
+	var pl: AudioStreamPlayer = _sfx_players[0]
+	for p in _sfx_players:
+		if not p.playing:
+			pl = p
+			break
+	pl.stream = stream
+	pl.volume_db = vol_db
+	pl.pitch_scale = pitch * rng.randf_range(0.95, 1.05)
+	pl.play()
 
 var gs: GameState
 var rng := RandomNumberGenerator.new()
@@ -156,6 +194,13 @@ func _build_ui() -> void:
 	hub_root.add_child(mid)
 	hub_attrs = _mk_label("", 15)
 	hub_attrs.custom_minimum_size = Vector2(300, 0)
+	hub_attrs.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var at_style := _style(Color(0.05, 0.03, 0.10, 0.6))
+	at_style.content_margin_left = 10
+	at_style.content_margin_right = 10
+	at_style.content_margin_top = 8
+	at_style.content_margin_bottom = 8
+	hub_attrs.add_theme_stylebox_override("normal", at_style)
 	mid.add_child(hub_attrs)
 	hub_actions = VBoxContainer.new()
 	hub_actions.custom_minimum_size = Vector2(230, 0)
@@ -171,6 +216,14 @@ func _build_ui() -> void:
 	sub_box = VBoxContainer.new()
 	sub_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sub_scroll.add_child(sub_box)
+	# 子面板里的长文案统一自动换行（之前训练说明/工坊配方会冲出屏幕右边被截断）
+	sub_box.child_entered_tree.connect(_fit_sub_child)
+	var sp_style := _style(Color(0.05, 0.03, 0.10, 0.72))
+	sp_style.content_margin_left = 12
+	sp_style.content_margin_right = 12
+	sp_style.content_margin_top = 8
+	sp_style.content_margin_bottom = 8
+	sub_panel.add_theme_stylebox_override("panel", sp_style)
 	hub_log = RichTextLabel.new()
 	hub_log.custom_minimum_size = Vector2(0, 110)
 	hub_log.fit_content = true
@@ -192,11 +245,11 @@ func _build_ui() -> void:
 	b_name_a = _mk_label("", 18)
 	col_a.add_child(b_name_a)
 	b_hp_a = _bar(Color(0.95, 0.4, 0.55))
-	col_a.add_child(b_hp_a)
+	_bar_row(col_a, "HP", b_hp_a, false)
 	b_st_a = _bar(Color(0.5, 0.8, 1.0))
-	col_a.add_child(b_st_a)
+	_bar_row(col_a, "体力", b_st_a, false)
 	b_tr_a = _bar(Color(1.0, 0.75, 0.3))
-	col_a.add_child(b_tr_a)
+	_bar_row(col_a, "重创", b_tr_a, false)
 	b_round = _mk_label("第 1 回合", 20)
 	b_round.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b_round.custom_minimum_size = Vector2(120, 0)
@@ -208,11 +261,11 @@ func _build_ui() -> void:
 	b_name_b.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	col_b.add_child(b_name_b)
 	b_hp_b = _bar(Color(0.95, 0.4, 0.55))
-	col_b.add_child(b_hp_b)
+	_bar_row(col_b, "HP", b_hp_b, true)
 	b_st_b = _bar(Color(0.5, 0.8, 1.0))
-	col_b.add_child(b_st_b)
+	_bar_row(col_b, "体力", b_st_b, true)
 	b_tr_b = _bar(Color(1.0, 0.75, 0.3))
-	col_b.add_child(b_tr_b)
+	_bar_row(col_b, "重创", b_tr_b, true)
 	me_anchor = Node2D.new()
 	me_anchor.position = Vector2(150, 235)
 	scr_battle.add_child(me_anchor)
@@ -221,41 +274,74 @@ func _build_ui() -> void:
 	scr_battle.add_child(foe_anchor)
 	b_log = RichTextLabel.new()
 	b_log.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	b_log.offset_left = 16
+	# 战报放右下角、按钮放左下角：之前战报横跨整屏、压在两人腿上
+	b_log.offset_left = 660
 	b_log.offset_right = -16
-	b_log.offset_top = -268
-	b_log.offset_bottom = -156
+	b_log.offset_top = -150
+	b_log.offset_bottom = -12
+	b_log.scroll_following = true
 	b_log.add_theme_stylebox_override("normal", _style(Color(0.03, 0.02, 0.08, 0.62)))
 	scr_battle.add_child(b_log)
 	b_tactics = HBoxContainer.new()
 	b_tactics.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	b_tactics.offset_left = 16
-	b_tactics.offset_top = -152
-	b_tactics.offset_bottom = -124
+	b_tactics.offset_right = -640
+	b_tactics.offset_top = -150
+	b_tactics.offset_bottom = -120
 	scr_battle.add_child(b_tactics)
 	b_controls = HBoxContainer.new()
 	b_controls.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	b_controls.offset_left = 16
-	b_controls.offset_top = -120
-	b_controls.offset_bottom = -60
+	b_controls.offset_right = -640
+	b_controls.offset_top = -112
+	b_controls.offset_bottom = -30
 	scr_battle.add_child(b_controls)
 	auto_timer = Timer.new()
 	auto_timer.wait_time = 0.85
 	auto_timer.timeout.connect(_on_auto_tick)
 	scr_battle.add_child(auto_timer)
 	# ---- 通用弹窗 ----
+	# 全屏遮罩：弹窗打开时挡住背后的中枢按钮（之前能透过弹窗点到下面的按钮）
+	modal_dim = ColorRect.new()
+	modal_dim.color = Color(0.02, 0.01, 0.05, 0.62)
+	modal_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	modal_dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	modal_dim.hide()
+	add_child(modal_dim)
 	modal = PanelContainer.new()
 	modal.set_anchors_preset(Control.PRESET_CENTER)
-	modal.position = Vector2(-330, -230)
-	modal.custom_minimum_size = Vector2(660, 460)
+	modal.position = Vector2(-400, -250)
+	modal.custom_minimum_size = Vector2(800, 500)
+	var mstyle := _style(Color(0.09, 0.06, 0.16, 0.97))
+	mstyle.border_color = Color(0.95, 0.55, 0.78)
+	mstyle.set_border_width_all(2)
+	mstyle.content_margin_left = 22
+	mstyle.content_margin_right = 22
+	mstyle.content_margin_top = 16
+	mstyle.content_margin_bottom = 16
+	modal.add_theme_stylebox_override("panel", mstyle)
 	add_child(modal)
+	modal.visibility_changed.connect(func() -> void: modal_dim.visible = modal.visible)
+	var mh := HBoxContainer.new()
+	mh.add_theme_constant_override("separation", 18)
+	modal.add_child(mh)
+	modal_portrait = TextureRect.new()
+	modal_portrait.custom_minimum_size = Vector2(220, 0)
+	modal_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	modal_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	modal_portrait.hide()
+	mh.add_child(modal_portrait)
 	var mv := VBoxContainer.new()
-	modal.add_child(mv)
-	modal_title = _mk_label("", 20, Color(1.0, 0.8, 0.9))
+	mv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mh.add_child(mv)
+	modal_title = _mk_label("", 22, Color(1.0, 0.8, 0.9))
 	mv.add_child(modal_title)
 	modal_text = RichTextLabel.new()
+	modal_text.bbcode_enabled = true
 	modal_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	modal_text.fit_content = true
+	modal_text.add_theme_font_size_override("normal_font_size", 17)
+	modal_text.add_theme_font_size_override("bold_font_size", 17)
 	mv.add_child(modal_text)
 	# 序章专用行（反馈行 / 测力机分数 / 力量条），平时隐藏
 	pro_fx = _mk_label("", 15, Color(1.0, 0.85, 0.6))
@@ -286,6 +372,34 @@ func _build_ui() -> void:
 	pro_advance.one_shot = true
 	pro_advance.timeout.connect(_on_pro_spar_advance)
 	add_child(pro_advance)
+
+func _fit_sub_child(n: Node) -> void:
+	if n is Label:
+		(n as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	elif n is Button:
+		(n as Button).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		(n as Button).alignment = HORIZONTAL_ALIGNMENT_LEFT
+	elif n is HBoxContainer:
+		for c in n.get_children():
+			if c is Label:
+				(c as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				(c as Label).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+## 一行「标签 + 条」：之前三条血条没有名字，分不清 HP / 体力 / 重创
+func _bar_row(col: VBoxContainer, label: String, bar: ProgressBar, right: bool) -> void:
+	var row := HBoxContainer.new()
+	var l := _mk_label(label, 13, Color(0.9, 0.86, 1.0))
+	l.custom_minimum_size = Vector2(40, 0)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if right else HORIZONTAL_ALIGNMENT_LEFT
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if right:
+		bar.fill_mode = ProgressBar.FILL_END_TO_BEGIN
+		row.add_child(bar)
+		row.add_child(l)
+	else:
+		row.add_child(l)
+		row.add_child(bar)
+	col.add_child(row)
 
 func _bar(color: Color) -> ProgressBar:
 	var p := ProgressBar.new()
@@ -332,10 +446,10 @@ func _refresh_hub() -> void:
 	for lv in DataDB.influence_levels():
 		if int(lv["lv"]) == int(gs.s["influence"]):
 			inf_name = String(lv["name"])
-	hub_info.text = "第 %d 天（第 %d 周） · 行动点 %d/%d · 资金 ¥%d · 排名 第 %d · 影响力 Lv%d %s · 心态 %d · 伤病 %d · 疲劳 %d\n阶段 %d %s · 战绩 %d 胜 %d 负（连胜 %d）· 卫冕 %d" % [
+	hub_info.text = "第 %d 天（第 %d 周） · 行动点 %d/%d · 资金 ¥%d · 排名 第 %d · 影响力 Lv%d %s · 心态 %s · 伤病 %d · 疲劳 %d\n阶段 %d %s · 战绩 %d 胜 %d 负（连胜 %d）· 卫冕 %d" % [
 		int(gs.s["day"]), int(gs.s["week"]), int(gs.s["ap"]), GameState.AP_PER_DAY,
 		int(gs.s["money"]), gs.my_rank(), int(gs.s["influence"]), inf_name,
-		int(gs.s["mind"]), int(gs.s["injury"]), int(gs.s["fatigue"]),
+		"%d·%s" % [int(gs.s["mind"]), GameState.mind_tier_name(int(gs.s["mind"]))], int(gs.s["injury"]), int(gs.s["fatigue"]),
 		int(gs.s["stage"]), stage_name, int(gs.s["wins"]), int(gs.s["losses"]),
 		int(gs.s["win_streak"]), int(gs.s["defenses"])]
 	var lines := ""
@@ -376,13 +490,18 @@ func _clear_sub() -> void:
 func _show_sub_main() -> void:
 	_clear_sub()
 	_shop_ap_charged = false
-	sub_box.add_child(_mk_label("拳馆中枢——选择今天的安排。训练消耗行动点与体力；正式赛报名不耗行动点。", 15))
+	var md_note := "今天是比赛日！正式赛报名不耗行动点，每个比赛日 1 场。" if gs.is_match_day() else "距离比赛日（每周第 7 天）还有 %d 天，抓紧训练。" % gs.days_to_match()
+	sub_box.add_child(_mk_label("拳馆中枢——选择今天的安排。训练消耗行动点与疲劳。\n" + md_note, 15))
 	hub_actions.add_child(_mk_button("训练", _show_trainings))
 	hub_actions.add_child(_mk_button("休息（2 AP）", _on_rest))
 	hub_actions.add_child(_mk_button("商店", _show_shop))
 	hub_actions.add_child(_mk_button("背包工坊", _show_bag))
 	hub_actions.add_child(_mk_button("赞助", _show_sponsor))
-	hub_actions.add_child(_mk_button("比赛", _show_matches))
+	var mb := _mk_button("★ 比赛（今天是比赛日）" if gs.can_fight_official() else ("比赛（还有 %d 天）" % gs.days_to_match() if not gs.is_match_day() else "比赛（今日已赛）"), _show_matches)
+	if gs.can_fight_official():
+		mb.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+		mb.add_theme_stylebox_override("normal", _style(Color(0.55, 0.2, 0.45, 0.9)))
+	hub_actions.add_child(mb)
 	hub_actions.add_child(_mk_button("约战（2 AP）", _show_spar))
 	hub_actions.add_child(_mk_button("排行榜", _show_ranking))
 	hub_actions.add_child(_mk_button("睡觉（结束今天）", _on_sleep))
@@ -699,7 +818,15 @@ func _show_matches() -> void:
 		for mode in [["manual", "手动应战"], ["auto", "自动观看"], ["sim", "模拟跳过"]]:
 			drow.add_child(_mk_button(mode[1], _on_start_defense.bind(mode[0])))
 		sub_box.add_child(drow)
-	sub_box.add_child(_mk_label("选择对手与模式（正式赛：影响排名/奖金/影响力）", 17))
+	if not gs.is_match_day():
+		sub_box.add_child(_mk_label("正式赛每周第 7 天开打——还有 %d 天。平时可以去「约战」切磋练手（2 AP，不计排名奖金）。" % gs.days_to_match(), 17))
+		sub_box.add_child(_mk_button("返回", _show_sub_main))
+		return
+	if not gs.can_fight_official():
+		sub_box.add_child(_mk_label("今天的正式赛已经打完了。好好休息，下周再来。", 17))
+		sub_box.add_child(_mk_button("返回", _show_sub_main))
+		return
+	sub_box.add_child(_mk_label("比赛日！选择对手与模式（正式赛：影响排名/奖金/影响力，每个比赛日 1 场）", 17))
 	for key in _match_candidates():
 		var e := gs.roster_entry(key)
 		var st: Dictionary = DataDB.foe_styles().get(String(e.get("style", "balanced")), {})
@@ -769,9 +896,18 @@ func _show_event_modal(title: String, ev: Dictionary) -> void:
 	pro_fx.hide()
 	modal_title.text = title
 	var txt := ""
+	var first_char := String(ev.get("char", ""))
 	for p in ev.get("pages", []):
-		txt += "%s：%s\n" % [String(p.get("w", "")), String(p.get("t", ""))]
+		var w := String(p.get("w", ""))
+		if first_char == "" and SPEAKERS.has(w) and w != "me":
+			first_char = w
+		var who := String(SPEAKERS.get(w, {}).get("name", w))
+		if w == "narr" or w == "":
+			txt += "[color=#c9bde6]%s[/color]\n\n" % String(p.get("t", ""))
+		else:
+			txt += "[b][color=#ffc2dd]%s[/color][/b]　%s\n\n" % [who, String(p.get("t", ""))]
 	modal_text.text = txt
+	_set_modal_portrait(first_char)
 	for c in modal_choices.get_children():
 		c.queue_free()
 	var choices: Array = ev.get("choices", [])
@@ -827,9 +963,19 @@ func _start_prologue() -> void:
 		"spar_started": false, "spar_rewarded": false}
 	_render_prologue()
 
+func _set_modal_portrait(char_id: String) -> void:
+	var path := String(SPEAKERS.get(char_id, {}).get("img", ""))
+	if path != "" and ResourceLoader.exists(path):
+		modal_portrait.texture = load(path)
+		modal_portrait.show()
+	else:
+		modal_portrait.texture = null
+		modal_portrait.hide()
+
 func _pro_set(title: String, speaker: String, text: String) -> void:
 	modal_title.text = title
-	modal_text.text = speaker + "\n" + text
+	modal_text.text = ("[b][color=#ffc2dd]%s[/color][/b]\n" % speaker if speaker != "" else "") + text
+	_set_modal_portrait("senior" if speaker.contains("梢") else "")
 	pro_fx.text = ""
 	pro_fx.hide()
 	if int(pro_state.get("step", 0)) != 1:
@@ -1069,6 +1215,10 @@ func _on_start_battle(key: String, mode: String, spar: bool) -> void:
 			return
 		gs.s["ap"] = int(gs.s["ap"]) - 2
 		gs.s["spars"] = int(gs.s.get("spars", 0)) + 1
+	elif not gs.can_fight_official():
+		# 规则在入口处兜底，不只靠比赛屏隐藏按钮（防止任何入口绕过：每周第 7 天、每天 1 场）
+		_hub_log_add("正式赛只在比赛日（每周第 7 天）开打，且每个比赛日 1 场。")
+		return
 	foe_key = key
 	foe_entry = gs.roster_entry(key)
 	battle_mode = mode
@@ -1077,12 +1227,16 @@ func _on_start_battle(key: String, mode: String, spar: bool) -> void:
 
 func _fighter_for_player() -> Dictionary:
 	var attrs := {}
+	var mind := int(gs.s["mind"])
+	# 心态修正（web battle.js 口径）：紧张（20~39）全属性 ×0.95；疲劳（<20）体力消耗 ×1.1
+	var mind_mul := 0.95 if mind >= 20 and mind < 40 else 1.0
 	for k in GameState.ATTR_KEYS:
-		attrs[k] = float(gs.s["attrs"][k]) * (1.0 - float(int(gs.s["injury"])) * 0.002)
+		attrs[k] = float(gs.s["attrs"][k]) * (1.0 - float(int(gs.s["injury"])) * 0.002) * mind_mul
 	var mods := gs.gear_battle_mods()
+	var stam_mul := float(mods["stam_mul"]) * (1.1 if mind < 20 else 1.0)
 	return BattleEngine.make_fighter("你", true, attrs, {
 		"punch_exp": gs.s["punch_exp"], "gear_pct": mods["pct"],
-		"gear_dr": mods["dr"], "gear_trauma_mul": mods["trauma_mul"], "gear_stam_mul": mods["stam_mul"],
+		"gear_dr": mods["dr"], "gear_trauma_mul": mods["trauma_mul"], "gear_stam_mul": stam_mul,
 		"style_key": "balanced"})
 
 func _fighter_for_foe() -> Dictionary:
@@ -1096,6 +1250,14 @@ func _start_battle_scene() -> void:
 	scr_battle.show()
 	battle_over = false
 	player_turn = true
+	# 上一场残留的倒地 / 震屏补间先停掉（否则回调会落在已释放的角色上）
+	for t in _rig_tweens.values():
+		if t and t.is_valid():
+			t.kill()
+	_rig_tweens.clear()
+	if _shake_tw and _shake_tw.is_valid():
+		_shake_tw.kill()
+	scr_battle.position = Vector2.ZERO
 	rig_foe = null
 	foe_portrait = null
 	for c in me_anchor.get_children():
@@ -1130,6 +1292,8 @@ func _start_battle_scene() -> void:
 	b_log.text = ("【卫冕战】冠军挑战——她是冲着你的冠军来的。\n" if is_defense else "") + ("比赛开始！你 对阵 %s。\n" % String(foe_entry["name"]))
 	_refresh_battle_ui()
 	_setup_tactic_buttons()
+	if battle_mode != "sim":
+		_sfx("bell", -4.0)
 	if battle_mode == "sim":
 		_run_sim()
 	elif battle_mode == "auto":
@@ -1151,7 +1315,7 @@ func _refresh_battle_ui() -> void:
 	b_st_b.value = float(engine.b["stamina"])
 	b_tr_a.value = float(engine.a["trauma"])
 	b_tr_b.value = float(engine.b["trauma"])
-	b_round.text = "第 %d 回合" % engine.round_no
+	b_round.text = "第 %d 回合" % mini(engine.round_no, BattleEngine.ROUNDS)
 	b_name_a.text = "你 · HP %.0f · 重创 %.0f" % [float(engine.a["hp"]), float(engine.a["trauma"])]
 	b_name_b.text = "%s · HP %.0f · 重创 %.0f" % [String(foe_entry["name"]), float(engine.b["hp"]), float(engine.b["trauma"])]
 
@@ -1228,13 +1392,25 @@ func _play_exchange_visuals(ev: Dictionary) -> void:
 			_flash(foe_portrait)
 		_hitstop([att_rig, def_rig], float(HITSTOP.get(react, 0.04)))
 		_screen_shake(float(SHAKE.get(react, 3.0)))
+		_sfx(String(SFX_FOR_REACT.get(react, "hit_light")), -2.0 if react == "hit_light" else 0.0)
 	elif kind == "dodge":
 		if def_rig:
 			def_rig.play_anim("dodge")
-	if bool(ev.get("ko", false)) and def_rig:
-		_knockdown_visual(def_rig, true)
-	elif bool(ev.get("knockdown", false)) and def_rig:
-		_knockdown_visual(def_rig)
+		_sfx("whoosh", -4.0, 1.1)
+	elif kind == "miss":
+		_sfx("whoosh", -6.0)
+	if bool(ev.get("ko", false)):
+		_sfx("knockdown")
+		_sfx("crowd", -3.0)
+		if def_rig:
+			_knockdown_visual(def_rig, true)
+	elif bool(ev.get("knockdown", false)):
+		_sfx("knockdown", -2.0)
+		_sfx("crowd", -8.0)
+		if def_rig:
+			_knockdown_visual(def_rig)
+	if ev.has("new_round"):
+		_sfx("bell", -4.0)
 
 ## 顿帧：命中瞬间双方动画同时停住一小下，再继续（不影响逻辑与计时器）。
 func _hitstop(rigs: Array, secs: float) -> void:
@@ -1285,7 +1461,11 @@ func _knockdown_visual(rig: FighterRig, stay: bool = false) -> void:
 		tw.tween_property(rig, "rotation", -0.7, 0.35).set_trans(Tween.TRANS_SINE) # 撑起
 		tw.tween_property(rig, "rotation", -0.85, 0.12) # 晃一下
 		tw.tween_property(rig, "rotation", 0.0, 0.38).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		tw.tween_callback(func() -> void: rig.play_anim("idle"))
+		var wr: WeakRef = weakref(rig)
+		tw.tween_callback(func() -> void:
+			var r: FighterRig = wr.get_ref()
+			if r and is_instance_valid(r):
+				r.play_anim("idle"))
 
 func _after_exchange(ev: Dictionary) -> void:
 	_battle_log(String(ev["text"]))
@@ -1348,6 +1528,10 @@ func _on_battle_finished() -> void:
 	auto_timer.stop()
 	var win := bool(engine.result["winner_is_a"])
 	_battle_log("比赛结束：%s 以 %s 获胜！" % ["你" if win else String(foe_entry["name"]), String(engine.result["how"])])
+	if battle_mode != "sim":
+		_sfx("bell", -2.0)
+		if win:
+			_sfx("crowd", -4.0)
 	if win and rig_me:
 		rig_me.play_anim("victory")
 	if is_spar:
@@ -1361,7 +1545,7 @@ func _on_battle_finished() -> void:
 		# 累计 KO 胜场（web koWins：正式赛获胜且对手 HP 归零才计，纯计数不参与数值逻辑）
 		if win and float(engine.b["hp"]) <= 0.0:
 			gs.s["ko_wins"] = int(gs.s["ko_wins"]) + 1
-		var res := gs.settle_match(foe_key, win, is_defense)
+		var res := gs.settle_match(foe_key, win, is_defense, not win and float(engine.a["hp"]) <= 0.0)
 		_hub_pending_result = "正式赛%s！奖金 ¥%d。%s" % ["胜" if win else "负", int(res["prize"]), String(res["stage_note"])]
 		if is_defense:
 			_hub_pending_result += "卫冕战：%s（累计卫冕 %d 次）。" % ["卫冕成功" if win else "卫冕失败，冠军易主", int(gs.s["defenses"])]

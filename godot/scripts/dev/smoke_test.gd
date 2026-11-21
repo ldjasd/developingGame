@@ -196,6 +196,26 @@ func _init() -> void:
 	eng2.start(qa, qb)
 	eng2.do_exchange(true, "upper")
 	check(not eng2.finished, "单次交换不终结比赛（无单发 KO）")
+	# --- 2026-11-21：比赛日 / 心态规则（web 口径补回）---
+	var gs_md := GameState.new()
+	check(not gs_md.is_match_day() and gs_md.days_to_match() == 6, "第 1 天不是比赛日，距比赛日 6 天")
+	for i in 6:
+		gs_md.sleep()
+	check(int(gs_md.s["day"]) == 7 and gs_md.is_match_day() and gs_md.can_fight_official(), "第 7 天是比赛日且可报名")
+	var foe_md := String(gs_md.s["ranking"][gs_md.my_rank() - 2])
+	gs_md.s["mind"] = 50
+	gs_md.settle_match(foe_md, true)
+	check(not gs_md.can_fight_official(), "同一比赛日只能打 1 场正式赛")
+	check(int(gs_md.s["mind"]) == 65, "胜场心态 +15（got %d）" % int(gs_md.s["mind"]))
+	gs_md.settle_match(foe_md, false, false, true)
+	check(int(gs_md.s["mind"]) == 40, "被 KO 心态 −25（got %d）" % int(gs_md.s["mind"]))
+	gs_md.sleep()
+	check(int(gs_md.s["mind"]) == 45, "睡觉心态向 60 回归 +5（got %d）" % int(gs_md.s["mind"]))
+	gs_md.s["mind"] = 85
+	gs_md.s["ap"] = 6
+	var pw_md := float(gs_md.s["attrs"]["power"])
+	gs_md.do_training("strength")
+	check(absf(float(gs_md.s["attrs"]["power"]) - pw_md - 3.0 * GameState.diminish(pw_md) * 1.1) < 0.001, "心态高昂训练效率 ×1.1")
 	print("== smoke done, fails=", fails, " ==")
 	if fails == 0:
 		print("SMOKE_PASS")

@@ -18,6 +18,7 @@ func _ready() -> void:
 	main._finish_prologue(true) # 新档先走序章：截图自检跳过序章，保持「中枢」镜头原意
 	await _wait(0.6)
 	await _shot("ui_hub")
+	main.gs.s["day"] = 7 # 正式赛只在比赛日（每周第 7 天）开打
 	main._on_start_battle("opp_rookie", "manual", false)
 	await _wait(1.2)
 	await _shot("ui_battle_guard")
@@ -27,6 +28,7 @@ func _ready() -> void:
 	await _wait(1.2)
 	main._on_battle_exit()
 	await _wait(0.4)
+	main.gs.s["last_match_day"] = 0 # 截图自检：同一天再开一场
 	main._on_start_battle("opp_counter", "manual", false)
 	await _wait(1.0)
 	await _shot("ui_battle_portrait")
