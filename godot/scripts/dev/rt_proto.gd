@@ -24,6 +24,7 @@ var bot := false
 var out_dir := ""
 var max_t := 9999.0
 var round_override := -1.0
+var seed_v := -1
 var me_attr := 30.0
 var foe_attr := 30.0
 var real_t := 0.0
@@ -48,6 +49,19 @@ var _info_t := 0.0
 var _pending_result := ""
 var _pending_wait := 0.0
 
+# KO 演出
+const KO_COUNT_STEP := 0.55   # KO 后读秒加快（规则早已判定，读秒只是演出）
+const KO_COUNT_DELAY := 1.0
+var _count_step := 1.0
+var _ko_popped := false
+var _last_hit_pos := Vector3(0, 1.3, -GAP)
+var white_rect: ColorRect
+var _ko_cam_w := 0.0
+var _ko_cam_on := false
+var _ko_victim: Node3D
+var _ko_orbit := 0.0
+var _shake_t := 0.0
+
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -63,6 +77,8 @@ func _ready() -> void:
 			me_attr = float(a.substr(5))
 		elif a.begins_with("--foe="):
 			foe_attr = float(a.substr(6))
+		elif a.begins_with("--seed="):
+			seed_v = int(a.substr(7))
 	var ring: Node3D = Ring.new()
 	add_child(ring)
 	cam = Camera3D.new()
@@ -72,6 +88,8 @@ func _ready() -> void:
 	_sfx = {
 		"light": load("res://assets/audio/designed_person/light_0.wav"),
 		"heavy": load("res://assets/audio/designed_person/heavy_0.wav"),
+		"heavy2": load("res://assets/audio/designed_person/heavy_3.wav"),
+		"crowd": load("res://assets/audio/crowd/crowd_win.wav"),
 		"body": load("res://assets/audio/designed_person/body_0.wav"),
 		"block": load("res://assets/audio/designed/block_0.wav"),
 		"whoosh": load("res://assets/audio/air_cloth/jacket_00.wav"),
@@ -100,11 +118,16 @@ func _new_match() -> void:
 	var pa := BattleCore.make("你", true, am, {"ai": bot, "tell": 0.0})
 	var pb := BattleCore.make("林小葵", false, af, {"style_key": "balanced"})
 	core.event.connect(_on_event)
-	core.start(pa, pb)
+	core.start(pa, pb, seed_v)
 	_end_t = -1.0
 	_pending_result = ""
 	_count_on = false
 	count_lb.text = ""
+	count_lb.add_theme_font_size_override("font_size", 96)
+	Engine.time_scale = 1.0
+	_ko_cam_on = false
+	_ko_victim = null
+	cam.cull_mask = 5 if cam_mode == 0 else 3
 	banner.text = ""
 
 
@@ -147,6 +170,7 @@ func _on_event(ev: Dictionary) -> void:
 			var tgt := _v(_other(who))
 			var pos: Vector3 = _v(who).call("glove_of", kind)
 			var blocked := String(ev["type"]) == "block"
+			_last_hit_pos = pos
 			var big := bool(ev["counter"]) or bool(ev["knockdown"]) or kind in ["hook", "upper"]
 			if blocked:
 				_spark(pos, 0.6, Color(0.5, 0.75, 1.0))
@@ -177,14 +201,17 @@ func _on_event(ev: Dictionary) -> void:
 				_info("闪开了！1 秒内反击 +40%")
 		"knockdown":
 			var n := int(ev["count"])
+			var ko := n >= 10
 			if bot:
 				print("KD who=%s count=%d at %.2f" % [who, n, real_t])
-			_v(who).call("act", "down", 60.0 if n >= 10 else n * BattleCore.COUNT_SEC + 1.2)  # KO 就不站起来了
-			_play("down")
-			fov_kick = 7.0
+			# KO：仰面倒下不再起来；普通击倒：先后仰再跪下，读秒后起身
+			_v(who).call("act", "ko_fall" if ko else "knock", 60.0 if ko else n * BattleCore.COUNT_SEC + 1.2)
+			_impact(who, ko)
 			_count_n = n
-			_count_t = 0.0
+			_count_step = KO_COUNT_STEP if ko else BattleCore.COUNT_SEC
+			_count_t = -(KO_COUNT_DELAY if ko else 0.5)  # 先让人倒下，再开始数
 			_count_on = true
+			_ko_popped = false
 			count_lb.text = ""
 		"getup":
 			count_lb.text = "站起来了！"
@@ -203,7 +230,80 @@ func _on_event(ev: Dictionary) -> void:
 			var won := bool(r["winner_is_a"])
 			_pending_result = ("你赢了！" if won else "你输了……") + "  " + String(r["how"]) + "\n按 Enter 再来一局"
 			# KO：先把 10 秒读完、盖上 K.O.，再出结果
-			_pending_wait = 10.0 * BattleCore.COUNT_SEC + 1.0 if (_count_on and _count_n >= 10) else 0.0
+			_pending_wait = KO_COUNT_DELAY + 10.0 * KO_COUNT_STEP + 1.6 if (_count_on and _count_n >= 10) else 0.0
+
+
+## 击倒 / KO 那一拳的冲击：长顿帧 → 慢动作 → 白闪 → 爆点 → 叠层重击声 + 观众 → 落地闷响 + 小震
+func _impact(who: String, ko: bool) -> void:
+	var victim := _v(who)
+	var pos := _last_hit_pos
+	freeze = 0.24 if ko else 0.14
+	white_rect.color.a = 0.75 if ko else 0.35
+	_burst(pos, ko)
+	_play("heavy")
+	_play("heavy2")
+	_play("crowd", -2.0 if ko else -8.0)
+	fov_kick = 9.0 if ko else 6.0
+	# 顿帧结束后进慢动作（计时不受慢动作影响）
+	var slow := 0.25 if ko else 0.5
+	var slow_len := 0.95 if ko else 0.35
+	get_tree().create_timer(freeze, true, false, true).timeout.connect(func() -> void:
+		Engine.time_scale = slow
+		get_tree().create_timer(slow_len, true, false, true).timeout.connect(func() -> void: Engine.time_scale = 1.0))
+	# 落地：KO 仰面倒下约 0.75 秒（游戏时间）落地；普通击倒 0.35 秒跪下
+	get_tree().create_timer(0.75 if ko else 0.35).timeout.connect(func() -> void:
+		_play("down")
+		_shake_t = 0.25 if ko else 0.12)
+	if ko:
+		_ko_victim = victim
+		_ko_cam_on = true
+		_ko_orbit = 0.0
+		get_tree().create_timer(1.4).timeout.connect(func() -> void: _play("bell_end"))
+
+
+func _burst(pos: Vector3, ko: bool) -> void:
+	_spark(pos, 2.8 if ko else 2.0, Color(1.0, 0.95, 0.6))
+	_spark(pos, 1.4, Color(1.0, 1.0, 1.0))
+	# 扩散环
+	var ring := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.10
+	tm.outer_radius = 0.13
+	ring.mesh = tm
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.albedo_color = Color(1.0, 0.85, 0.4, 0.9)
+	ring.material_override = rm
+	ring.position = pos
+	ring.rotation_degrees = Vector3(90, 0, 0)  # 环面朝镜头（镜头在 +Z）
+	add_child(ring)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(ring, "scale", Vector3.ONE * (6.0 if ko else 4.0), 0.35)
+	tw.tween_property(rm, "albedo_color:a", 0.0, 0.35)
+	tw.chain().tween_callback(ring.queue_free)
+	# 飞溅的汗珠 / 碎光
+	var rng := RandomNumberGenerator.new()
+	for i in (16 if ko else 9):
+		var d := MeshInstance3D.new()
+		var sm := SphereMesh.new()
+		sm.radius = 0.018
+		sm.height = 0.036
+		d.mesh = sm
+		var dm := StandardMaterial3D.new()
+		dm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		dm.albedo_color = Color(0.85, 0.95, 1.0) if i % 2 == 0 else Color(1.0, 0.9, 0.5)
+		d.material_override = dm
+		d.position = pos
+		add_child(d)
+		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.2, 1.0), rng.randf_range(-1.0, -0.2)).normalized()
+		var dt := create_tween()
+		dt.set_parallel(true)
+		dt.tween_property(d, "position", pos + dir * rng.randf_range(0.35, 0.8), 0.45).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		dt.tween_property(dm, "albedo_color:a", 0.0, 0.5)
+		dt.chain().tween_callback(d.queue_free)
 
 
 func _spark(pos: Vector3, k: float, c: Color) -> void:
@@ -226,12 +326,12 @@ func _spark(pos: Vector3, k: float, c: Color) -> void:
 	tw.chain().tween_callback(mi.queue_free)
 
 
-func _play(key: String) -> void:
+func _play(key: String, db: float = -4.0) -> void:
 	if not _sfx.has(key) or _sfx[key] == null:
 		return
 	var p := AudioStreamPlayer.new()
 	p.stream = _sfx[key]
-	p.volume_db = -4.0
+	p.volume_db = db
 	add_child(p)
 	p.play()
 	p.finished.connect(p.queue_free)
@@ -358,6 +458,25 @@ func _place_cam(delta: float) -> void:
 		cam.position = mid + Vector3(sin(deg_to_rad(38.0)) * 3.0, 0.7, cos(deg_to_rad(38.0)) * 3.0)
 		cam.look_at(mid + Vector3(0, -0.1, 0))
 		cam.fov = 45.0 - fov_kick
+	# KO 镜头：从侧前方推近倒地的人，然后像转播一样慢慢绕
+	_ko_cam_w = move_toward(_ko_cam_w, 1.0 if _ko_cam_on else 0.0, delta * 2.5)
+	if _ko_cam_w > 0.0 and _ko_victim:
+		_ko_orbit = minf(_ko_orbit + delta * 0.18, 0.7)  # 往远离站立方的方向绕，绕到一定角度停住
+		var c := _ko_victim.global_position + Vector3(0, 0.45, 0)
+		# 从倒地者的正面斜侧看（站着的一方让到另一边，不挡镜头）
+		var fz := 1.0 if _ko_victim == foe_v else -1.0   # 倒地者正面朝向
+		var sx := -1.0 if _ko_victim == foe_v else 1.0   # 镜头放在站立方让开方向的反侧
+		var ang := deg_to_rad(50.0) + _ko_orbit
+		var ko_xf := Transform3D(Basis.IDENTITY, c + Vector3(sx * sin(ang) * 2.0, 0.95, fz * cos(ang) * 2.0))
+		ko_xf = ko_xf.looking_at(c, Vector3.UP)
+		var w := ease(_ko_cam_w, -2.0)
+		cam.global_transform = cam.global_transform.interpolate_with(ko_xf, w)
+		cam.fov = lerpf(cam.fov, 38.0 - fov_kick, w)
+		cam.cull_mask = 3 if w > 0.5 else (5 if cam_mode == 0 else 3)  # KO 镜头里主角显示实体
+	# 落地小震（只给击倒 / KO，3px 量级）
+	if _shake_t > 0.0:
+		_shake_t -= delta
+		cam.position += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * 0.012
 
 
 # ---------------- HUD ----------------
@@ -370,6 +489,11 @@ func _build_hud() -> void:
 	flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(flash_rect)
+	white_rect = ColorRect.new()
+	white_rect.color = Color(1, 1, 1, 0)
+	white_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	white_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(white_rect)
 	for side in ["a", "b"]:
 		var box := VBoxContainer.new()
 		box.position = Vector2(24, 20) if side == "a" else Vector2(840, 20)
@@ -398,7 +522,7 @@ func _build_hud() -> void:
 	round_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud.add_child(round_lb)
 	banner = _label("", 44)
-	banner.position = Vector2(190, 300)
+	banner.position = Vector2(190, 430)
 	banner.custom_minimum_size = Vector2(900, 0)
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud.add_child(banner)
@@ -453,10 +577,31 @@ func _update_hud(delta: float) -> void:
 	_info_t -= delta
 	if _info_t <= 0.0:
 		info_lb.text = ""
+	white_rect.color.a = move_toward(white_rect.color.a, 0.0, delta * 2.5)
 	if _count_on:
 		_count_t += delta
-		var shown := mini(int(_count_t / BattleCore.COUNT_SEC) + 1, _count_n)
-		count_lb.text = "K.O." if _count_n >= 10 and _count_t > 10.0 * BattleCore.COUNT_SEC else str(shown)
+		if _count_t < 0.0:
+			count_lb.text = ""
+		elif _count_n >= 10 and _count_t > 10.0 * _count_step:
+			if not _ko_popped:
+				_ko_popped = true
+				count_lb.text = "K.O."
+				count_lb.add_theme_font_size_override("font_size", 150)
+				count_lb.pivot_offset = count_lb.size / 2.0
+				count_lb.scale = Vector2(2.2, 2.2)
+				var tw := create_tween()
+				tw.tween_property(count_lb, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+				_play("heavy", 0.0)
+				_play("crowd", 0.0)
+				white_rect.color.a = 0.35
+		else:
+			var shown := mini(int(_count_t / _count_step) + 1, _count_n)
+			var txt := str(shown)
+			if count_lb.text != txt:
+				count_lb.text = txt
+				count_lb.pivot_offset = count_lb.size / 2.0
+				count_lb.scale = Vector2(1.5, 1.5)
+				create_tween().tween_property(count_lb, "scale", Vector2.ONE, 0.15)
 
 
 func _snap(name: String) -> void:

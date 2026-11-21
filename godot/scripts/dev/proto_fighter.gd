@@ -280,6 +280,27 @@ func update_pose(delta: float) -> void:
 				roll += 0.18 * b
 				gl = gl.lerp(Vector3(-0.22, 0.40, -0.10), b)
 				gr = gr.lerp(Vector3(0.22, 0.38, -0.08), b)
+			"ko_fall":
+				# KO：先被打得头猛地后仰、整个人往后弹（0.18 秒），再仰面倒下（0.55 秒落地）
+				var s1 := clampf(_t / 0.18, 0.0, 1.0)
+				var s2 := ease(clampf((_t - 0.22) / 0.55, 0.0, 1.0), 2.2)
+				pitch += 0.65 * s1 + 0.95 * s2
+				off.z += 0.32 * s1 + 0.30 * s2
+				off.y -= 0.10 * s1 + 0.66 * s2
+				roll += 0.18 * s2
+				yaw += 0.25 * s1
+				gl = gl.lerp(Vector3(-0.42, 0.30, 0.10), maxf(s1 * 0.6, s2))
+				gr = gr.lerp(Vector3(0.40, 0.45, 0.05), maxf(s1 * 0.6, s2))
+			"knock":
+				# 普通击倒：被打得往后一仰（0.15 秒），然后膝盖一软跪下去（快）
+				var k1 := clampf(_t / 0.15, 0.0, 1.0) * (1.0 - clampf((_t - 0.15) / 0.2, 0.0, 1.0))
+				var k2 := clampf((_t - 0.12) / 0.25, 0.0, 1.0) * (1.0 - clampf((_t - (_dur - 0.6)) / 0.6, 0.0, 1.0))
+				pitch += 0.45 * k1 - 0.55 * k2
+				off.z += 0.18 * k1 + 0.10 * k2
+				off.y -= 0.42 * k2
+				roll += 0.10 * k2
+				gl = gl.lerp(Vector3(-0.20, 0.10, -0.32), k2)
+				gr = gr.lerp(Vector3(0.20, 0.05, -0.30), k2)
 			"down":
 				# 单膝跪地：0.4 秒崩下去，最后 0.6 秒站起来
 				var k := clampf(_t / 0.4, 0.0, 1.0) * (1.0 - clampf((_t - (_dur - 0.6)) / 0.6, 0.0, 1.0))
@@ -290,7 +311,7 @@ func update_pose(delta: float) -> void:
 				gl = gl.lerp(Vector3(-0.20, 0.10, -0.32), k)
 				gr = gr.lerp(Vector3(0.20, 0.05, -0.30), k)
 	# 按住格挡（呈现层每帧同步规则内核的状态）：1 = 高格挡，2 = 低格挡
-	if guard_hold > 0 and not PUNCH.has(action) and action != "down":
+	if guard_hold > 0 and not PUNCH.has(action) and not action in ["down", "knock", "ko_fall"]:
 		var low := guard_hold == 2
 		gl = BLOCK_L + (Vector3(0.02, -0.30, -0.06) if low else Vector3.ZERO)
 		gr = BLOCK_R + (Vector3(-0.02, -0.30, -0.06) if low else Vector3.ZERO)
