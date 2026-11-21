@@ -21,6 +21,10 @@ build/
 *.pck
 *.zip
 
+# 3D 渲染试点的样例模型（VRoid CC0，体积大，按 assets/proto3d/README.md 自行下载）
+assets/proto3d/*.vrm
+assets/proto3d/*.vrm.import
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

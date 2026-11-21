@@ -6,6 +6,7 @@
 ## 未发布
 
 ### 2026-11-21
+- **工程**：战斗渲染试点——接入 Godot VRM 插件（v2.6.1，MIT；未装原生物理库）、VRoid CC0 样例模型（不入库）；`dev/vrm_fighter`（IK 驱动人形骨骼）、`dev/sprite_fighter`（单张立绘基线）；记录 `playtests/RENDER_PROTO_20261121.md`。冒烟 SMOKE_PASS。
 - **工程**：战斗镜头试点 `dev/cam_proto`（侧视 / 背后 / 过肩 / 第三人称四分屏），用户定背后视角；记录 `playtests/CAMERA_PROTO_20261121.md`。
 - **工程**：文档重组——新入口 `docs/README.md`；新增审核报告、发布路线图、愿景、决策记录、按系统拆分的设计文档、流程文档与模板；旧文档归档到 `archive/web-prototype/`。
 - **内容**：接入 muse 的 BGM 三首（标题 / 日常 / 比赛，0.8 秒交叉淡化，−14dB）。

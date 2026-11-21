@@ -5,6 +5,11 @@ extends Node3D
 ## 录演示：... -- --demo [--out=<目录>]（自动播固定脚本，存关键帧截图，播完退出；配合 --write-movie 录视频）
 
 const Fighter := preload("res://scripts/dev/proto_fighter.gd")
+const VrmFighter := preload("res://scripts/dev/vrm_fighter.gd")
+const SpriteFighter := preload("res://scripts/dev/sprite_fighter.gd")
+# 3D 试点模型（VRoid CC0 样例，见 assets/proto3d/README.md）
+const VRM_ME := "res://assets/proto3d/AvatarSample_G.vrm"
+const VRM_FOE := "res://assets/proto3d/AvatarSample_E.vrm"
 const GAP := 0.56  # 两人各自离中心的距离（米）
 
 const CAMS := [
@@ -42,6 +47,9 @@ var freeze := 0.0
 var fov_kick := 0.0
 var demo := false
 var out_dir := ""
+var use_3d := false
+var use_2d := false
+var only_view := -1
 var _next := 0
 var _shots_done := {}
 var _sfx := {}
@@ -56,10 +64,18 @@ func _ready() -> void:
 			demo = true
 		elif a.begins_with("--out="):
 			out_dir = a.substr(6)
+		elif a == "--model=3d":
+			use_3d = true
+		elif a == "--model=2d":
+			use_2d = true
+		elif a.begins_with("--view="):
+			only_view = int(a.substr(7)) - 1
 	_build_ring()
 	me = _make_fighter(true)
 	foe = _make_fighter(false)
 	_build_views()
+	if only_view >= 0:
+		_show_only(only_view)
 	_player = AudioStreamPlayer.new()
 	add_child(_player)
 	_sfx = {
@@ -72,7 +88,15 @@ func _ready() -> void:
 
 
 func _make_fighter(is_me: bool) -> Node3D:
-	var f: Node3D = Fighter.new()
+	var f: Node3D
+	if use_2d and not is_me:
+		f = SpriteFighter.new()
+		f.set("texture_path", "res://assets/fighters/portraits/opp_rookie.webp")
+	elif use_3d:
+		f = VrmFighter.new()
+		f.set("model_path", VRM_ME if is_me else VRM_FOE)
+	else:
+		f = Fighter.new()
 	if is_me:
 		f.body_color = Color(0.93, 0.45, 0.70)
 		f.glove_color = Color(0.55, 0.30, 0.85)
@@ -113,7 +137,10 @@ func _build_ring() -> void:
 	spot.rotation_degrees = Vector3(-90, 0, 0)
 	spot.spot_range = 9.0
 	spot.spot_angle = 38.0
-	spot.light_energy = 3.0
+	spot.light_energy = 0.9 if use_3d else 3.0  # MToon 卡通材质对强光很敏感，3D 模式降光
+	if use_3d:
+		sun.light_energy = 0.75
+		e.ambient_light_energy = 0.35
 	spot.light_color = Color(1.0, 0.92, 0.85)
 	add_child(spot)
 	_box(Vector3(6.2, 0.12, 6.2), Vector3(0, -0.06, 0), Color(0.42, 0.40, 0.55))
@@ -223,9 +250,10 @@ func _place_cams(delta: float) -> void:
 	cams[0].look_at(Vector3(0, 1.1, 0))
 	cams[0].fov = 46.0
 	# ② 背后：主角背后偏上、居中
-	cams[1].position = me_p + Vector3(0, 2.45, 2.2)
-	cams[1].look_at(foe.position + Vector3(0, 1.05, 0))
-	cams[1].fov = 48.0 - fov_kick
+	# 镜头要比主角头顶高出足够多，主角的头才会落在对手脸的下方
+	cams[1].position = me_p + Vector3(0, 2.7, 1.75)
+	cams[1].look_at(foe.position + Vector3(0, 0.95, 0))
+	cams[1].fov = 40.0 - fov_kick
 	# ③ 过肩：右肩后方，贴近
 	cams[2].position = me_p + Vector3(0.52, 1.66, 0.85)
 	cams[2].look_at(foe_head + Vector3(-0.12, -0.15, 0))

@@ -280,6 +280,8 @@ func update_pose(delta: float) -> void:
 				gl = gl.lerp(Vector3(-0.22, 0.40, -0.10), b)
 				gr = gr.lerp(Vector3(0.22, 0.38, -0.08), b)
 
+	if _apply(off, pitch, yaw, roll, gl, gr, glow):
+		return
 	for i in _glove_mats.size():
 		var hand_glow := glow if PUNCH.has(action) and HAND[action] == ("l" if i == 0 else "r") else 0.0
 		_glove_mats[i].emission_enabled = hand_glow > 0.01
@@ -320,6 +322,11 @@ func update_pose(delta: float) -> void:
 		_seg("th_" + s, hp, kn)
 		_seg("sh_" + s, kn, foot)
 		_seg("shoe_" + s, foot + Vector3(0, -0.02, 0.06), foot + Vector3(0, -0.02, -0.10))
+
+
+## 子类（3D 模型版）覆盖：用算好的姿势驱动骨骼；返回 true 表示已处理，不再摆几何体
+func _apply(_off: Vector3, _pitch: float, _yaw: float, _roll: float, _gl: Vector3, _gr: Vector3, _glow: float) -> bool:
+	return false
 
 
 func _bez(a: Vector3, m: Vector3, b: Vector3, k: float) -> Vector3:

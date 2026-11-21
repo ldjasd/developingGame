@@ -7,7 +7,7 @@
 
 | # | 问题 | 选项 | Claude 建议 | 详细 |
 |---|---|---|---|---|
-| 2 | 战斗角色渲染 | 2D 精灵 / 3D 卡通 | 先做试点再定 | `design/battle.md` §10 |
+| 2 | 战斗角色渲染 | 2D 精灵 / 3D 卡通 | **3D**（试点已做，见 `playtests/RENDER_PROTO_20261121.md`） | `design/battle.md` §10 |
 | 3 | 生涯终点 | 无限 / 主线 40~60 周 + 结局 | 主线 + 结局 + 自由模式 | `design/career.md` §2.1 |
 | 4 | 装备系统 | 保持 / 收缩成外观 + 3 维取舍 | 收缩 | `design/equipment.md` |
 | 5 | 发布渠道 | itch.io / 其他 | itch.io 免费 | `process/RELEASE_CHECKLIST.md` |
