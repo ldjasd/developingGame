@@ -40,8 +40,8 @@ const SFX_RECORDED := {
 	"bell_end": [["bell/bell_end"], 0.0],
 }
 
-## 用户 2026-11-21：挥空与观众声先关掉（合成版不对，找到合适素材前不播）
-const SFX_DISABLED := ["whoosh", "crowd"]
+## 临时静音名单（空 = 全部正常播放）。2026-11-21 曾误把挥空/观众关掉（用户原意是「听一下」），已恢复
+const SFX_DISABLED: Array = []
 
 func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	if name in SFX_DISABLED:

@@ -7,7 +7,7 @@
 | 格挡 | `designed/block_*.wav` | 速度球拳套实录 + 合成层（`design_punches.py`） |
 | 开场铃 / 终场铃 | `bell/bell_start.wav`、`bell/bell_end.wav` | TRP 真实拳击铃实录；开场 = 单响，终场 = 同一只铃三下真实敲击叠成「铛-铛-铛」；修音：70Hz 以下缓坡去轰鸣、尾部噪声门、短场馆混响、统一音量，不变调（`godot/tools/make_bells.py`） |
 | 倒地 | `kenney/*.ogg` | Kenney Impact Sounds 原样 |
-| 挥空、观众 | — | 用户 2026-11-21 要求先关掉（`main.gd` `SFX_DISABLED`），合成版 `whoosh.wav`、`crowd.wav` 留着但不播 |
+| 挥空、观众 | `whoosh.wav`、`crowd.wav` | 本项目合成（`gen_sfx.py`），待评估是否换实录 |
 
 ## 素材来源与授权（全部 CC0 1.0，可商用，不要求署名）
 | 来源 | 作者 | 链接 |
