@@ -1,0 +1,26 @@
+{
+  "senior": {
+    "name": "藤原梢",
+    "role": "前辈 · 退役拳手",
+    "img": "assets/story/senior.webp",
+    "desc": "在街机厅把你「捡」回拳馆的人。眼毒，嘴硬，心软。"
+  },
+  "manager": {
+    "name": "栗原真纪",
+    "role": "经纪人",
+    "img": "assets/story/manager.webp",
+    "desc": "替你谈赞助与赛程的人。务实，算盘打得精，心也细。"
+  },
+  "rival": {
+    "name": "沈墨凛",
+    "role": "宿敌 · 防守反击型",
+    "img": "assets/story/rival.webp",
+    "desc": "黑长直的反击高手。你们在擂台上见过不止一次了。"
+  },
+  "teammate": {
+    "name": "林小葵",
+    "role": "同期队友",
+    "img": "assets/story/teammate.webp",
+    "desc": "和你差不多时间进馆的同期生。元气，输了也笑着说下次。"
+  }
+}

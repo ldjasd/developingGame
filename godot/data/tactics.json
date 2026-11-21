@@ -1,0 +1,24 @@
+{
+  "tactics": {
+    "attack": {
+      "name": "强攻压制"
+    },
+    "counter": {
+      "name": "稳守反击"
+    },
+    "points": {
+      "name": "游走打点"
+    }
+  },
+  "break_tactics": {
+    "attack": {
+      "name": "强攻"
+    },
+    "balanced": {
+      "name": "均衡"
+    },
+    "guard": {
+      "name": "稳守"
+    }
+  }
+}

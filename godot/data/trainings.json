@@ -1,0 +1,107 @@
+[
+  {
+    "id": "spar",
+    "name": "实战陪练",
+    "pts": 3,
+    "desc": "意志 +1 · 全部拳种经验 +5 · 10% 概率轻伤",
+    "stam": 15,
+    "apply": "function (s) { s.attrs.will += 1; PUNCH_KEYS.forEach(function (k) { addPunchExp(s, k, 5); });\n          if (Math.random() < 0.10) { s.injury = Math.min(100, s.injury + 10); return '陪练中挨了一记重拳，意志 +1，全拳种经验 +5——但眉角肿了，伤病 +10。'; }\n          return '和陪练真刀真枪打了几回合，意志 +1，全部拳种经验 +5。'; }"
+  },
+  {
+    "id": "strength",
+    "name": "力量训练",
+    "pts": 3,
+    "desc": "力量 +3",
+    "stam": 12,
+    "apply": "function (s) { s.attrs.power += 3; return '杠铃卧推加深蹲，力量 +3，胳膊都在抖。'; }"
+  },
+  {
+    "id": "bag",
+    "name": "重沙袋",
+    "pts": 3,
+    "desc": "力量 +2 · 直拳/摆拳经验 +10",
+    "stam": 10,
+    "apply": "function (s) { s.attrs.power += 2; addPunchExp(s, 'straight', 10); addPunchExp(s, 'hook', 10); return '抡起重拳砸向沙袋，力量 +2，直拳与摆拳更熟练了。'; }"
+  },
+  {
+    "id": "pads",
+    "name": "手靶训练",
+    "pts": 2,
+    "desc": "精准度 +2 · 技术 +1 · 刺拳经验 +10",
+    "stam": 8,
+    "apply": "function (s) { s.attrs.accuracy += 2; s.attrs.technique += 1; addPunchExp(s, 'jab', 10); return '跟着教练的手靶啪啪作响，精准度 +2，技术 +1，刺拳更顺手了。'; }"
+  },
+  {
+    "id": "upper",
+    "name": "上勾拳特训",
+    "pts": 2,
+    "desc": "上勾拳经验 +10 · 力量 +1",
+    "stam": 8,
+    "apply": "function (s) { s.attrs.power += 1; addPunchExp(s, 'upper', 10); return '对着上勾靶反复钻拳，从腿到腰一气呵成，力量 +1，上勾拳更熟练了。'; }"
+  },
+  {
+    "id": "body",
+    "name": "击腹拳特训",
+    "pts": 2,
+    "desc": "击腹拳经验 +10 · 精准度 +1",
+    "stam": 8,
+    "apply": "function (s) { s.attrs.accuracy += 1; addPunchExp(s, 'body', 10); return '专打沙袋的腹部标记点，找准肋下空当，精准度 +1，击腹拳更熟练了。'; }"
+  },
+  {
+    "id": "rope",
+    "name": "跳绳",
+    "pts": 2,
+    "desc": "步伐速度 +2 · 耐久 +1",
+    "stam": 8,
+    "apply": "function (s) { s.attrs.footwork += 2; s.attrs.endurance += 1; return '绳子甩得呼呼响，步伐速度 +2，耐久 +1。'; }"
+  },
+  {
+    "id": "run",
+    "name": "长跑",
+    "pts": 2,
+    "desc": "耐久 +2",
+    "stam": 10,
+    "apply": "function (s) { s.attrs.endurance += 2; return '沿着河岸跑了十公里，耐久 +2。'; }"
+  },
+  {
+    "id": "speedball",
+    "name": "速度球",
+    "pts": 2,
+    "desc": "出拳速度 +2 · 精准度 +1",
+    "stam": 6,
+    "apply": "function (s) { s.attrs.speed += 2; s.attrs.accuracy += 1; return '对着速度球连珠炮出拳，出拳速度 +2，精准度 +1。'; }"
+  },
+  {
+    "id": "dodgeball",
+    "name": "闪躲球",
+    "pts": 2,
+    "desc": "防守技术 +2 · 步伐速度 +1",
+    "stam": 8,
+    "apply": "function (s) { s.attrs.defense += 2; s.attrs.footwork += 1; return '躲教练扔来的软球，防守技术 +2，步伐速度 +1。'; }"
+  },
+  {
+    "id": "shadow",
+    "name": "空击训练",
+    "pts": 1,
+    "desc": "技术 +1 · 精准度 +1",
+    "stam": 6,
+    "apply": "function (s) { s.attrs.technique += 1; s.attrs.accuracy += 1; return '对着镜子反复打空击，技术 +1，精准度 +1。'; }"
+  },
+  {
+    "id": "video",
+    "name": "录像研究",
+    "pts": 1,
+    "desc": "技术 +1 · 精准度 +1 · 比赛前一天用可侦察对手弱点",
+    "stam": 3,
+    "apply": "function (s) { s.attrs.technique += 1; s.attrs.accuracy += 1;\n          if ((s.day + 1) % 7 === 0) { s.scoutedForDay = s.day + 1; return '把明天对手的录像翻来覆去看，技术 +1，精准度 +1——弱点记下了！下场比赛用对应拳种打他伤害 +30%。'; }\n          return '复盘比赛录像，技术 +1，精准度 +1。（比赛前一天研究，能侦察出对手弱点）'; }"
+  },
+  {
+    "id": "meditation",
+    "name": "冥想调整",
+    "pts": 1,
+    "desc": "意志 +1 · 心态 +10",
+    "stam": 2,
+    "mind": 10,
+    "apply": "function (s) { s.attrs.will += 1; return '闭眼冥想调整呼吸，意志 +1，心态 +10。'; }"
+  }
+]

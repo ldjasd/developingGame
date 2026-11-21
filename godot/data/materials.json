@@ -1,0 +1,37 @@
+[
+  {
+    "id": "synthetic",
+    "name": "人造革",
+    "kind": "皮料"
+  },
+  {
+    "id": "calf",
+    "name": "小牛皮",
+    "kind": "皮料"
+  },
+  {
+    "id": "goat",
+    "name": "山羊皮",
+    "kind": "皮料"
+  },
+  {
+    "id": "kangaroo",
+    "name": "袋鼠皮",
+    "kind": "皮料"
+  },
+  {
+    "id": "latex",
+    "name": "乳胶",
+    "kind": "内衬材料"
+  },
+  {
+    "id": "gel",
+    "name": "凝胶",
+    "kind": "内衬材料"
+  },
+  {
+    "id": "horsehair",
+    "name": "马毛",
+    "kind": "内衬材料"
+  }
+]

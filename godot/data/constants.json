@@ -1,0 +1,219 @@
+{
+  "punch_keys": [
+    "jab",
+    "straight",
+    "hook",
+    "upper",
+    "body"
+  ],
+  "craft_fee": 200,
+  "craft_mat_need": 2,
+  "punch_ko": {
+    "jab": 6,
+    "straight": 12,
+    "upper": 18,
+    "hook": 18,
+    "body": 12
+  },
+  "ko_decay": 6,
+  "trauma_k": 70,
+  "trauma_hp_floor": 0.4,
+  "attr_hard_cap": 100,
+  "counter_pref": {
+    "back": "straight",
+    "down": "upper",
+    "side": "hook"
+  },
+  "counter_pref_txt": {
+    "back": "后闪→直拳",
+    "down": "下闪→上勾拳",
+    "side": "侧闪→摆拳"
+  },
+  "ref_base": 9.3,
+  "ref_drift": 0.45,
+  "ref_win": 0.9,
+  "ref_loss": 0.55,
+  "ref_form": 0.1,
+  "ref_beat": 0.3,
+  "round_seconds": 45,
+  "rounds": 3,
+  "tick_ms": 500,
+  "enh_max": 10,
+  "enh_mat_curve": [
+    1,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2,
+    3,
+    3
+  ],
+  "mech_defs": {
+    "trauma": {
+      "floor": 0.5,
+      "per": 0.004,
+      "label": "所受重创积累"
+    },
+    "stam": {
+      "floor": 0.7,
+      "per": 0.003,
+      "label": "出拳体力消耗"
+    },
+    "cd": {
+      "floor": 0.6,
+      "per": 0.004,
+      "label": "指令冷却"
+    }
+  },
+  "physio_price": 1600,
+  "physio_heal": 40,
+  "physio_weekly_max": 2,
+  "camp_charges": 4,
+  "promo_prize_mul": 1.4,
+  "tip_texts": {
+    "train": "训练：点卡片凑点数（同一项可重复选），凑满 5 点收益最大；选好后点底部「开始训练」，一次结算。",
+    "shop": "商店：点商品卡购买，卡上的绿 / 红字是和你现装备的差值；进店这一趟扣 2 AP，慢慢挑。",
+    "match": "比赛：每周第 7 天是比赛日，报名免费（0 AP）。比赛前一天在训练里做「录像研究」，能侦察对手的弱点拳种。",
+    "status": "状态页：属性、装备、背包、赞助都在这里，不耗行动点——想看随时来看。"
+  },
+  "persona_adjust_txt": {
+    "comeback": "落后时会转强攻反扑",
+    "protect": "领先后会转稳守保胜果",
+    "desperate": "残血时会拼命强攻",
+    "none": "整场一种打法、不会变招"
+  },
+  "spar_weekly_cap": 2,
+  "spar_ap_cost": 2,
+  "pose_dir": "assets/pose/",
+  "poses": {
+    "guard": "guard.webp",
+    "jab": "jab.webp",
+    "straight": "straight.webp",
+    "hook": "hook.webp",
+    "upper": "upper.webp",
+    "body": "body.webp",
+    "block": "block.webp",
+    "dodge": "dodge.webp",
+    "hit": "hit.webp",
+    "victory": "victory.webp"
+  },
+  "pose_focus": {
+    "guard": "center top",
+    "jab": "80% top",
+    "straight": "82% top",
+    "hook": "76% top",
+    "upper": "62% top",
+    "body": "72% top",
+    "block": "center top",
+    "dodge": "center top",
+    "hit": "center top",
+    "victory": "center top"
+  },
+  "pose_timing": {
+    "punch": 250,
+    "hit": 320,
+    "block": 300,
+    "dodge": 320
+  },
+  "foe_anim_chars": {
+    "opp_world_champion": "evelyn",
+    "opp_counter": "counter",
+    "opp_champion_domestic": "champion_domestic",
+    "opp_rookie": "rookie",
+    "opp_shy": "shy",
+    "opp_pocket": "pocket",
+    "opp_braid": "braid",
+    "opp_brick": "brick"
+  },
+  "attr_style": {
+    "power": [
+      "cat-a",
+      "✦"
+    ],
+    "endurance": [
+      "cat-a",
+      "♥"
+    ],
+    "will": [
+      "cat-a",
+      "★"
+    ],
+    "speed": [
+      "cat-b",
+      "⚡"
+    ],
+    "accuracy": [
+      "cat-b",
+      "◎"
+    ],
+    "footwork": [
+      "cat-b",
+      "»"
+    ],
+    "defense": [
+      "cat-c",
+      "◆"
+    ],
+    "technique": [
+      "cat-c",
+      "✧"
+    ]
+  },
+  "plan_points": 5,
+  "train_icons": {
+    "spar": "拳",
+    "strength": "力",
+    "bag": "包",
+    "pads": "靶",
+    "upper": "勾",
+    "body": "腹",
+    "rope": "绳",
+    "run": "跑",
+    "speedball": "速",
+    "dodgeball": "闪",
+    "shadow": "影",
+    "video": "像",
+    "meditation": "冥"
+  },
+  "train_cats": {
+    "spar": "a",
+    "strength": "a",
+    "bag": "a",
+    "upper": "a",
+    "pads": "b",
+    "body": "b",
+    "speedball": "b",
+    "dodgeball": "b",
+    "video": "b",
+    "rope": "c",
+    "run": "c",
+    "shadow": "c",
+    "meditation": "c"
+  },
+  "scene_views": {
+    "title": "titleView",
+    "daily": "dailyView",
+    "train": "trainView",
+    "shop": "shopView",
+    "status": "statusView",
+    "match": "matchView",
+    "gallery": "galleryView",
+    "saves": "savesView",
+    "settings": "settingsView",
+    "battle": "battleView"
+  },
+  "scene_bg": {
+    "daily": "gym",
+    "train": "training_room",
+    "shop": "shop",
+    "status": "street",
+    "match": "ring_wide",
+    "gallery": "street",
+    "saves": "gym",
+    "settings": "gym",
+    "battle": "ring_wide"
+  }
+}

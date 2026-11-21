@@ -1,0 +1,27 @@
+{
+  "jab": {
+    "name": "刺拳",
+    "coef": 0.6,
+    "stam": 2
+  },
+  "straight": {
+    "name": "直拳",
+    "coef": 1.2,
+    "stam": 4
+  },
+  "hook": {
+    "name": "摆拳",
+    "coef": 1.4,
+    "stam": 6
+  },
+  "upper": {
+    "name": "上勾拳",
+    "coef": 1.3,
+    "stam": 6
+  },
+  "body": {
+    "name": "击腹拳",
+    "coef": 0.8,
+    "stam": 4
+  }
+}

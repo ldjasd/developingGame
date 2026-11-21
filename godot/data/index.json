@@ -1,0 +1,263 @@
+{
+  "generated_from": "web/js/data.js, story.js, story-engine.js, game.js, battle.js, ui.js, tools.js",
+  "note": "Function-valued fields (apply/check) are stored as source strings; see _function_fields in this index.",
+  "tables": {
+    "LEVELS": {
+      "file": "levels.json",
+      "count": 7,
+      "source": "data.js"
+    },
+    "PUNCHES": {
+      "file": "punches.json",
+      "count": 5,
+      "source": "data.js"
+    },
+    "ATTRS": {
+      "file": "attrs.json",
+      "count": 8,
+      "source": "data.js"
+    },
+    "TRAININGS": {
+      "file": "trainings.json",
+      "count": 13,
+      "source": "data.js"
+    },
+    "SLOT_NAMES": {
+      "file": "slot_names.json",
+      "count": 6,
+      "source": "data.js"
+    },
+    "SHOP_GEAR": {
+      "file": "shop_gear.json",
+      "count": 21,
+      "source": "data.js"
+    },
+    "GLOVE_PATTERNS": {
+      "file": "glove_patterns.json",
+      "count": 3,
+      "source": "data.js"
+    },
+    "GLOVE_OUTERS": {
+      "file": "glove_outers.json",
+      "count": 4,
+      "source": "data.js"
+    },
+    "GLOVE_LININGS": {
+      "file": "glove_linings.json",
+      "count": 3,
+      "source": "data.js"
+    },
+    "GLOVE_OZ": {
+      "file": "glove_oz.json",
+      "count": 5,
+      "source": "data.js"
+    },
+    "GLOVE_FIX": {
+      "file": "glove_fix.json",
+      "count": 2,
+      "source": "data.js"
+    },
+    "MATERIALS": {
+      "file": "materials.json",
+      "count": 7,
+      "source": "data.js"
+    },
+    "DISMANTLE_MAP": {
+      "file": "dismantle_map.json",
+      "count": 21,
+      "source": "data.js"
+    },
+    "DEX_ACH": {
+      "file": "dex_ach.json",
+      "count": 2,
+      "source": "data.js"
+    },
+    "GEAR_IMG_SRC": {
+      "file": "gear_img_src.json",
+      "count": 24,
+      "source": "data.js"
+    },
+    "DEX_GALLERY": {
+      "file": "dex_gallery.json",
+      "count": 104,
+      "source": "data.js",
+      "subcounts": {
+        "categories": 6,
+        "entries": 104
+      }
+    },
+    "CONSUMABLES": {
+      "file": "consumables.json",
+      "count": 3,
+      "source": "data.js"
+    },
+    "STAGES": {
+      "file": "stages.json",
+      "count": 6,
+      "source": "data.js"
+    },
+    "SPONSORS": {
+      "file": "sponsors.json",
+      "count": 4,
+      "source": "data.js"
+    },
+    "FOE_NAMES": {
+      "file": "foe_names.json",
+      "count": 13,
+      "source": "data.js"
+    },
+    "TACTICS": {
+      "file": "tactics.json",
+      "count": 3,
+      "source": "data.js + game.js",
+      "subcounts": {
+        "tactics": 3,
+        "break_tactics": 3
+      }
+    },
+    "FOE_STYLES": {
+      "file": "foe_styles.json",
+      "count": 4,
+      "source": "data.js"
+    },
+    "ROSTER_DEF": {
+      "file": "roster.json",
+      "count": 50,
+      "source": "data.js"
+    },
+    "GROWTH_LABELS": {
+      "file": "growth_labels.json",
+      "count": 6,
+      "source": "data.js"
+    },
+    "FOE_LINES": {
+      "file": "foe_lines.json",
+      "count": 15,
+      "source": "data.js",
+      "subcounts": {
+        "specific": 15,
+        "generic": 3
+      }
+    },
+    "DEFENSE_LINES": {
+      "file": "defense_lines.json",
+      "count": 8,
+      "source": "data.js",
+      "subcounts": {
+        "specific": 8,
+        "generic": 2
+      }
+    },
+    "APPEARANCE": {
+      "file": "appearance.json",
+      "count": 4,
+      "source": "data.js"
+    },
+    "INFLUENCE_LEVELS": {
+      "file": "influence_levels.json",
+      "count": 5,
+      "source": "data.js"
+    },
+    "ACHIEVEMENTS": {
+      "file": "achievements.json",
+      "count": 31,
+      "source": "data.js",
+      "subcounts": {
+        "categories": 4,
+        "achievements": 31
+      }
+    },
+    "STORY_CHARS": {
+      "file": "story_chars.json",
+      "count": 4,
+      "source": "story.js"
+    },
+    "STORY_EVENTS": {
+      "file": "story_events.json",
+      "count": 46,
+      "source": "story.js"
+    },
+    "DAILY_EVENTS": {
+      "file": "daily_events.json",
+      "count": 19,
+      "source": "story.js + story-engine.js",
+      "subcounts": {
+        "events": 19,
+        "alts": 10,
+        "repeatable": 10,
+        "event_ids": 19
+      }
+    },
+    "BATTLE_LINES": {
+      "file": "battle_lines.json",
+      "count": 10,
+      "source": "battle.js",
+      "subcounts": {
+        "me_lines": 5,
+        "foe_lines_fx": 5
+      }
+    },
+    "MPUNCH": {
+      "file": "manual_punches.json",
+      "count": 8,
+      "source": "battle.js"
+    },
+    "CONSTANTS": {
+      "file": "constants.json",
+      "count": 42,
+      "source": "game.js + battle.js + ui.js + tools.js + data.js"
+    }
+  },
+  "_function_fields": [
+    "TRAININGS[0].apply",
+    "TRAININGS[1].apply",
+    "TRAININGS[2].apply",
+    "TRAININGS[3].apply",
+    "TRAININGS[4].apply",
+    "TRAININGS[5].apply",
+    "TRAININGS[6].apply",
+    "TRAININGS[7].apply",
+    "TRAININGS[8].apply",
+    "TRAININGS[9].apply",
+    "TRAININGS[10].apply",
+    "TRAININGS[11].apply",
+    "TRAININGS[12].apply",
+    "STAGES[0].check",
+    "STAGES[1].check",
+    "STAGES[2].check",
+    "STAGES[3].check",
+    "STAGES[4].check",
+    "STAGES[5].check",
+    "ACHIEVEMENTS.achievements[0].check",
+    "ACHIEVEMENTS.achievements[1].check",
+    "ACHIEVEMENTS.achievements[2].check",
+    "ACHIEVEMENTS.achievements[3].check",
+    "ACHIEVEMENTS.achievements[4].check",
+    "ACHIEVEMENTS.achievements[5].check",
+    "ACHIEVEMENTS.achievements[6].check",
+    "ACHIEVEMENTS.achievements[7].check",
+    "ACHIEVEMENTS.achievements[8].check",
+    "ACHIEVEMENTS.achievements[9].check",
+    "ACHIEVEMENTS.achievements[10].check",
+    "ACHIEVEMENTS.achievements[11].check",
+    "ACHIEVEMENTS.achievements[12].check",
+    "ACHIEVEMENTS.achievements[13].check",
+    "ACHIEVEMENTS.achievements[14].check",
+    "ACHIEVEMENTS.achievements[15].check",
+    "ACHIEVEMENTS.achievements[16].check",
+    "ACHIEVEMENTS.achievements[17].check",
+    "ACHIEVEMENTS.achievements[18].check",
+    "ACHIEVEMENTS.achievements[19].check",
+    "ACHIEVEMENTS.achievements[20].check",
+    "ACHIEVEMENTS.achievements[21].check",
+    "ACHIEVEMENTS.achievements[22].check",
+    "ACHIEVEMENTS.achievements[23].check",
+    "ACHIEVEMENTS.achievements[24].check",
+    "ACHIEVEMENTS.achievements[25].check",
+    "ACHIEVEMENTS.achievements[26].check",
+    "ACHIEVEMENTS.achievements[27].check",
+    "ACHIEVEMENTS.achievements[28].check",
+    "ACHIEVEMENTS.achievements[29].check",
+    "ACHIEVEMENTS.achievements[30].check"
+  ]
+}

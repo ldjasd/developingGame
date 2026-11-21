@@ -1,0 +1,86 @@
+{
+  "gloves1": [
+    "synthetic",
+    "latex"
+  ],
+  "gloves2": [
+    "calf",
+    "latex"
+  ],
+  "gloves3": [
+    "kangaroo",
+    "horsehair"
+  ],
+  "gloves4": [
+    "kangaroo",
+    "gel"
+  ],
+  "gloves6": [
+    "goat",
+    "gel"
+  ],
+  "gloves5": [
+    "calf",
+    "horsehair"
+  ],
+  "guard1": [
+    "synthetic",
+    "gel"
+  ],
+  "boots1": [
+    "synthetic",
+    "latex"
+  ],
+  "head1": [
+    "calf",
+    "latex"
+  ],
+  "head2": [
+    "goat",
+    "gel"
+  ],
+  "robe1": [
+    "synthetic",
+    "latex"
+  ],
+  "wrist1": [
+    "synthetic",
+    "latex"
+  ],
+  "wrist2": [
+    "calf",
+    "gel"
+  ],
+  "wrist3": [
+    "kangaroo",
+    "horsehair"
+  ],
+  "head3": [
+    "kangaroo",
+    "gel"
+  ],
+  "robe2": [
+    "synthetic",
+    "latex"
+  ],
+  "robe3": [
+    "goat",
+    "gel"
+  ],
+  "boots2": [
+    "goat",
+    "latex"
+  ],
+  "boots3": [
+    "calf",
+    "horsehair"
+  ],
+  "guard2": [
+    "calf",
+    "gel"
+  ],
+  "guard3": [
+    "goat",
+    "horsehair"
+  ]
+}

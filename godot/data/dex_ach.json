@@ -1,0 +1,14 @@
+[
+  {
+    "id": "dex5",
+    "need": 5,
+    "reward": 1000,
+    "title": null
+  },
+  {
+    "id": "dex10",
+    "need": 10,
+    "reward": 3000,
+    "title": "收藏家"
+  }
+]

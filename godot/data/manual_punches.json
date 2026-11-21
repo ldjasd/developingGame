@@ -1,0 +1,66 @@
+{
+  "jab": {
+    "prof": "jab",
+    "name": "刺拳",
+    "coef": 0.6,
+    "range": 20,
+    "stam": 2,
+    "cd": 200
+  },
+  "straight": {
+    "prof": "straight",
+    "name": "直拳",
+    "coef": 1.2,
+    "range": 20,
+    "stam": 4,
+    "cd": 340
+  },
+  "hookL": {
+    "prof": "hook",
+    "name": "左摆拳",
+    "coef": 1.4,
+    "range": 16,
+    "stam": 6,
+    "cd": 520
+  },
+  "hookR": {
+    "prof": "hook",
+    "name": "右摆拳",
+    "coef": 1.42,
+    "range": 16,
+    "stam": 6,
+    "cd": 530
+  },
+  "upperL": {
+    "prof": "upper",
+    "name": "左上勾拳",
+    "coef": 1.3,
+    "range": 15,
+    "stam": 6,
+    "cd": 500
+  },
+  "upperR": {
+    "prof": "upper",
+    "name": "右上勾拳",
+    "coef": 1.32,
+    "range": 15,
+    "stam": 6,
+    "cd": 510
+  },
+  "bodyL": {
+    "prof": "body",
+    "name": "左击腹拳",
+    "coef": 0.8,
+    "range": 16,
+    "stam": 4,
+    "cd": 380
+  },
+  "bodyR": {
+    "prof": "body",
+    "name": "右击腹拳",
+    "coef": 0.82,
+    "range": 16,
+    "stam": 4,
+    "cd": 390
+  }
+}

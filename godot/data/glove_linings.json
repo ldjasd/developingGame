@@ -1,0 +1,27 @@
+{
+  "horsehair": {
+    "name": "马毛",
+    "price": 700,
+    "pct": {
+      "power": 5,
+      "defense": -5
+    },
+    "note": "力量生效 +5% · 防守生效 −5%（伤手）"
+  },
+  "latex": {
+    "name": "乳胶",
+    "price": 300,
+    "pct": {
+      "endurance": 5
+    },
+    "note": "缓冲均衡 · 耐久生效 +5%"
+  },
+  "gel": {
+    "name": "凝胶",
+    "price": 600,
+    "pct": {
+      "defense": 5
+    },
+    "note": "防守生效 +5%"
+  }
+}

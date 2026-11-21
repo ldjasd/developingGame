@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cparttest7x1"]
+
+[ext_resource type="Script" path="res://scripts/dev/part_test.gd" id="1"]
+
+[node name="PartTest" type="Node2D"]
+script = ExtResource("1")

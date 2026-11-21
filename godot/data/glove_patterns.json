@@ -1,0 +1,29 @@
+{
+  "guardian": {
+    "name": "守护系",
+    "base": 1700,
+    "pct": {
+      "defense": 9,
+      "power": -5
+    },
+    "note": "防守生效 +9% · 力量生效 −5% · 价高"
+  },
+  "bull": {
+    "name": "斗牛系",
+    "base": 1100,
+    "pct": {
+      "power": 9,
+      "defense": -5
+    },
+    "note": "力量生效 +9% · 防守生效 −5%（伤手风险）· 中价"
+  },
+  "classic": {
+    "name": "经典系",
+    "base": 700,
+    "pct": {
+      "power": 5,
+      "defense": 5
+    },
+    "note": "攻守均衡 · 便宜"
+  }
+}

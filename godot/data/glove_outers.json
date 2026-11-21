@@ -1,0 +1,32 @@
+{
+  "calf": {
+    "name": "小牛皮",
+    "price": 600,
+    "pct": {
+      "technique": 5
+    },
+    "note": "均衡手感 · 技术生效 +5%"
+  },
+  "kangaroo": {
+    "name": "袋鼠皮",
+    "price": 900,
+    "pct": {
+      "speed": 5
+    },
+    "note": "轻韧 · 出拳速度生效 +5%"
+  },
+  "goat": {
+    "name": "山羊皮",
+    "price": 700,
+    "pct": {
+      "accuracy": 5
+    },
+    "note": "贴合 · 精准度生效 +5%"
+  },
+  "synthetic": {
+    "name": "人造革",
+    "price": 200,
+    "pct": {},
+    "note": "便宜耐用 · 无额外加成"
+  }
+}

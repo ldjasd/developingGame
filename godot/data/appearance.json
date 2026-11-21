@@ -1,0 +1,114 @@
+{
+  "hair": {
+    "ponytail": {
+      "name": "高马尾",
+      "src": "assets/portrait.webp"
+    },
+    "hime": {
+      "name": "公主切",
+      "src": "assets/portrait/hair_hime.webp"
+    },
+    "waves": {
+      "name": "大波浪",
+      "src": "assets/portrait/hair_waves.webp"
+    },
+    "halfup": {
+      "name": "半扎发",
+      "src": "assets/portrait/hair_halfup.webp"
+    },
+    "short": {
+      "name": "超短发",
+      "src": "assets/portrait/hair_short.webp"
+    },
+    "braid": {
+      "name": "麻花辫",
+      "src": "assets/portrait/hair_braid.webp"
+    },
+    "longstraight": {
+      "name": "黑长直",
+      "src": "assets/portrait/hair_longstraight.webp"
+    },
+    "bun": {
+      "name": "丸子头",
+      "src": "assets/portrait/hair_bun.webp"
+    },
+    "waterwaves": {
+      "name": "水波纹",
+      "src": "assets/portrait/hair_waterwaves.webp"
+    }
+  },
+  "face": {
+    "default": {
+      "name": "默认",
+      "src": "assets/portrait.webp"
+    },
+    "round": {
+      "name": "圆润",
+      "src": "assets/portrait/face_round.webp"
+    },
+    "oval": {
+      "name": "瓜子",
+      "src": "assets/portrait/face_oval.webp"
+    }
+  },
+  "outfit": {
+    "default": {
+      "name": "默认",
+      "src": "assets/portrait.webp"
+    },
+    "robe": {
+      "name": "登场战袍",
+      "src": "assets/portrait/outfit_robe.webp"
+    },
+    "training": {
+      "name": "训练服",
+      "src": "assets/portrait/outfit_training.webp"
+    },
+    "short_training": {
+      "name": "短款训练服",
+      "src": "assets/portrait/outfit_short_training.webp"
+    },
+    "short_vest": {
+      "name": "短款背心",
+      "src": "assets/portrait/outfit_short_vest.webp"
+    },
+    "short_cami": {
+      "name": "吊带款",
+      "src": "assets/portrait/outfit_short_cami.webp"
+    },
+    "wide_strap": {
+      "name": "宽肩带",
+      "src": "assets/portrait/outfit_wide_strap.webp"
+    },
+    "racerback": {
+      "name": "工字背",
+      "src": "assets/portrait/outfit_racerback.webp"
+    },
+    "cross_back": {
+      "name": "交叉美背",
+      "src": "assets/portrait/outfit_cross_back.webp"
+    },
+    "halter": {
+      "name": "挂脖款",
+      "src": "assets/portrait/outfit_halter.webp"
+    },
+    "zip": {
+      "name": "拉链款",
+      "src": "assets/portrait/outfit_zip.webp"
+    }
+  },
+  "body": {
+    "petite": {
+      "name": "娇小",
+      "scale": 0.92
+    },
+    "standard": {
+      "name": "标准",
+      "scale": 1
+    },
+    "tall": {
+      "name": "高挑",
+      "scale": 1.08
+    }
+  }
+}

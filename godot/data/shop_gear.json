@@ -1,0 +1,258 @@
+[
+  {
+    "id": "gloves1",
+    "slot": "gloves",
+    "name": "新手拳套",
+    "price": 500,
+    "desc": "力量生效 +8%",
+    "pct": {
+      "power": 8
+    }
+  },
+  {
+    "id": "gloves2",
+    "slot": "gloves",
+    "name": "标准拳套",
+    "price": 1500,
+    "desc": "力量生效 +11% · 精准度生效 +5%",
+    "pct": {
+      "power": 11,
+      "accuracy": 5
+    }
+  },
+  {
+    "id": "gloves3",
+    "slot": "gloves",
+    "name": "专业拳套",
+    "price": 4000,
+    "desc": "力量生效 +13% · 精准度生效 +5% · 出拳速度生效 +5%",
+    "pct": {
+      "power": 13,
+      "accuracy": 5,
+      "speed": 5
+    }
+  },
+  {
+    "id": "guard1",
+    "slot": "guard",
+    "name": "基础护齿",
+    "price": 800,
+    "desc": "比赛中受到的伤害 −5% · 所受重创积累 −8%",
+    "pct": {},
+    "dr": 5,
+    "mech": {
+      "trauma": 0.92
+    }
+  },
+  {
+    "id": "boots1",
+    "slot": "boots",
+    "name": "轻便战靴",
+    "price": 1200,
+    "desc": "步伐速度生效 +6% · 出拳体力消耗 −5%",
+    "pct": {
+      "footwork": 6
+    },
+    "mech": {
+      "stam": 0.95
+    }
+  },
+  {
+    "id": "gloves4",
+    "slot": "gloves",
+    "name": "疾风拳套",
+    "price": 1800,
+    "desc": "出拳速度生效 +13% · 力量生效 +5%（速度型）",
+    "pct": {
+      "speed": 13,
+      "power": 5
+    }
+  },
+  {
+    "id": "gloves6",
+    "slot": "gloves",
+    "name": "影月拳套",
+    "price": 2600,
+    "desc": "精准度生效 +10% · 技术生效 +6%（技巧型）",
+    "pct": {
+      "accuracy": 10,
+      "technique": 6
+    }
+  },
+  {
+    "id": "gloves5",
+    "slot": "gloves",
+    "name": "重炮拳套",
+    "price": 3200,
+    "desc": "力量生效 +17% · 出拳速度生效 −5%（重炮型）",
+    "pct": {
+      "power": 17,
+      "speed": -5
+    }
+  },
+  {
+    "id": "head1",
+    "slot": "head",
+    "name": "基础护头",
+    "price": 900,
+    "desc": "防守技术生效 +6% · 所受重创积累 −5%",
+    "pct": {
+      "defense": 6
+    },
+    "mech": {
+      "trauma": 0.95
+    }
+  },
+  {
+    "id": "head2",
+    "slot": "head",
+    "name": "职业护头",
+    "price": 2200,
+    "desc": "防守技术生效 +10% · 意志生效 +5%",
+    "pct": {
+      "defense": 10,
+      "will": 5
+    }
+  },
+  {
+    "id": "robe1",
+    "slot": "robe",
+    "name": "登场战袍",
+    "price": 1500,
+    "desc": "意志生效 +11% · 登场气势拉满",
+    "pct": {
+      "will": 11
+    }
+  },
+  {
+    "id": "wrist1",
+    "slot": "wrist",
+    "name": "基础护腕",
+    "price": 400,
+    "desc": "精准度生效 +5% · 指令冷却 −5%",
+    "pct": {
+      "accuracy": 5
+    },
+    "mech": {
+      "cd": 0.95
+    }
+  },
+  {
+    "id": "wrist2",
+    "slot": "wrist",
+    "name": "专业护腕",
+    "price": 1200,
+    "desc": "精准度生效 +5% · 出拳速度生效 +5% · 指令冷却 −8%",
+    "pct": {
+      "accuracy": 5,
+      "speed": 5
+    },
+    "mech": {
+      "cd": 0.92
+    }
+  },
+  {
+    "id": "wrist3",
+    "slot": "wrist",
+    "name": "冠军护腕",
+    "price": 3000,
+    "desc": "精准度生效 +9% · 出拳速度生效 +5% · 防守技术生效 +5% · 指令冷却 −15%",
+    "pct": {
+      "accuracy": 9,
+      "speed": 5,
+      "defense": 5
+    },
+    "mech": {
+      "cd": 0.85
+    }
+  },
+  {
+    "id": "head3",
+    "slot": "head",
+    "name": "冠军护头",
+    "price": 3500,
+    "desc": "减伤 +15% · 耐久生效 +6% · 所受重创积累 −10%",
+    "pct": {
+      "endurance": 6
+    },
+    "dr": 15,
+    "mech": {
+      "trauma": 0.9
+    }
+  },
+  {
+    "id": "robe2",
+    "slot": "robe",
+    "name": "轻盈训练服",
+    "price": 800,
+    "desc": "步伐速度生效 +6%",
+    "pct": {
+      "footwork": 6
+    }
+  },
+  {
+    "id": "robe3",
+    "slot": "robe",
+    "name": "冠军战袍",
+    "price": 4000,
+    "desc": "力量生效 +6% · 耐久生效 +6%",
+    "pct": {
+      "power": 6,
+      "endurance": 6
+    }
+  },
+  {
+    "id": "boots2",
+    "slot": "boots",
+    "name": "速度战靴",
+    "price": 1500,
+    "desc": "步伐速度生效 +11% · 出拳体力消耗 −8%",
+    "pct": {
+      "footwork": 11
+    },
+    "mech": {
+      "stam": 0.92
+    }
+  },
+  {
+    "id": "boots3",
+    "slot": "boots",
+    "name": "重型战靴",
+    "price": 2800,
+    "desc": "步伐速度生效 +6% · 耐久生效 +5% · 力量生效 +5% · 出拳体力消耗 −4%",
+    "pct": {
+      "footwork": 6,
+      "endurance": 5,
+      "power": 5
+    },
+    "mech": {
+      "stam": 0.96
+    }
+  },
+  {
+    "id": "guard2",
+    "slot": "guard",
+    "name": "定制护齿",
+    "price": 1000,
+    "desc": "比赛中受到的伤害 −8% · 所受重创积累 −14%",
+    "pct": {},
+    "dr": 8,
+    "mech": {
+      "trauma": 0.86
+    }
+  },
+  {
+    "id": "guard3",
+    "slot": "guard",
+    "name": "专业护齿",
+    "price": 2500,
+    "desc": "比赛中受到的伤害 −12% · 意志生效 +5% · 所受重创积累 −20%",
+    "pct": {
+      "will": 5
+    },
+    "dr": 12,
+    "mech": {
+      "trauma": 0.8
+    }
+  }
+]

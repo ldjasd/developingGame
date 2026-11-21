@@ -1,0 +1,34 @@
+[
+  {
+    "key": "power",
+    "name": "力量"
+  },
+  {
+    "key": "endurance",
+    "name": "耐久"
+  },
+  {
+    "key": "will",
+    "name": "意志"
+  },
+  {
+    "key": "speed",
+    "name": "出拳速度"
+  },
+  {
+    "key": "accuracy",
+    "name": "精准度"
+  },
+  {
+    "key": "footwork",
+    "name": "步伐速度"
+  },
+  {
+    "key": "defense",
+    "name": "防守技术"
+  },
+  {
+    "key": "technique",
+    "name": "技术"
+  }
+]

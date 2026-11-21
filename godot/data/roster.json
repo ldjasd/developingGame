@@ -1,0 +1,302 @@
+[
+  {
+    "key": "opp_world_champion",
+    "name": "伊芙琳",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_crimson",
+    "name": "薇拉",
+    "style": "power",
+    "growth": "genius"
+  },
+  {
+    "key": "opp_champion_domestic",
+    "name": "白鸟丽华",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_legend",
+    "name": "白霜华",
+    "style": "balanced",
+    "growth": "veteran"
+  },
+  {
+    "key": "opp_asia",
+    "name": "萨菲娅",
+    "style": "power",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_saint",
+    "name": "塞西莉亚",
+    "style": "guardcounter",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_amazon",
+    "name": "塔娅",
+    "style": "power",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_ice",
+    "name": "白凛华",
+    "style": "guardcounter",
+    "growth": "late"
+  },
+  {
+    "key": "opp_counter",
+    "name": "沈墨凛",
+    "style": "guardcounter",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_europe",
+    "name": "艾琳·诺德",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_genius",
+    "name": "米娅",
+    "style": "speed",
+    "growth": "genius"
+  },
+  {
+    "key": "opp_africa",
+    "name": "阿玛拉",
+    "style": "power",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_north",
+    "name": "艾丽娅·诺尔",
+    "style": "guardcounter",
+    "growth": "late"
+  },
+  {
+    "key": "opp_muscle",
+    "name": "岩宫刚子",
+    "style": "power",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_korea_style",
+    "name": "韩凛",
+    "style": "speed",
+    "growth": "early"
+  },
+  {
+    "key": "opp_greylong",
+    "name": "月岛澪",
+    "style": "balanced",
+    "growth": "veteran"
+  },
+  {
+    "key": "opp_latina",
+    "name": "卡门·罗莎",
+    "style": "power",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_doctor",
+    "name": "森宫静流",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_fire",
+    "name": "炎宫阳",
+    "style": "power",
+    "growth": "early"
+  },
+  {
+    "key": "opp_mystery",
+    "name": "紫夜幻",
+    "style": "speed",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_midnight",
+    "name": "沈蓝汐",
+    "style": "guardcounter",
+    "growth": "late"
+  },
+  {
+    "key": "opp_hojicha",
+    "name": "茶宫温子",
+    "style": "guardcounter",
+    "growth": "veteran"
+  },
+  {
+    "key": "opp_olive",
+    "name": "奥莉维亚",
+    "style": "power",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_martial",
+    "name": "宫本凛",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_violetstraight",
+    "name": "紫宫罗兰",
+    "style": "speed",
+    "growth": "early"
+  },
+  {
+    "key": "opp_emerald",
+    "name": "艾梅拉",
+    "style": "power",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_copper",
+    "name": "布伦达",
+    "style": "power",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_snow_short",
+    "name": "雪代凛",
+    "style": "speed",
+    "growth": "genius"
+  },
+  {
+    "key": "opp_speed",
+    "name": "陆凌霜",
+    "style": "speed",
+    "growth": "early"
+  },
+  {
+    "key": "opp_power",
+    "name": "秦红绫",
+    "style": "power",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_idol",
+    "name": "金星瑶",
+    "style": "balanced",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_dancer",
+    "name": "白云裳",
+    "style": "speed",
+    "growth": "late"
+  },
+  {
+    "key": "opp_muaythai",
+    "name": "娜琳",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_veteran",
+    "name": "顾长青",
+    "style": "guardcounter",
+    "growth": "veteran"
+  },
+  {
+    "key": "opp_goldbrown",
+    "name": "金洛华",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_ivory",
+    "name": "伊沃娜",
+    "style": "balanced",
+    "growth": "late"
+  },
+  {
+    "key": "opp_teal",
+    "name": "澜静羽",
+    "style": "speed",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_violet_short",
+    "name": "夏紫苑",
+    "style": "speed",
+    "growth": "early"
+  },
+  {
+    "key": "opp_silver_bun",
+    "name": "银宫铃",
+    "style": "speed",
+    "growth": "early"
+  },
+  {
+    "key": "opp_peach",
+    "name": "桃宫蜜",
+    "style": "balanced",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_milktea",
+    "name": "唐恬",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_scholar",
+    "name": "沈书瑶",
+    "style": "balanced",
+    "growth": "late"
+  },
+  {
+    "key": "opp_twinbraid",
+    "name": "蓝青禾",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_student",
+    "name": "方小勤",
+    "style": "balanced",
+    "growth": "early"
+  },
+  {
+    "key": "opp_braid",
+    "name": "田小麦",
+    "style": "balanced",
+    "growth": "steady"
+  },
+  {
+    "key": "opp_rookie",
+    "name": "林小葵",
+    "style": "balanced",
+    "growth": "early"
+  },
+  {
+    "key": "opp_shy",
+    "name": "苏雾",
+    "style": "speed",
+    "growth": "late"
+  },
+  {
+    "key": "opp_pocket",
+    "name": "雷小朵",
+    "style": "power",
+    "growth": "volatile"
+  },
+  {
+    "key": "opp_brick",
+    "name": "赤磊",
+    "style": "power",
+    "growth": "early"
+  },
+  {
+    "key": "opp_chestnut_short",
+    "name": "胡小桃",
+    "style": "balanced",
+    "growth": "late"
+  }
+]

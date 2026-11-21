@@ -1,0 +1,243 @@
+{
+  "categories": [
+    {
+      "id": "battle",
+      "name": "战斗",
+      "icon": "⚡"
+    },
+    {
+      "id": "career",
+      "name": "生涯",
+      "icon": "★"
+    },
+    {
+      "id": "gear",
+      "name": "装备 / 经营",
+      "icon": "◆"
+    },
+    {
+      "id": "story",
+      "name": "情感 / 剧情",
+      "icon": "♥"
+    }
+  ],
+  "achievements": [
+    {
+      "id": "first_win",
+      "cat": "battle",
+      "name": "初尝胜果",
+      "desc": "赢得第 1 场比赛",
+      "check": "function (s) { return (s.wins || 0) >= 1; }"
+    },
+    {
+      "id": "wins_10",
+      "cat": "battle",
+      "name": "十胜俱乐部",
+      "desc": "累计赢得 10 场比赛",
+      "check": "function (s) { return (s.wins || 0) >= 10; }"
+    },
+    {
+      "id": "wins_25",
+      "cat": "battle",
+      "name": "常胜之师",
+      "desc": "累计赢得 25 场比赛",
+      "check": "function (s) { return (s.wins || 0) >= 25; }"
+    },
+    {
+      "id": "wins_50",
+      "cat": "battle",
+      "name": "半百荣光",
+      "desc": "累计赢得 50 场比赛",
+      "check": "function (s) { return (s.wins || 0) >= 50; }"
+    },
+    {
+      "id": "first_ko",
+      "cat": "battle",
+      "name": "一击入魂",
+      "desc": "首次以 KO / TKO 赢得比赛",
+      "check": "function (s) { return (s.koWins || 0) >= 1; }"
+    },
+    {
+      "id": "ko_10",
+      "cat": "battle",
+      "name": "KO 艺术家",
+      "desc": "累计以 KO / TKO 赢得 10 场比赛",
+      "check": "function (s) { return (s.koWins || 0) >= 10; }"
+    },
+    {
+      "id": "streak_3",
+      "cat": "battle",
+      "name": "势如破竹",
+      "desc": "取得 3 连胜",
+      "check": "function (s) { return (s.winStreak || 0) >= 3; }"
+    },
+    {
+      "id": "streak_5",
+      "cat": "battle",
+      "name": "无人能挡",
+      "desc": "取得 5 连胜",
+      "check": "function (s) { return (s.winStreak || 0) >= 5; }"
+    },
+    {
+      "id": "streak_10",
+      "cat": "battle",
+      "name": "十全十美",
+      "desc": "取得 10 连胜",
+      "check": "function (s) { return (s.winStreak || 0) >= 10; }"
+    },
+    {
+      "id": "spar_first",
+      "cat": "battle",
+      "name": "擂台之约",
+      "desc": "完成第 1 场约战（不计排名的指名挑战）",
+      "check": "function (s) { return (s.sparFights || 0) >= 1; }"
+    },
+    {
+      "id": "rank_25",
+      "cat": "career",
+      "name": "跻身前列",
+      "desc": "国内排名进入前 25",
+      "check": "function (s) { return (s.rank || 50) <= 25; }"
+    },
+    {
+      "id": "rank_10",
+      "cat": "career",
+      "name": "国内十强",
+      "desc": "国内排名进入前 10",
+      "check": "function (s) { return (s.rank || 50) <= 10; }"
+    },
+    {
+      "id": "rank_1",
+      "cat": "career",
+      "name": "登顶国内",
+      "desc": "国内排名达到第 1 名",
+      "check": "function (s) { return (s.rank || 50) <= 1; }"
+    },
+    {
+      "id": "influence_3",
+      "cat": "career",
+      "name": "声名鹊起",
+      "desc": "影响力达到 Lv3（10 胜或排名前 25）",
+      "check": "function (s) { return (s.wins || 0) >= 10 || (s.rank || 50) <= 25; }"
+    },
+    {
+      "id": "influence_5",
+      "cat": "career",
+      "name": "传奇之名",
+      "desc": "影响力达到 Lv5（排名第 1 名）",
+      "check": "function (s) { return (s.rank || 50) <= 1; }"
+    },
+    {
+      "id": "stage_4",
+      "cat": "career",
+      "name": "国内顶尖之路",
+      "desc": "到达生涯阶段 4「国内顶尖」",
+      "check": "function (s) { return (s.stage || 1) >= 4 || (s.completedStages || []).indexOf(4) >= 0; }"
+    },
+    {
+      "id": "stage_6",
+      "cat": "career",
+      "name": "传奇之路",
+      "desc": "到达生涯阶段 6「传奇之路」",
+      "check": "function (s) { return (s.stage || 1) >= 6 || (s.completedStages || []).indexOf(6) >= 0; }"
+    },
+    {
+      "id": "champ_slayer",
+      "cat": "career",
+      "name": "弑王者",
+      "desc": "在正式比赛中击败国内第 1 名伊芙琳",
+      "check": "function (s) { return !!s.beatChamp; }"
+    },
+    {
+      "id": "defend_1",
+      "cat": "career",
+      "name": "王座守卫",
+      "desc": "首次在卫冕战中击败挑战者，守住国内冠军",
+      "check": "function (s) { return (s.defenses || 0) >= 1; }"
+    },
+    {
+      "id": "defend_3",
+      "cat": "career",
+      "name": "三度卫冕",
+      "desc": "累计卫冕成功 3 场（与阶段 6「传奇之路」的卫冕目标对齐）",
+      "check": "function (s) { return (s.defenses || 0) >= 3; }"
+    },
+    {
+      "id": "first_craft",
+      "cat": "gear",
+      "name": "亲手打造",
+      "desc": "在工坊打造第 1 件装备",
+      "check": "function (s) { return (s.customGear || []).some(function (g) { return g && g.source === 'craft'; }); }"
+    },
+    {
+      "id": "enh_5",
+      "cat": "gear",
+      "name": "千锤百炼",
+      "desc": "任意装备强化到 +5",
+      "check": "function (s) { return Object.keys(s.enh || {}).some(function (k) { return (s.enh[k] || 0) >= 5; }); }"
+    },
+    {
+      "id": "enh_10",
+      "cat": "gear",
+      "name": "登峰造极",
+      "desc": "任意装备强化到 +10（满级）",
+      "check": "function (s) { return Object.keys(s.enh || {}).some(function (k) { return (s.enh[k] || 0) >= 10; }); }"
+    },
+    {
+      "id": "dex_10",
+      "cat": "gear",
+      "name": "图鉴收藏家",
+      "desc": "装备图鉴集齐 10 款（成就只作记录，图鉴现金奖励见图鉴区）",
+      "check": "function (s) { return (s.dexSigs || []).length >= 10; }"
+    },
+    {
+      "id": "sponsor_any",
+      "cat": "gear",
+      "name": "商业首秀",
+      "desc": "签约任意一家赞助商",
+      "check": "function (s) { return !!s.sponsor; }"
+    },
+    {
+      "id": "custom_first",
+      "cat": "gear",
+      "name": "量身定制",
+      "desc": "在用品店定制第 1 副拳套",
+      "check": "function (s) { return (s.customGear || []).some(function (g) { return g && g.source === 'custom'; }); }"
+    },
+    {
+      "id": "money_10k",
+      "cat": "gear",
+      "name": "小有积蓄",
+      "desc": "持有金钱达到 ¥10,000",
+      "check": "function (s) { return (s.money || 0) >= 10000; }"
+    },
+    {
+      "id": "prologue_done",
+      "cat": "story",
+      "name": "命运的测力机",
+      "desc": "完成序章",
+      "check": "function (s) { return !!(s.story && s.story.prologueDone); }"
+    },
+    {
+      "id": "affinity_60",
+      "cat": "story",
+      "name": "亲近信赖",
+      "desc": "任意角色好感达到 60",
+      "check": "function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 60; }); }"
+    },
+    {
+      "id": "affinity_90",
+      "cat": "story",
+      "name": "心意相通",
+      "desc": "任意角色好感达到 90",
+      "check": "function (s) { var a = (s.story && s.story.affinity) || {}; return Object.keys(a).some(function (k) { return (a[k] || 0) >= 90; }); }"
+    },
+    {
+      "id": "spar_rival_3",
+      "cat": "story",
+      "name": "宿敌之约",
+      "desc": "与沈墨凛约战累计 3 次",
+      "check": "function (s) { return (s.sparRival || 0) >= 3; }"
+    }
+  ]
+}
