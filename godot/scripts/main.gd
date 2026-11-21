@@ -35,7 +35,9 @@ const SFX_RECORDED := {
 	"hit_body": [["designed_person/body_0", "designed_person/body_1", "designed_person/body_2", "designed_person/body_3"], 0.0],
 	"block": [["designed/block_0", "designed/block_1", "designed/block_2"], -6.0],
 	"knockdown": [["kenney/impactSoft_heavy_000.ogg", "kenney/impactSoft_heavy_002.ogg", "kenney/impactSoft_heavy_004.ogg"], 2.0],
-	"bell": [["kenney/impactBell_heavy_000.ogg", "kenney/impactBell_heavy_001.ogg"], -2.0],
+	# 拳击铃：TRP 真实拳击铃实录（Freesound 571096，CC0），tools/make_bells.py 修音；开场单响 / 终场三连
+	"bell_start": [["bell/bell_start"], 0.0],
+	"bell_end": [["bell/bell_end"], 0.0],
 }
 
 ## 用户 2026-11-21：挥空与观众声先关掉（合成版不对，找到合适素材前不播）
@@ -62,7 +64,7 @@ func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	if vs.is_empty():
 		return
 	var stream: AudioStream = vs[rng.randi_range(0, vs.size() - 1)]
-	if SFX_RECORDED.has(name) and vs.size() > 1:
+	if SFX_RECORDED.has(name):
 		vol_db += float(SFX_RECORDED[name][1])
 	if _sfx_players.is_empty():
 		for i in 8:
@@ -77,7 +79,7 @@ func _sfx(name: String, vol_db: float = 0.0, pitch: float = 1.0) -> void:
 	pl.stream = stream
 	pl.volume_db = vol_db
 	# 录音：原速原调（调用方传的 pitch 也忽略），只靠 5 个变体避免重复感；合成音效才允许调音高
-	pl.pitch_scale = 1.0 if SFX_RECORDED.has(name) and vs.size() > 1 else pitch
+	pl.pitch_scale = 1.0 if SFX_RECORDED.has(name) else pitch
 	pl.play()
 
 var gs: GameState
@@ -1373,7 +1375,7 @@ func _start_battle_scene() -> void:
 	_refresh_battle_ui()
 	_setup_tactic_buttons()
 	if battle_mode != "sim":
-		_sfx("bell", -4.0)
+		_sfx("bell_start", -3.0)
 	if battle_mode == "sim":
 		_run_sim()
 	elif battle_mode == "auto":
@@ -1522,7 +1524,11 @@ func _play_exchange_visuals(ev: Dictionary) -> void:
 		if def_rig:
 			_knockdown_visual(def_rig, false, int(ev.get("count", -1)))
 	if ev.has("new_round"):
-		_sfx("bell", -4.0)
+		# 回合结束「铛-铛-铛」，间隔一会儿再敲下一回合的开场单响
+		_sfx("bell_end", -3.0)
+		get_tree().create_timer(1.6).timeout.connect(func() -> void:
+			if not battle_over:
+				_sfx("bell_start", -4.0))
 
 ## 顿帧：命中瞬间双方动画同时停住一小下，再继续（不影响逻辑与计时器）。
 func _hitstop(rigs: Array, secs: float) -> void:
@@ -1849,7 +1855,7 @@ func _on_battle_finished() -> void:
 	var win := bool(engine.result["winner_is_a"])
 	_battle_log("比赛结束：%s 以 %s 获胜！" % ["你" if win else String(foe_entry["name"]), String(engine.result["how"])])
 	if battle_mode != "sim":
-		_sfx("bell", -2.0)
+		_sfx("bell_end", -2.0)
 		if win:
 			_sfx("crowd", -4.0)
 	if win and rig_me:
