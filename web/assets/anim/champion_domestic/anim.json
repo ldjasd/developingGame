@@ -1,0 +1,41 @@
+{
+ "cell": [
+  352,
+  505
+ ],
+ "cols": 6,
+ "states": {
+  "idle": {
+   "file": "idle.webp",
+   "frames": 29,
+   "fps": 12,
+   "loop": true,
+   "src": "batch:champion_domestic_idle_v1.mp4 [2.50~4.92s]"
+  },
+  "attack": {
+   "file": "attack.webp",
+   "frames": 10,
+   "fps": 18,
+   "loop": false,
+   "src": "batch:champion_domestic_straight_v1.mp4 [pick 24fps from 0.83s: [1, 2, 3, 4, 5, 5, 4, 3, 2, 1]]"
+  },
+  "hit": {
+   "file": "hit.webp",
+   "frames": 36,
+   "fps": 22,
+   "loop": false,
+   "src": "batch:champion_domestic_hit_v1.mp4 [0.95~3.95s]"
+  },
+  "down": {
+   "file": "down.webp",
+   "frames": 33,
+   "fps": 12,
+   "loop": false,
+   "src": "batch:champion_domestic_down_v1.mp4 [1.00~3.75s]",
+   "downK": 1.34,
+   "downOX": 48.7,
+   "downOY": 85.5,
+   "downGY": 99.8
+  }
+ }
+}
