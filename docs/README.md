@@ -10,6 +10,7 @@
 | [AUDIT_20261121.md](AUDIT_20261121.md) | 现在做到哪了、离发布还差什么 |
 | [ROADMAP.md](ROADMAP.md) | 从现在到 1.0 的五个阶段，每阶段做什么、怎样算完成 |
 | [DECISIONS.md](DECISIONS.md) | 已经定了什么、还有什么等拍板 |
+| [KNOWN_ISSUES_PLAN.md](KNOWN_ISSUES_PLAN.md) | 已知问题和各自的解决方案 |
 
 ## 设计（按系统，一个系统一份）
 | 文档 | 状态 |
