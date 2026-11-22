@@ -8,8 +8,8 @@ extends Node3D
 
 const VrmFighter := preload("res://scripts/dev/vrm_fighter.gd")
 const Ring := preload("res://scripts/dev/proto_ring.gd")
-const VRM_ME := "res://assets/proto3d/AvatarSample_G.vrm"
-const VRM_FOE := "res://assets/proto3d/AvatarSample_E.vrm"
+const VRM_ME := "res://assets/characters3d/me.vrm"
+const VRM_FOE := "res://assets/characters3d/rookie.vrm"
 const GAP := 0.56
 
 var core: BattleCore
@@ -154,9 +154,15 @@ func _make_visual(is_me: bool) -> Node3D:
 	if is_me:
 		f.set("glove_color", Color(0.55, 0.30, 0.85))
 		f.set("ghost_layer", 3)
+		if VRM_ME.contains("characters3d"):
+			# 主角：粉紫上衣、紫色百褶裙、粉色运动鞋（docs/tech/VROID_GUIDE.md §2）
+			f.set("tints", {"Onepiece": Color("d98fd6"), "Bottoms": Color("7b5cc4"), "Shoes": Color("f07aa8")})
 		f.position = Vector3(0, 0, GAP)
 	else:
 		f.set("glove_color", Color(0.15, 0.55, 0.25))
+		if VRM_FOE.contains("rookie"):
+			# 林小葵：绿色无袖背心、白色百褶裙（docs/tech/VROID_GUIDE.md §3）
+			f.set("tints", {"Onepiece": Color("3e9a4e"), "Bottoms": Color("f2f2f2")})
 		f.position = Vector3(0, 0, -GAP)
 		f.rotation.y = PI
 	add_child(f)

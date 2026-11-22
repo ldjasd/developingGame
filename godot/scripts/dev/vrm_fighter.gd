@@ -5,6 +5,8 @@ extends "res://scripts/dev/proto_fighter.gd"
 const GHOST_SHADER := preload("res://addons/mtoon/mtoon_trans_zwrite.gdshader")
 
 var model_path := ""
+## 衣服改色：材质名里含这个关键字 -> 纯色（去掉原贴图，只留卡通明暗）。VRoid 里改色不方便，统一在这里做。
+var tints := {}
 var _skels: Array[Skeleton3D] = []
 var _b := {}       # 骨骼名 -> 索引
 var _scale := 1.0  # 模型相对几何体人偶的尺寸
@@ -24,6 +26,7 @@ func build() -> void:
 	for c in copies:
 		var inst: Node3D = ps.instantiate()
 		add_child(inst)
+		_apply_tints(inst)
 		var layer_bits := 1
 		if ghost_layer > 0:
 			layer_bits = 2 if c == 0 else (1 << (ghost_layer - 1))
@@ -78,6 +81,30 @@ func _set_layers(n: Node, bits: int, ghost: bool) -> void:
 					mi.set_surface_override_material(si, m)
 	for c in n.get_children():
 		_set_layers(c, bits, ghost)
+
+
+func _apply_tints(n: Node) -> void:
+	if tints.is_empty():
+		return
+	if n is MeshInstance3D:
+		var mi := n as MeshInstance3D
+		if mi.mesh:
+			for si in mi.mesh.get_surface_count():
+				var src := mi.get_active_material(si)
+				if not (src is ShaderMaterial):
+					continue
+				for key: String in tints:
+					if src.resource_name.contains(key):
+						var col: Color = tints[key]
+						var m := (src as ShaderMaterial).duplicate() as ShaderMaterial
+						m.set_shader_parameter("_MainTex", null)
+						m.set_shader_parameter("_ShadeTexture", null)
+						m.set_shader_parameter("_Color", col)
+						m.set_shader_parameter("_ShadeColor", col.darkened(0.28))
+						mi.set_surface_override_material(si, m)
+						break
+	for c in n.get_children():
+		_apply_tints(c)
 
 
 func _find_skeleton(n: Node) -> Skeleton3D:
