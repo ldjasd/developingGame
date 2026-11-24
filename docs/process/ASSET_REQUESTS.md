@@ -7,11 +7,11 @@
 
 | # | 内容 | 规格 | 放到 | 验收 | 状态 |
 |---|---|---|---|---|---|
-| A1 | BGM 三首的来源与许可证 | 作者、链接、许可证名 | `godot/assets/audio/CREDITS.md` BGM 表 | 能查证 | 待做 |
-| A2 | 中枢立绘去灰边 | 透明底，发梢 / 肩膀无灰色光晕 | `godot/assets/ui/hub_me.webp` | 深色底上无光晕 | 待做 |
+| A1 | BGM 三首的来源与许可证 | 作者、链接、许可证名 | `godot/assets/audio/CREDITS.md` BGM 表 | 能查证 | 已提交 |
+| A2 | 中枢立绘去灰边 | 透明底，发梢 / 肩膀无灰色光晕 | `godot/assets/ui/hub_me.webp` | 深色底上无光晕 | 已提交 |
 | A3 | 试点用 2D 正面对手（林小葵） | 12 张：待机 ×2、刺 / 直 / 摆 / 上勾 / 击腹、格挡、打脸受击、打腹受击、踉跄、倒地；同画布 768×1024 透明 PNG，脚底基线固定 | `godot/assets/fighters_front/linxiaokui/` | 连播不跳、头部高度一致 | 待做（视角已定为背后；等 2D/3D 试点开工） |
 | A4 | 试点用 2D 背面主角 | 同 A3 规格，背面视角 | `godot/assets/fighters_back/me/` | 同上 | 待做（视角已定为背后；等 2D/3D 试点开工） |
-| A5 | 状态图标 4 个 | 心态、影响力、疲劳、伤病；128px 徽章风格，同 UI 素材套 | `godot/assets/ui/stat_*.png` | 与 attr_* 并排风格一致 | 待做 |
+| A5 | 状态图标 4 个 | 心态、影响力、疲劳、伤病；128px 徽章风格，同 UI 素材套 | `godot/assets/ui/stat_*.png` | 与 attr_* 并排风格一致 | 已提交 |
 
 ## 之前的需求（来自 `../playtests/GODOT_PLAYTEST_20261121.md` §4）
 

@@ -26,7 +26,14 @@
 | attr_defense.png | defense | 防守技术 |
 | attr_technique.png | technique | 技术 |
 
-注：中枢信息行里的心态/影响力/疲劳/伤病是状态值、不在 ATTR_KEYS 内，本套未出图标（如需可按同风格补）。
+注：中枢信息行里的心态/影响力/疲劳/伤病是状态值、不在 ATTR_KEYS 内。已于 2026-11-25 按同风格补齐（需求单 A5），生成脚本 `godot/tools/build_stat_icons.py`（与本套共用 badge/glyph 管线）：
+| 文件 | 状态 | 图形 |
+|---|---|---|
+| stat_mood.png | 心态 | 粉色笑脸（闭眼笑弧＋腮红＋金星点缀） |
+| stat_influence.png | 影响力 | 金色四角星＋紫/粉涟漪环 |
+| stat_fatigue.png | 疲劳 | 低电量电池（仅第一格亮粉） |
+| stat_injury.png | 伤病 | 医疗十字＋绷带白点 |
+自检联系表：`research/godot_rig/ui_kit_check/stat_contact_dark.png`、`stat_contact_light.png`（与 attr 图标并排）。
 
 ## 拳种图标（128×128，同徽章风格，金色轨迹线区分拳路）
 | 文件 | 拳种键（data/punches.json） | 轨迹 |
